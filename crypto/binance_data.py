@@ -1,12 +1,20 @@
-
 import math
 from collections import defaultdict
+
 from binance.spot import Spot
-from .api_keys import BINANCE_KEY, BINANCE_SECRET
+from api_keys import BINANCE_KEY, BINANCE_SECRET
 
 class Binance:
-    BTC_DEFI_STAKING = 0.01
-    ETH_DEFI_STAKING = 0.1
+    # Needs to be updated manually every time staking changes;
+    LOCKED_STACKING = {
+        'BTC': 0.01,
+        'ETH': 0.1,
+        'NEO': 2.85,
+        'ADA': 100,
+        'BNB': 0.442,
+        'LUNA': 1.32,
+        'MATIC': 150
+    }
 
     def __init__(self) -> None:
         self.__binance_connection = Spot(key=BINANCE_KEY, secret=BINANCE_SECRET)
@@ -80,7 +88,7 @@ class BinanceFiltered(Binance):
         balances = self._get_spot_account_balances()
 
         for token, balance in balances.items():
-            if token not in ['USDT','USDC','BUSD', 'PAX', 'DAI']:
+            if token not in ['USDT','USDC','BUSD', 'PAX', 'DAI', 'QISWAP', 'BOBA']:
                 if float(balance) > 0.0001:
                     crypto[token] = round(float(balance), 3)
 
@@ -90,20 +98,14 @@ class BinanceFiltered(Binance):
         ''' Sums up all crypto in different wallets (Spot + Earn).
 
         Returns: 
-            dict: Total amount of different crypto tokens.
+            defaultdict: Name + Amount
         '''
-        spot_crypto = self.get_spot_account_crypto_balances()
-        if spot_crypto.get('BTC') is not None:
-            spot_crypto['BTC'] += self.BTC_DEFI_STAKING
-        else:
-             spot_crypto['BTC'] = self.BTC_DEFI_STAKING
+        crypto = self.get_spot_account_crypto_balances()
 
-        if spot_crypto.get('ETH') is not None:
-            spot_crypto['ETH'] += self.ETH_DEFI_STAKING
-        else:
-             spot_crypto['ETH'] = self.ETH_DEFI_STAKING
+        for token, amount in self.LOCKED_STACKING.items():
+            crypto[token] += amount
 
-        return spot_crypto
+        return crypto
 
     def get_all_principal_plus_avg_interest_rate(self):
         '''

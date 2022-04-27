@@ -2,26 +2,31 @@ from .binance_data import BinanceFiltered
 from .crypto_landing.coinloan import CoinLoan
 from .crypto_landing.youholder import YouHodler
 
+from helpers.requests_handler import RequestsHandler
+from endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
+
 
 class Crypto:
-    ''' Grouping and represantation of crypto related data should be performed here.
+    ''' Grouping and represantation of crypto related data is performed here.
     '''
-    TREZOR_BTC = 0.01
-    TREZOR_ETH = 0.2
-    EOS_WALLET = 90
-    NEO_WALLET = 5
-    SIA_COIN = 4343
-
-    crypto_quantity = {
-        'BTC': None,
-        'ETH': None,
-        'ADA': None,
+    # TREZOR + Other Crypto Wallets;
+    EXTERNAL_CRYPTO = {
+        'BTC': 0.039994,
+        'ETH': 0.50884,
         'EOS': 90,
-        'NEO': 7.85,
-        'SC': SIA_COIN
+        'NEO': 5,
+        'SC': 4343
     }
 
     binance = BinanceFiltered()
+    
+    @classmethod
+    def get_all_free_cash_in_stablecoins(cls):
+        '''
+        Returns: 
+            int: Sums up all uninvested cash in stablecoins. 
+        '''
+        return cls.binance.get_spot_account_cash_balance()
 
     @classmethod
     def get_all_crypto_fixed_income(cls):
@@ -31,7 +36,6 @@ class Crypto:
         Returns: 
             Dict: Maps asset names with tupples of principal and interest. 
         '''
-
         crypto_fixed_income = {
             'YouHodler': YouHodler.BALANCE,
             'Binance': cls.binance.get_all_principal_plus_avg_interest_rate(),
@@ -52,16 +56,58 @@ class Crypto:
         return crypto_fixed_income
 
     @classmethod
-    def get_all_crypto(cls):
-        ''' 
+    def _get_all_crypto_quantity(cls):
+        ''' Sums up Binance crypto and crypto from other wallets that are without API support
+
          Returns: 
-            Dict: Maps crypto names with their quantity.
+            defaultdict: Maps crypto names with their total quantity.
         '''
-        binance_crypto = cls.binance.get_all_crypto_balances()
+        crypto = cls.binance.get_all_crypto_balances()
 
-        for crypto in binance_crypto.items():
-            print(crypto)
+        for token, amount in cls.EXTERNAL_CRYPTO.items():
+            crypto[token] += amount
+        
+        for token, amount in crypto.items():
+            crypto[token] = round(amount, 3)
+        
+        return crypto
 
 
+class CryptoMarketValue(Crypto):
 
+    r = RequestsHandler()
+    symbols = '?symbol=BTC,ETH,ADA,BNB,EOS,NEO,LUNA,MATIC,NEAR,FTM,OMG,SC'
+    coinmarketcap_crypto_info = r.perform_request(COINMARKETCAP_API, symbols, COINMARKETCAP_HEADERS)
+
+    @classmethod
+    def get_crypto_market_value(cls):
+        ''' Calculates market value for each crypto available in portfolio.
+
+         Returns: 
+            dict: Maps crypto names with their market value.
+        '''
+        crypto_quantity = cls._get_all_crypto_quantity()
+        crypto_market_value = {}
+        crypto_value = {}
+
+        for crypto in crypto_quantity.keys():
+            crypto_market_value.update({ crypto: cls.coinmarketcap_crypto_info['data'][crypto]['quote']['USD']})
+
+        for crypto, price, quantity in zip(list(crypto_market_value.keys()), list(crypto_market_value.values()), list(crypto_quantity.values())): 
+            value = round(quantity * price['price'])
+            crypto_value[crypto] = value
+
+        sorted_dict = dict(sorted(crypto_value.items(), key=lambda x:x[1], reverse=True))
+
+        return sorted_dict
+
+    @classmethod
+    def get_crypto_total_market_value(cls):
+        crypto = cls.get_crypto_market_value()
+        totalValue = 0
+
+        for crypto in crypto.values():
+            totalValue += crypto
+
+        return totalValue
         
