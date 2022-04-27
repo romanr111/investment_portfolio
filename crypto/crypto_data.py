@@ -7,7 +7,7 @@ from endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 
 
 class Crypto:
-    ''' Grouping and represantation of crypto related data is performed here.
+    ''' Grouping and of crypto related data is performed here.
     '''
     # TREZOR + Other Crypto Wallets;
     EXTERNAL_CRYPTO = {
@@ -74,7 +74,8 @@ class Crypto:
 
 
 class CryptoMarketValue(Crypto):
-
+    ''' Representation of crypto market value is performed here.
+    '''
     r = RequestsHandler()
     symbols = '?symbol=BTC,ETH,ADA,BNB,EOS,NEO,LUNA,MATIC,NEAR,FTM,OMG,SC'
     coinmarketcap_crypto_info = r.perform_request(COINMARKETCAP_API, symbols, COINMARKETCAP_HEADERS)
@@ -110,4 +111,15 @@ class CryptoMarketValue(Crypto):
             totalValue += crypto
 
         return totalValue
+
+    @classmethod
+    def get_mining_value(cls):
+        nanopool_balance = 0.03749
+        assets_price = 1400
+        eth_market_price = cls.coinmarketcap_crypto_info['data']['ETH']['quote']['USD']['price']
+
+        eth_value = round(nanopool_balance * eth_market_price)
+        total = eth_value + assets_price
+        
+        return total
         
