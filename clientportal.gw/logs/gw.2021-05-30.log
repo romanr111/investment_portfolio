@@ -1,0 +1,2 @@
+02:29:19.005 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|4823ms
+02:29:19.010 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "false"}

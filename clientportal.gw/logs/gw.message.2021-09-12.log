@@ -1,0 +1,7 @@
+-> request: /sso/ping
+-> request: /sso/ping
+-> GET /sso/ping,200|732ms
+-> request: /sso/ping
+-> request: /sso/ping
+-> GET /sso/ping,200|638ms
+-> request: /sso/ping

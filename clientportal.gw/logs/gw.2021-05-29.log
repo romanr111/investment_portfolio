@@ -1,0 +1,132 @@
+10:46:18.463 ERROR vert.x-eventloop-thread-0 BaseServiceProxy     : request failed Connection was closed
+io.vertx.core.VertxException: Connection was closed
+	at io.vertx.core.http.impl.ClientConnection.handleClosed(ClientConnection.java:406)
+	at io.vertx.core.impl.ContextImpl.lambda$wrapTask$2(ContextImpl.java:342)
+	at io.vertx.core.impl.ContextImpl.executeFromIO(ContextImpl.java:200)
+	at io.vertx.core.net.impl.VertxHandler.channelInactive(VertxHandler.java:134)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:245)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:231)
+	at io.netty.channel.AbstractChannelHandlerContext.fireChannelInactive(AbstractChannelHandlerContext.java:224)
+	at io.netty.channel.CombinedChannelDuplexHandler$DelegatingChannelHandlerContext.fireChannelInactive(CombinedChannelDuplexHandler.java:420)
+	at io.netty.handler.codec.ByteToMessageDecoder.channelInputClosed(ByteToMessageDecoder.java:377)
+	at io.netty.handler.codec.ByteToMessageDecoder.channelInactive(ByteToMessageDecoder.java:342)
+	at io.netty.handler.codec.http.HttpClientCodec$Decoder.channelInactive(HttpClientCodec.java:281)
+	at io.netty.channel.CombinedChannelDuplexHandler.channelInactive(CombinedChannelDuplexHandler.java:223)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:245)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:231)
+	at io.netty.channel.AbstractChannelHandlerContext.fireChannelInactive(AbstractChannelHandlerContext.java:224)
+	at io.netty.handler.codec.ByteToMessageDecoder.channelInputClosed(ByteToMessageDecoder.java:377)
+	at io.netty.handler.codec.ByteToMessageDecoder.channelInactive(ByteToMessageDecoder.java:342)
+	at io.netty.handler.ssl.SslHandler.channelInactive(SslHandler.java:978)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:245)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:231)
+	at io.netty.channel.AbstractChannelHandlerContext.fireChannelInactive(AbstractChannelHandlerContext.java:224)
+	at io.netty.channel.DefaultChannelPipeline$HeadContext.channelInactive(DefaultChannelPipeline.java:1354)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:245)
+	at io.netty.channel.AbstractChannelHandlerContext.invokeChannelInactive(AbstractChannelHandlerContext.java:231)
+	at io.netty.channel.DefaultChannelPipeline.fireChannelInactive(DefaultChannelPipeline.java:917)
+	at io.netty.channel.AbstractChannel$AbstractUnsafe$7.run(AbstractChannel.java:763)
+	at io.netty.util.concurrent.AbstractEventExecutor.safeExecute(AbstractEventExecutor.java:163)
+	at io.netty.util.concurrent.SingleThreadEventExecutor.runAllTasks(SingleThreadEventExecutor.java:403)
+	at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:463)
+	at io.netty.util.concurrent.SingleThreadEventExecutor$5.run(SingleThreadEventExecutor.java:858)
+	at java.lang.Thread.run(Thread.java:748)
+10:49:42.798 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|777ms
+10:49:42.800 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "false"}
+10:54:42.680 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|687ms
+10:54:42.683 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+10:59:42.445 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|451ms
+10:59:42.447 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:04:42.511 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|516ms
+11:04:42.513 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:09:42.494 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|516ms
+11:09:42.496 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:14:42.538 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|556ms
+11:14:42.540 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:19:42.661 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|688ms
+11:19:42.663 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:24:42.514 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|531ms
+11:24:42.516 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:29:42.659 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|680ms
+11:29:42.661 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:35:12.005 ERROR vert.x-eventloop-thread-0 BaseServiceProxy     : request failed api.ibkr.com: nodename nor servname provided, or not known
+java.net.UnknownHostException: api.ibkr.com: nodename nor servname provided, or not known
+	at java.net.Inet4AddressImpl.lookupAllHostAddr(Native Method)
+	at java.net.InetAddress$2.lookupAllHostAddr(InetAddress.java:929)
+	at java.net.InetAddress.getAddressesFromNameService(InetAddress.java:1324)
+	at java.net.InetAddress.getAllByName0(InetAddress.java:1277)
+	at java.net.InetAddress.getAllByName(InetAddress.java:1193)
+	at java.net.InetAddress.getAllByName(InetAddress.java:1127)
+	at java.net.InetAddress.getByName(InetAddress.java:1077)
+	at io.netty.util.internal.SocketUtils$8.run(SocketUtils.java:146)
+	at io.netty.util.internal.SocketUtils$8.run(SocketUtils.java:143)
+	at java.security.AccessController.doPrivileged(Native Method)
+	at io.netty.util.internal.SocketUtils.addressByName(SocketUtils.java:143)
+	at io.netty.resolver.DefaultNameResolver.doResolve(DefaultNameResolver.java:43)
+	at io.netty.resolver.SimpleNameResolver.resolve(SimpleNameResolver.java:63)
+	at io.netty.resolver.SimpleNameResolver.resolve(SimpleNameResolver.java:55)
+	at io.netty.resolver.InetSocketAddressResolver.doResolve(InetSocketAddressResolver.java:57)
+	at io.netty.resolver.InetSocketAddressResolver.doResolve(InetSocketAddressResolver.java:32)
+	at io.netty.resolver.AbstractAddressResolver.resolve(AbstractAddressResolver.java:108)
+	at io.netty.bootstrap.Bootstrap.doResolveAndConnect0(Bootstrap.java:208)
+	at io.netty.bootstrap.Bootstrap.doResolveAndConnect(Bootstrap.java:170)
+	at io.netty.bootstrap.Bootstrap.connect(Bootstrap.java:145)
+	at io.vertx.core.net.impl.ChannelProvider.connect(ChannelProvider.java:38)
+	at io.vertx.core.http.impl.ConnectionManager$ChannelConnector.connect(ConnectionManager.java:537)
+	at io.vertx.core.http.impl.ConnectionManager$ConnQueue.createNewConnection(ConnectionManager.java:294)
+	at io.vertx.core.http.impl.ConnectionManager$ConnQueue.getConnection(ConnectionManager.java:237)
+	at io.vertx.core.http.impl.ConnectionManager.getConnectionForRequest(ConnectionManager.java:171)
+	at io.vertx.core.http.impl.HttpClientImpl.getConnectionForRequest(HttpClientImpl.java:950)
+	at io.vertx.core.http.impl.HttpClientRequestImpl.connect(HttpClientRequestImpl.java:745)
+	at io.vertx.core.http.impl.HttpClientRequestImpl.write(HttpClientRequestImpl.java:867)
+	at io.vertx.core.http.impl.HttpClientRequestImpl.end(HttpClientRequestImpl.java:358)
+	at ibgroup.web.core.clientportal.gw.services.SsoService.tickleSession(SsoService.java:145)
+	at ibgroup.web.core.clientportal.gw.services.SsoService.onTimerEvent(SsoService.java:60)
+	at io.vertx.core.impl.VertxImpl$InternalTimerHandler.handle(VertxImpl.java:870)
+	at io.vertx.core.impl.VertxImpl$InternalTimerHandler.handle(VertxImpl.java:829)
+	at io.vertx.core.impl.ContextImpl.lambda$wrapTask$2(ContextImpl.java:344)
+	at io.netty.util.concurrent.AbstractEventExecutor.safeExecute(AbstractEventExecutor.java:163)
+	at io.netty.util.concurrent.SingleThreadEventExecutor.runAllTasks(SingleThreadEventExecutor.java:403)
+	at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:463)
+	at io.netty.util.concurrent.SingleThreadEventExecutor$5.run(SingleThreadEventExecutor.java:858)
+	at java.lang.Thread.run(Thread.java:748)
+11:39:42.604 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|593ms
+11:39:42.605 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:44:42.800 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|780ms
+11:44:42.802 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:49:42.822 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|808ms
+11:49:42.824 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:54:42.627 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|558ms
+11:54:42.629 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+11:59:42.634 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|548ms
+11:59:42.634 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:04:42.614 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|528ms
+12:04:42.616 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:09:42.695 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|592ms
+12:09:42.697 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:14:42.662 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|561ms
+12:14:42.663 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:19:42.704 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|586ms
+12:19:42.704 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:24:42.799 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|686ms
+12:24:42.801 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:29:42.675 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|555ms
+12:29:42.677 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:34:42.575 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|448ms
+12:34:42.577 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:39:42.668 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|538ms
+12:39:42.670 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:44:42.688 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|566ms
+12:44:42.688 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:49:42.663 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|535ms
+12:49:42.664 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:54:42.685 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|550ms
+12:54:42.686 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+12:59:42.748 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|541ms
+12:59:42.750 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+13:04:42.763 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|553ms
+13:04:42.765 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+13:09:43.078 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|859ms
+13:09:43.079 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
+13:14:42.766 INFO  vert.x-eventloop-thread-0 BaseServiceProxy     : -> GET /sso/ping,200|609ms
+13:14:42.767 INFO  vert.x-eventloop-thread-0 SsoService           : sso ping {"result": "true"}
