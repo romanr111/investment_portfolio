@@ -10,11 +10,9 @@ if __name__ == "__main__":
     print('\n')
     print(c.get_total_fixed_income())
     print('\n')
-'''    
     print(c.get_all_fixed_income())
     print('\n')
     print(c.get_all_p2p_income())
     print('\n')
     print(crypto.get_all_crypto_fixed_income())
     print('\n')
-'''
