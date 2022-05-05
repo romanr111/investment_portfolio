@@ -1,7 +1,8 @@
+from src.cash_fixed_income import fixed_income
 from .binance_data import BinanceFiltered
 from .crypto_landing.coinloan import CoinLoan
 from .crypto_landing.youholder import YouHodler
-
+from src.cash_fixed_income.fixed_income import FixedIncomeAsset
 from src.helpers.requests_handler import RequestsHandler
 from support_data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 
@@ -41,17 +42,8 @@ class Crypto:
             'Binance': cls.binance.get_all_principal_plus_avg_interest_rate(),
             'CoinLoan': CoinLoan.BALANCE,
         }
-
-        sum_of_all_principal = 0
-        sum_of_all_interest = 0
-
-        for values in crypto_fixed_income.values():
-            principal, interest = values
-            sum_of_all_principal += principal
-            sum_of_all_interest += principal * interest
-        
-        avarage_interest_rate = round(sum_of_all_interest / sum_of_all_principal, 3)
-        crypto_fixed_income['TotalInterestEarningCrypto'] = (sum_of_all_principal, avarage_interest_rate)
+        asset = FixedIncomeAsset()
+        crypto_fixed_income = asset.calc_avg_interest_rate(crypto_fixed_income, 'TotalInterestEarningCrypto')
 
         return crypto_fixed_income
 
@@ -104,6 +96,10 @@ class CryptoMarketValue(Crypto):
 
     @classmethod
     def get_crypto_total_market_value(cls):
+        '''
+         Returns: 
+            int: Calculates total market value of all crypto available in portfolio.
+        '''
         crypto = cls.get_crypto_market_value()
         totalValue = 0
 
