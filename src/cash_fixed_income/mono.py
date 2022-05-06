@@ -35,8 +35,4 @@ class Mono:
 
         totalMoney = usd + uah_to_usd + eur_to_usd
 
-        print('Mono cash!')
-        print(f'USD - {usd}, UAH/USD - {uah_to_usd}, EUR/USD - {eur_to_usd}')
-        print(f'TOTAL MONO - {round(totalMoney)}')
-
         return round(totalMoney)      

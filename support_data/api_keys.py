@@ -1,2 +1,4 @@
 BINANCE_KEY = 'Cu9k4zo6620mSbRF7hVRdipXexLv3zJSDx4XPtgepUCHfgFVL8dKkf7liUQ1PbKk'
 BINANCE_SECRET = 'y0vRwLw9VbvuGk1Molo4wd6DZLeoq5v6DGpv8EPVcsCp8P2veOKaywbGIJywQBrh'
+PHYS_GOLD_API_KEY = 'goldapi-fv531ukmojzzs3-io'
+WISE_KEY = 'd91292d8-ff32-4db9-b854-1f3e0e5f5474'

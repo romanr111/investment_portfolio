@@ -12,10 +12,12 @@ COINMARKETCAP_HEADERS = {
 SCOPE = ['https://www.googleapis.com/auth/drive']
 SUMMARY_API = 'https://localhost:5000/v1/api/portfolio/U9064529/summary'
 POSITIONS_API = 'https://localhost:5000/v1/api/portfolio/U9064529/positions/0'
+
 NASDAQ_API = 'https://api.nasdaq.com/api/quote/'
 
-PHYS_GOLD_API = 'https://www.goldapi.io/api/'
-PHYS_GOLD_API_KEY = 'goldapi-fv531ukmojzzs3-io'
+
+PHYS_GOLD_ENDPOINT = 'https://www.goldapi.io/api/'
+
 MONO_API = 'https://api.monobank.ua/personal/client-info'
 
 MONO_PERSONAL_TOKEN = {
@@ -30,9 +32,7 @@ NASDAQ_HEADERS = {
     'referer': 'https://www.nasdaq.com/', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 11_2_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.105 Safari/537.36', 
 }
 
-PHYS_GOLD_HEADERS = {
-  'x-access-token': PHYS_GOLD_API_KEY
-}
+
 
 
 # https://www.goldapi.io/dashboard
