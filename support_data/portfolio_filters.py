@@ -1,0 +1,6 @@
+CHINA = ['9988', '700']
+CHINA_ADR = ['BABA']
+BANKS = ['TD', 'BNS', 'BAC', 'USB']
+REITS = ['VNQ', 'VNQI', 'FREL', 'HHC', 'PHM']
+GOLD = ['GLD', 'IAU', 'SGOL', 'PHYS']
+COMM = ['SLV', 'CPER', 'DBC', 'PDBC', 'COMB', 'BCI']

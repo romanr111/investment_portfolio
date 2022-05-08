@@ -1,4 +1,4 @@
-from src.helpers.convertor import CurrencyConverter
+import helpers
 
 class Wise():
     EUR_BALANCE = 297
@@ -9,8 +9,7 @@ class Wise():
         Returns 
             tupple: USD represantation of EUR asset along with interest rate
         '''
-        convertor = CurrencyConverter()
-        eur_to_usd = convertor.convert('EUR', 'USD', self.EUR_BALANCE)
+        eur_to_usd = helpers.convert('EUR', 'USD', self.EUR_BALANCE)
         return eur_to_usd
 
 

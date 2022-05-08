@@ -1,24 +1,20 @@
-from functools import total_ordering
 import sys
 
-from src.cash_fixed_income import fixed_income
 sys.path.append(".")
-
-from src.brokers import ib
+from .fixed_income import FixedIncomeAsset, EstateGuru, PeerBerry
 from src.cash_fixed_income import mono, privatbank, wise
 from src.crypto.all_crypto import Crypto
-from .fixed_income import FixedIncomeAsset, EstateGuru, PeerBerry
+
 
 class Cash:
-    
-    def __init__(self) -> None:
+    def __init__(self, ib_cash):
         self.cash = 100000
         self.lended = 700
         self.my_debt = -3000        
         self.mono = mono.Mono()
         self.privat = privatbank.Privat()
         self.wise = wise.Wise()
-        self.ib_cash = 0
+        self.ib_cash = ib_cash
         self.crypto = Crypto()
         self.estateguru = EstateGuru()
         self.peerberry = PeerBerry()

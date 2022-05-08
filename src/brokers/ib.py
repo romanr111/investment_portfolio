@@ -1,156 +1,77 @@
 import sys
 import csv
+
+from helpers import perform_request, sort_dict, convert
 sys.path.append(".")
+import support_data.portfolio_filters as filters
 from support_data.endpoints import SUMMARY_API, POSITIONS_API
-from src.helpers.requests_handler import RequestsHandler
 
 
-class InteractiveBrokers(): 
-     
-    def __init__(self) -> None: 
-        r = RequestsHandler()    
-        self.summary = r.perform_request(SUMMARY_API, verify=False)
-        self.portfolio = r.perform_request(POSITIONS_API, verify=False)
-        print(f'summary: {self.summary}')
-        print('\n')
-        print(f'portfolio: {self.portfolio}')
+class InteractiveBrokers:
+    def __init__(self):
+        self.summary = perform_request(SUMMARY_API, verify=False)
+        self.all_portfolio_info = perform_request(POSITIONS_API, verify=False)
 
-    def get_cash_balance(self): 
-        short_selling_amount = self.get_short_selling_amount()    
+    @property
+    def cash_balance(self): 
         balance = round(self.summary['totalcashvalue']['amount'])
-        print(f'IB Short: {short_selling_amount}')
-        return balance + short_selling_amount
+        return balance 
+       
+    def get_portfolio_positions(self): 
+        public_reit_names = self._get_public_reits_names()
 
-    def get_portfolio_positions(self):   
-        stocks = {}
-        for stock in self.portfolio:
-            stocks.update({stock['contractDesc'] : round(stock['mktValue']) })
+        portfolio = {
+            'China_Stocks': {},
+            'Bank_Stocks': {},
+            'USA_Stocks': {},
+            'Short_Stocks': {},
+            'REIT': {},
+            'Gold': {},
+            'Commodities': {},
+        }
+        for position in self.all_portfolio_info:
+            stock = position['contractDesc']
+            mkt_value = round(position['mktValue'])
+            stock_name_value = {stock: mkt_value}
 
-        sort = sorted(stocks.items(), key = lambda item: item[1], reverse=True)
-        sorted_stocks =  {k: v for k, v in sort}
+            if mkt_value < 0:
+                portfolio['Short_Stocks'].update(stock_name_value)
+            elif stock in filters.CHINA or stock in filters.CHINA_ADR:
+                if stock in filters.CHINA:
+                    usd_stock_price = round(convert('HKD', 'USD', mkt_value))
+                    portfolio['China_Stocks'].update({ stock: usd_stock_price })
+                else:
+                    portfolio['China_Stocks'].update(stock_name_value)
+            elif stock in filters.BANKS:
+                portfolio['Bank_Stocks'].update(stock_name_value)
+            elif (stock in public_reit_names) or (stock in filters.REITS):
+                portfolio['REIT'].update(stock_name_value)
+            elif stock in filters.GOLD:
+                portfolio['Gold'].update(stock_name_value)
+            elif stock in filters.COMM:
+                portfolio['REIT'].update(stock_name_value)
+            else:   
+                portfolio['USA_Stocks'].update(stock_name_value)
+            portfolio['REIT'].update({'LAND': 200})
 
-        return sorted_stocks
+            for k, dict in portfolio.items():
+                portfolio[k] = sort_dict(dict)
+        return portfolio
 
-    def get_short_selling_amount(self):
-        portfolio = self.get_portfolio_positions()   
-        short_amout = 0
-        for _, value in portfolio.items():
-            if value < 0:
-                short_amout += value
-        return short_amout
+    def calculate_total_mkt_value(self, dict):
+        return round(sum([value for value in dict.values()]))
 
-class IBFiltered(InteractiveBrokers):
-
-    def sort_dict(self, dict):
-        sort = sorted(dict.items(), key = lambda item: item[1], reverse=True)
-        return  {k: v for k, v in sort}
-
-    def get_banks_positions(self):
-        portfolio = self.get_portfolio_positions()
-        bank_positions = {}
-        for stock, value in portfolio.items():
-            if stock in ['TD', 'BNS', 'BAC', 'USB']:
-                bank_positions[stock] = value
-        return self.sort_dict(bank_positions)
-
-    def get_banks_total_mkt_value(self):
-        banks = self.get_banks_positions()
-        mktValue = 0
-        for value in banks.values():
-            mktValue += value
-
-        return mktValue
-
-##################################################################
-##################################################################
-
-    def get_reits_info(self):
-        my_reits = []
+    def _get_public_reits_names(self):
         reit_list = []
-        f = open('List_U.S._REITs.csv')
+        f = open('support_data/List_U.S._REITs.csv')
         csv_f = csv.reader(f)
         for row in csv_f:
             reit_list.append(str(row[0]))
-        for stock in self.portfolio:
-            if (stock['contractDesc'] in reit_list) or (stock['contractDesc'] in ['VNQ', 'VNQI', 'FREL', 'HHC', 'PHM']):
-                my_reits.append(stock)
+        return reit_list
 
-        return my_reits 
 
-    def get_reits_positions(self):
-        reits = self.get_reits_info()
-        reits_positions = {}
-        for reit in reits:  
-            reits_positions.update({ reit['contractDesc'] : round(reit['mktValue']) })
-        reits_positions['LAND'] = 430
-        sort = sorted(reits_positions.items(), key = lambda item: item[1], reverse=True)
-        sorted_reits =  {k: v for k, v in sort}
-
-        return sorted_reits   
-    
-    def get_reits_total_mkt_value(self):
-        info = self.get_reits_info()
-        mktValue = round(sum([ stock['mktValue'] for stock in info ]))
-        mkt_value = 430 + mktValue
-        return mkt_value
-        
-    def get_gold_positions(self):
-        gold = [stock for stock in self.portfolio if stock['contractDesc'] in ['GLD', 'IAU', 'SGOL', 'PHYS'] ]
-        gold_positions = {stock['contractDesc'] : round(stock['mktValue']) for stock in gold}
-        return gold_positions
-
-    def get_gold_total_mkt_value(self):
-        info = self.get_gold_positions()
-        mktValue = round(sum([value for value in info.values()]))
-        return mktValue
-
-    def get_commodities_positions(self):
-        commodities = [ stock for stock in self.portfolio if stock['contractDesc'] in ['SLV', 'CPER', 'DBC', 'PDBC', 'COMB', 'BCI'] ]      
-        commodities_positions = { stock['contractDesc']: round(stock['mktValue']) for stock in commodities }
-        sort = sorted(commodities_positions.items(), key = lambda item: item[1], reverse=True)
-        sorted_comm =  {k: v for k, v in sort}
-        return sorted_comm
-
-    def get_commodities_total_mkt_value(self):
-        info = self.get_commodities_positions()
-        mktValue = round(sum([value for value in info.values()]))
-        return mktValue
-
-    def get_stocks_without_banks_reits_gld_cmd(self):
-        banks = self.get_banks_positions()
-        reits = self.get_reits_positions()
-        gld = self.get_gold_positions()
-        cmd = self.get_commodities_positions()
-
-        brgc = list(banks.keys()) + list(reits.keys()) + list(gld.keys()) + list(cmd.keys())
-        stocks_positions = { stock['contractDesc'] : round(stock['mktValue']) for stock in self.portfolio if stock['contractDesc'] not in brgc }
-        sorted_stocks = {}
-
-        for stock, price in stocks_positions.items():
-            if stock in ['9988', '700']:
-                usd_stock_price = round(converter.convert('HKD', 'USD', price))
-                sorted_stocks.update({stock: usd_stock_price })
-            # Exclude short selling    
-            elif price < 0:
-                self.short_selling_amount += price
-            else:
-                sorted_stocks[stock] = price
-
-        print(f'Function that calculates short_selling_amount ----> {self.short_selling_amount}')
-
-        sort = sorted(sorted_stocks.items(), key = lambda item: item[1], reverse=True)
-        sorted_stocks =  {k: v for k, v in sort}
-
-        return sorted_stocks
-
-    def get_stocks_total_mkt_value(self):
-        banks_total_mkt_value = self.get_banks_total_mkt_value()
-        non_bank_stocks_dict = self.get_stocks_without_banks_reits_gld_cmd()        
-        nonBanksMarketValue = round(sum([value for value in non_bank_stocks_dict.values()]))
-        total = banks_total_mkt_value + nonBanksMarketValue
-        return total
-    
+    '''
     def get_stocks_quantity(self):   
         stocks = { stock['contractDesc']: round(stock['position']) for stock in self.portfolio }
         return stocks
-
+    '''

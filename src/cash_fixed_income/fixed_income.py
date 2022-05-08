@@ -1,5 +1,4 @@
-
-from src.helpers.convertor import CurrencyConverter
+import helpers
 
 class FixedIncomeAsset:
 
@@ -27,7 +26,6 @@ class FixedIncomeAsset:
 
 class EurAsset():
     EUR_BALANCE = (1, 0.1)
-    convertor = CurrencyConverter()
     
     @property
     def usd_balance(self):
@@ -35,7 +33,7 @@ class EurAsset():
         Returns 
             tupple: USD represantation of EUR asset along with interest rate
         '''
-        eur_to_usd = round(self.convertor.convert('EUR', 'USD', self.EUR_BALANCE[0]))
+        eur_to_usd = round(helpers.convert('EUR', 'USD', self.EUR_BALANCE[0]))
         return (eur_to_usd, self.EUR_BALANCE[1])
 
 

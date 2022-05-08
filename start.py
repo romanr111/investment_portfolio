@@ -1,29 +1,25 @@
-from src.cash_fixed_income.all_cash_assets import Cash
-from src.crypto.all_crypto import Crypto
-from src.phys_gold import PhysGold
-from src.brokers.ib import IBFiltered
+import time
+#from src.cash_fixed_income.all_cash_assets import Cash
+#from src.crypto.all_crypto import Crypto
+#from src.phys_gold import PhysGold
+from src.brokers.ib import InteractiveBrokers
 
 
-if __name__ == "__main__":
+def main():
 
-    c = Cash()
-    crypto = Crypto()
-    gold = PhysGold()
- 
-    print('\n')
-    ib = IBFiltered()
-    print('\n')
-    print(ib.get_portfolio_positions())
-    print('\n')
-    print('\n')
-    print(ib.get_cash_balance())
-    print('\n')
-    print(ib.get_banks_positions())
-    print('\n')
-    print(ib.get_banks_total_mkt_value())
+    ib = InteractiveBrokers()
+    portfolio = ib.get_portfolio_positions()
 
-    print(f'Cash balance: {c.calculate_all_non_invested_cash()}')
     print('\n')
+    print(f'cash balance: {ib.cash_balance}')
+    print('\n')
+    print(portfolio)
+    print('\n')
+    print(portfolio['China_Stocks'])
+    print('\n')
+    print(ib.calculate_total_mkt_value(portfolio['China_Stocks']))
+
+    '''
     print(f'Monthly Fixed Income: {c.get_montly_fixed_income()}')
 
     print('\n')
@@ -36,3 +32,10 @@ if __name__ == "__main__":
     print('\n')
     print(crypto.get_all_crypto_fixed_income())
     print('\n')
+    '''
+
+if __name__ == "__main__":
+    start_time = time.time()
+    main()
+    print("--- TOTAL: %s seconds ---" % (time.time() - start_time))
+

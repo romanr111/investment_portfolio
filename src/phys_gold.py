@@ -1,6 +1,6 @@
 from support_data.api_keys import PHYS_GOLD_API_KEY
 from support_data.endpoints import PHYS_GOLD_ENDPOINT
-from .helpers.requests_handler import RequestsHandler
+import helpers
 
 CURRENCY = 'USD'
 METAL = 'XAU'
@@ -10,12 +10,11 @@ PHYS_GOLD_HEADERS = {
   'x-access-token': PHYS_GOLD_API_KEY
 }
 
-request = RequestsHandler()
-responce = request.perform_request(PHYS_GOLD_ENDPOINT, PARAM, header=PHYS_GOLD_HEADERS)
-
 class PhysGold:
+    responce = helpers.perform_request(PHYS_GOLD_ENDPOINT, PARAM, header=PHYS_GOLD_HEADERS)
+
     def get_phys_gold_g_price(self):   
-        price = responce['prev_close_price']
+        price = self.responce['prev_close_price']
         gram = round(price) / 31.1
         return gram
 

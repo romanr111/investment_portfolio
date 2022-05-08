@@ -1,9 +1,9 @@
+import helpers
 from src.cash_fixed_income import fixed_income
 from .binance_data import BinanceFiltered
 from .crypto_landing.coinloan import CoinLoan
 from .crypto_landing.youholder import YouHodler
 from src.cash_fixed_income.fixed_income import FixedIncomeAsset
-from src.helpers.requests_handler import RequestsHandler
 from support_data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 
 
@@ -68,9 +68,8 @@ class Crypto:
 class CryptoMarketValue(Crypto):
     ''' Representation of crypto market value is performed here.
     '''
-    r = RequestsHandler()
     symbols = '?symbol=BTC,ETH,ADA,BNB,EOS,NEO,LUNA,MATIC,NEAR,FTM,OMG,SC'
-    coinmarketcap_crypto_info = r.perform_request(COINMARKETCAP_API, symbols, COINMARKETCAP_HEADERS)
+    coinmarketcap_crypto_info = helpers.perform_request(COINMARKETCAP_API, symbols, COINMARKETCAP_HEADERS)
 
     @classmethod
     def get_crypto_market_value(cls):
