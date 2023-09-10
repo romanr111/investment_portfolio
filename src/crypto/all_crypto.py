@@ -1,4 +1,4 @@
-import helpers
+import src.helpers as helpers
 from src.cash_fixed_income import fixed_income
 from .binance_data import BinanceFiltered
 from .crypto_landing.coinloan import CoinLoan

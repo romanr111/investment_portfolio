@@ -1,26 +1,57 @@
-import helpers
+import sys
 
-class Wise():
-    EUR_BALANCE = 297
+sys.path.append(".")
+import src.helpers as helpers
+import requests
 
-    @property
-    def usd_balance(self):
-        ''' 
-        Returns 
-            tupple: USD represantation of EUR asset along with interest rate
-        '''
-        eur_to_usd = helpers.convert('EUR', 'USD', self.EUR_BALANCE)
+from support_data.api_keys import BEARER_TOKEN
+
+PROFILE_ID = 21629358
+BALANCE_IDS = {
+    "USD": 39868508,
+    "EUR": 20834458,
+}
+
+
+class Wise:
+    def __init__(self):
+        self.balances = self.fetch_balances()
+
+    def fetch_balances(self):
+        balances = {}
+        for currency, balance_id in BALANCE_IDS.items():
+            url = f"https://api.transferwise.com/v4/profiles/{PROFILE_ID}/balances/{balance_id}"
+            headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+            response = requests.get(url, headers=headers)
+
+            # Check for a successful response
+            if response.status_code == 200:
+                balances[currency] = response.json()[
+                    "amount"
+                ]  # Assuming 'amount' is the field in the response
+            else:
+                print(f"Content --> {response.content}")
+                response.raise_for_status()
+        return balances
+
+    def get_eur_to_usd_balance(self):
+        """Returns USD balance and USD representation of EUR asset."""
+        eur_to_usd = 0
+        if "EUR" in self.balances:
+            eur_to_usd = helpers.convert("EUR", "USD", self.balances["EUR"]["value"])
         return eur_to_usd
 
+    def get_usd_balance(self):
+        """Extract and return the USD balance from the balances dictionary."""
+        return self.balances.get("USD", {}).get("value", 0)
+
+    def get_total_balance_in_usd(self):
+        """Sums up USD and converted EUR balances."""
+        total = round(self.get_usd_balance() + self.get_eur_to_usd_balance())
+        print(f"Total Wise Balance: {total}")
+        return total
 
 
-
-'''
-
-curl -X GET https://api.transferwise.com/profiles/29208436/balances -H "Authorization: Bearer d91292d8-ff32-4db9-b854-1f3e0e5f5474"
-
-curl -X GET https://api.sandbox.transferwise.tech/v4/profiles/29208436/balances?types=STANDARD \
-     -H "Authorization: Bearer d91292d8-ff32-4db9-b854-1f3e0e5f5474"
-
-curl -X GET https://api.sandbox.transferwise.tech/v1/profiles/29208436/account-details -H "Authorization: Bearer d91292d8-ff32-4db9-b854-1f3e0e5f5474"
-'''
+# Usage
+wise = Wise()
+wise.get_total_balance_in_usd()
