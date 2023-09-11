@@ -1,9 +1,9 @@
 import src.helpers as helpers
-from src.cash_fixed_income import fixed_income
-from .binance_data import BinanceFiltered
-from .crypto_landing.coinloan import CoinLoan
-from .crypto_landing.youholder import YouHodler
-from src.cash_fixed_income.fixed_income import FixedIncomeAsset
+from src.fixed_income import fixed_income
+from ..fixed_income.binance import BinanceFiltered
+from ..fixed_income.crypto_landing.coinloan import CoinLoan
+from ..fixed_income.crypto_landing.youholder import YouHodler
+from src.fixed_income.fixed_income import FixedIncomeAsset
 from support_data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 
 

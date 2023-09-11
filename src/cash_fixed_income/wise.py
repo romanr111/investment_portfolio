@@ -50,8 +50,3 @@ class Wise:
         total = round(self.get_usd_balance() + self.get_eur_to_usd_balance())
         print(f"Total Wise Balance: {total}")
         return total
-
-
-# Usage
-wise = Wise()
-wise.get_total_balance_in_usd()

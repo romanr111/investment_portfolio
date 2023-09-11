@@ -1,6 +1,6 @@
 class Privat:
-    BALANCE = -812
-    '''
-    https://api.privatbank.ua/#p24/registration
-    https://api.privatbank.ua/#p24/balance
-    '''
+    BALANCE = 2
+
+    def get_total_balance_in_usd(self):
+        """Sums up USD and converted EUR balances."""
+        return self.BALANCE
