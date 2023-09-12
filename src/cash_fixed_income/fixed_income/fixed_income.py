@@ -6,9 +6,16 @@ import src.helpers as helpers
 
 ESTATE_GURU = (3359, 0.068)
 PEER_BERRY = (1772, 0.078)
-WHITE_BIT = ((530, 0.3), (500, 0.2485), (1735, 0.107))
 COIN_LOAN = (1, 0.1)
 YOU_HODLER = (0, 0)
+WHITE_BIT = (
+    (530, 0.3),
+    (500, 0.2485),
+    (1735, 0.1075),
+    (2000, 0.2319),
+    (747, 0.1),
+    (1273, 0.1739),
+)
 
 PLATFORM_GROUPING = {
     "EstateGuru": "p2p_lending",
@@ -150,11 +157,13 @@ class FixedIncomeAsset(Asset):
         group_interest = {}
 
         for group, assets in self.assets.items():
-            assets_data = tuple(assets.values())  # Only pass the first element
+            assets_data = tuple(assets.values())
             total_p, avg_interest = self.calculate_weighted_interest(assets_data)
             group_interest[group] = (total_p, avg_interest)
-            print(f"\nGroup weighted interest - {group_interest}\n")
-            return group_interest
+        print("--------")
+        print(f"\nGroup weighted interest - {group_interest}\n")
+        print("--------")
+        return group_interest
 
 
 def get_summary():
@@ -162,11 +171,21 @@ def get_summary():
     pb = PeerBerry(*PEER_BERRY)
     wb = WhiteBit(*WHITE_BIT)
     cl = CoinLoan(COIN_LOAN)
+
     asset = FixedIncomeAsset(eg, pb, wb, cl)
-    asset.get_group_weighted_interest()
+    group_weighted = asset.get_group_weighted_interest()
+    list_of_tuples = list(group_weighted.values())
+    x = asset.calculate_weighted_interest(list_of_tuples)
+    print("--------")
+    print(f"TOTAL - {x}")
+    print("--------")
     return asset.assets
 
 
 # Run the tests and check type
 result = get_summary()
 print(result)
+
+
+# TODO
+# https://github.com/whitebit-exchange/api-docs/blob/main/pages/private/http-main-v4.md#crypto-l%D0%B5nding
