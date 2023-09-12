@@ -54,60 +54,14 @@ class Asset:
         Returns:
         - A tuple containing total principal and average interest
         """
-
-        # Check if the data is a single tuple or tuple of tuples
         print(f"DEBUG: data = {data}")
 
-        if isinstance(data[0], tuple):
-            flat_data = data
-        else:
-            flat_data = [data]
-
-        print(f"DEBUG: flat_data = {flat_data}")
-
-        # Now, proceed with calculations
-        total_p = sum(principal for principal, _ in flat_data)
-        weighted_int = sum(principal * interest for principal, interest in flat_data)
+        total_p = sum(principal for principal, _ in data)
+        weighted_int = sum(principal * interest for principal, interest in data)
 
         avg_interest = round(weighted_int / total_p, 3)
-        print(f"{total_p}, {avg_interest} \n")
+        print(f"Object weighted interest - {total_p}, {avg_interest} \n")
         return total_p, avg_interest
-
-
-class FixedIncomeAsset(Asset):
-    def __init__(self, *args):
-        self.assets = self._combine_asset_data(args)
-
-    def _combine_asset_data(self, assets):
-        combined_dict = {}
-        for asset in assets:
-            combined_dict.update(asset.data)
-        return self._structure_data(combined_dict)
-
-    def _structure_data(self, data_dict):
-        result = {}
-        for key, value in data_dict.items():
-            group = PLATFORM_GROUPING.get(key)
-            if group not in result:
-                result[group] = {}
-            result[group][key] = value
-        return result
-
-    def get_group_weighted_interest(self):
-        """
-        Calculate weighted interest for each group in the assets.
-
-        Returns:
-            - A dictionary with group names as keys and their respective weighted interests as values.
-        """
-        group_interest = {}
-
-        for group, assets in self.assets.items():
-            assets_data = tuple(assets.values())  # Only pass the first element
-            total_p, avg_interest = self.calculate_weighted_interest(assets_data)
-            group_interest[group] = (total_p, avg_interest)
-            print(f"\n weighted_interest -- {group_interest}\n")
-            return group_interest
 
 
 class EurAsset(Asset):
@@ -126,7 +80,7 @@ class CryptoAssets(Asset):
             total_principal, average_interest = self.calculate_weighted_interest(data)
             super().__init__(total_principal, average_interest)
         elif self.is_single_tuple(data):
-            principal, interest = data[0]
+            principal, interest = data
             super().__init__(principal, interest)
         else:
             raise ValueError("Unsupported data format")
@@ -164,6 +118,43 @@ class EstateGuru(EurAsset):
 class PeerBerry(EurAsset):
     def __init__(self, *args):
         super().__init__(*args)
+
+
+class FixedIncomeAsset(Asset):
+    def __init__(self, *args):
+        self.assets = self._combine_asset_data(args)
+        print(f"initiated fixed income assets:\n{self.assets}\n")
+
+    def _combine_asset_data(self, assets):
+        combined_dict = {}
+        for asset in assets:
+            combined_dict.update(asset.data)
+        return self._structure_data(combined_dict)
+
+    def _structure_data(self, data_dict):
+        result = {}
+        for key, value in data_dict.items():
+            group = PLATFORM_GROUPING.get(key)
+            if group not in result:
+                result[group] = {}
+            result[group][key] = value
+        return result
+
+    def get_group_weighted_interest(self):
+        """
+        Calculate weighted interest for each group in the assets.
+
+        Returns:
+            - A dictionary with group names as keys and their respective weighted interests as values.
+        """
+        group_interest = {}
+
+        for group, assets in self.assets.items():
+            assets_data = tuple(assets.values())  # Only pass the first element
+            total_p, avg_interest = self.calculate_weighted_interest(assets_data)
+            group_interest[group] = (total_p, avg_interest)
+            print(f"\nGroup weighted interest - {group_interest}\n")
+            return group_interest
 
 
 def get_summary():
