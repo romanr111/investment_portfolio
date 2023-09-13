@@ -1,29 +1,11 @@
 import sys
+import time
 
 sys.path.append(".")
 
 import src.helpers as helpers
 
-ESTATE_GURU = (3359, 0.068)
-PEER_BERRY = (1772, 0.078)
-COIN_LOAN = (1, 0.1)
-YOU_HODLER = (0, 0)
-WHITE_BIT = (
-    (530, 0.3),
-    (500, 0.2485),
-    (1735, 0.1075),
-    (2000, 0.2319),
-    (747, 0.1),
-    (1273, 0.1739),
-)
-
-PLATFORM_GROUPING = {
-    "EstateGuru": "p2p_lending",
-    "PeerBerry": "p2p_lending",
-    "WhiteBit": "crypto_lending",
-    "CoinLoan": "crypto_lending",
-    "YouHodler": "crypto_lending",
-}
+from fixed_inc_data import *
 
 
 class Asset:
@@ -61,7 +43,7 @@ class Asset:
         Returns:
         - A tuple containing total principal and average interest
         """
-        print(f"DEBUG: data = {data}")
+        print(f"Weighted DEBUG: {data}")
 
         total_p = sum(principal for principal, _ in data)
         weighted_int = sum(principal * interest for principal, interest in data)
@@ -100,12 +82,6 @@ class CryptoAssets(Asset):
         """Check if the data is a tuple of tuples."""
         return all(isinstance(item, tuple) for item in data)
 
-    @property
-    def data(self):
-        if hasattr(self, "_data"):  # if _data attribute exists
-            return {self.__class__.__name__: self._data}
-        return super().data
-
 
 class WhiteBit(CryptoAssets):
     def __init__(self, *data):
@@ -127,7 +103,7 @@ class PeerBerry(EurAsset):
         super().__init__(*args)
 
 
-class FixedIncomeAsset(Asset):
+class FixedIncomeAssets(Asset):
     def __init__(self, *args):
         self.assets = self._combine_asset_data(args)
         print(f"initiated fixed income assets:\n{self.assets}\n")
@@ -166,25 +142,43 @@ class FixedIncomeAsset(Asset):
         return group_interest
 
 
-def get_summary():
-    eg = EstateGuru(*ESTATE_GURU)
-    pb = PeerBerry(*PEER_BERRY)
-    wb = WhiteBit(*WHITE_BIT)
-    cl = CoinLoan(COIN_LOAN)
+class FixedIncomePortfolio:
+    def __init__(self):
+        self.portfolio = self._initialize_assets()
 
-    asset = FixedIncomeAsset(eg, pb, wb, cl)
-    group_weighted = asset.get_group_weighted_interest()
-    list_of_tuples = list(group_weighted.values())
-    x = asset.calculate_weighted_interest(list_of_tuples)
-    print("--------")
-    print(f"TOTAL - {x}")
-    print("--------")
-    return asset.assets
+    def _initialize_assets(self):
+        eg = EstateGuru(*ESTATE_GURU)
+        pb = PeerBerry(*PEER_BERRY)
+        wb = WhiteBit(*WHITE_BIT)
+        cl = CoinLoan(COIN_LOAN)
+        return FixedIncomeAssets(eg, pb, wb, cl)
+
+    @property
+    def summary(self):
+        return self.portfolio.assets
+
+    @property
+    def group_weighted_interest(self):
+        return self.portfolio.get_group_weighted_interest()
+
+    @property
+    def total_prinicpal_interest_in_p2p(self):
+        gwi = self.portfolio.get_group_weighted_interest()
+        tuples = tuple(gwi.values())
+        total = self.portfolio.calculate_weighted_interest(tuples)
+        return total
 
 
-# Run the tests and check type
-result = get_summary()
-print(result)
+if __name__ == "__main__":
+    start_time = time.time()
+    portfolio = FixedIncomePortfolio()
+    print(f"summary - {portfolio.summary}")
+    print("\n")
+    print(f"group_weighted_interest - {portfolio.group_weighted_interest}")
+    print(f"TOTAL - {portfolio.total_prinicpal_interest_in_p2p}")
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {elapsed_time} seconds")
 
 
 # TODO
