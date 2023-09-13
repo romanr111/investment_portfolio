@@ -5,6 +5,7 @@ sys.path.append(".")
 
 import src.helpers as helpers
 
+from functools import lru_cache
 from fixed_inc_data import *
 
 
@@ -33,6 +34,7 @@ class Asset:
     def data(self):
         return {self.__class__.__name__: (self._principal, self._interest)}
 
+    @lru_cache(maxsize=None)
     def calculate_weighted_interest(self, data):
         """
         Calculate weighted interest for given data.
@@ -68,15 +70,9 @@ class CryptoAssets(Asset):
         if self.is_tuple_of_tuples(data):
             total_principal, average_interest = self.calculate_weighted_interest(data)
             super().__init__(total_principal, average_interest)
-        elif self.is_single_tuple(data):
+        else:
             principal, interest = data
             super().__init__(principal, interest)
-        else:
-            raise ValueError("Unsupported data format")
-
-    def is_single_tuple(self, data):
-        """Check if the data is a single tuple."""
-        return len(data) == 1 and isinstance(data[0], tuple)
 
     def is_tuple_of_tuples(self, data):
         """Check if the data is a tuple of tuples."""
@@ -145,6 +141,7 @@ class FixedIncomeAssets(Asset):
 class FixedIncomePortfolio:
     def __init__(self):
         self.portfolio = self._initialize_assets()
+        self._gwi = self.portfolio.get_group_weighted_interest()
 
     def _initialize_assets(self):
         eg = EstateGuru(*ESTATE_GURU)
@@ -159,23 +156,31 @@ class FixedIncomePortfolio:
 
     @property
     def group_weighted_interest(self):
-        return self.portfolio.get_group_weighted_interest()
+        return self._gwi
 
     @property
     def total_prinicpal_interest_in_p2p(self):
-        gwi = self.portfolio.get_group_weighted_interest()
-        tuples = tuple(gwi.values())
+        tuples = tuple(self._gwi.values())
         total = self.portfolio.calculate_weighted_interest(tuples)
         return total
+
+    @property
+    def yearly_earnings(self):
+        principal, interest = self.total_prinicpal_interest_in_p2p
+        return round(principal * interest)
 
 
 if __name__ == "__main__":
     start_time = time.time()
     portfolio = FixedIncomePortfolio()
-    print(f"summary - {portfolio.summary}")
+    print(f"SUMMARY - {portfolio.summary}")
     print("\n")
-    print(f"group_weighted_interest - {portfolio.group_weighted_interest}")
+    print(f"GROUP WEIGHTED INTEREST - {portfolio.group_weighted_interest}")
+    print("\n")
     print(f"TOTAL - {portfolio.total_prinicpal_interest_in_p2p}")
+    print("\n")
+    print(f"YEARLY EARNINGS - {portfolio.yearly_earnings} $")
+    print("\n")
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time} seconds")
