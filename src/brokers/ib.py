@@ -1,10 +1,8 @@
-# import sys
 import csv
 
-from src.helpers import perform_request, sort_dict, convert
-
-# sys.path.append(".")
 import data.portfolio_filters as filters
+
+from src.helpers import perform_request, sort_dict, convert
 from data.endpoints import SUMMARY_API, POSITIONS_API
 
 #
@@ -95,6 +93,13 @@ class InteractiveBrokers:
 
     def calculate_total_mkt_value(self, dict):
         return round(sum([value for value in dict.values()]))
+
+    def get_stocks_quantity(self):
+        stocks = {
+            stock["contractDesc"]: round(stock["position"])
+            for stock in self.all_portfolio_info
+        }
+        return stocks
 
     def get_full_porfolio_data(self):
         portfolio = self.get_portfolio_positions()
