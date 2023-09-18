@@ -484,3 +484,5 @@ java.io.IOException: Operation timed out
 -> GET /v1/api/tickle,200|319ms
 -> request: /v1/api/tickle
 -> GET /v1/api/tickle,200|155ms
+-> request: /v1/api/tickle
+-> GET /v1/api/tickle,200|129ms
