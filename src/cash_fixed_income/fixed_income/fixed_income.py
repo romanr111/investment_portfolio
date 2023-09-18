@@ -140,8 +140,8 @@ class FixedIncomeAssets(Asset):
 
 class FixedIncomePortfolio:
     def __init__(self):
-        self.portfolio = self._initialize_assets()
-        self._gwi = self.portfolio.get_group_weighted_interest()
+        self._portfolio = self._initialize_assets()
+        self._gwi = self._portfolio.get_group_weighted_interest()
 
     def _initialize_assets(self):
         eg = EstateGuru(*ESTATE_GURU)
@@ -152,7 +152,7 @@ class FixedIncomePortfolio:
 
     @property
     def summary(self):
-        return self.portfolio.assets
+        return self._portfolio.assets
 
     @property
     def group_weighted_interest(self):
@@ -161,7 +161,7 @@ class FixedIncomePortfolio:
     @property
     def total_prinicpal_interest_in_p2p(self):
         tuples = tuple(self._gwi.values())
-        total = self.portfolio.calculate_weighted_interest(tuples)
+        total = self._portfolio.calculate_weighted_interest(tuples)
         return total
 
     @property
@@ -179,12 +179,8 @@ if __name__ == "__main__":
     print("\n")
     print(f"TOTAL - {portfolio.total_prinicpal_interest_in_p2p}")
     print("\n")
-    print(f"YEARLY EARNINGS - {portfolio.yearly_earnings} $")
+    print(f"YEARLY P2P DIVIDENDS - {portfolio.yearly_earnings} $")
     print("\n")
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time} seconds")
-
-
-# TODO
-# https://github.com/whitebit-exchange/api-docs/blob/main/pages/private/http-main-v4.md#crypto-l%D0%B5nding

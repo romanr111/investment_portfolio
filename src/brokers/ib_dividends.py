@@ -5,6 +5,7 @@ from functools import lru_cache
 
 
 class BaseDividends:
+    TAX_DISCOUNT = 0.8  # 15% USA tax, 5% Ukraine tax
     API_URL = NASDAQ_API
     HEADERS = NASDAQ_HEADERS
 
@@ -52,8 +53,7 @@ class BaseDividends:
 
     def get_my_total_monthly_and_yearly_divs(self):
         div_per_position = self.get_my_yearly_dividends_per_stock()
-        tax_discount = 0.8  # 15% USA tax, 5% Ukraine tax
-        yearly = sum(div * tax_discount for div in div_per_position.values())
+        yearly = sum(div * self.TAX_DISCOUNT for div in div_per_position.values())
         return round(yearly / 12), round(yearly)
 
 

@@ -49,5 +49,6 @@ class Mono:
         print(f"EUR - {eur}")
         print("\n")
         print(f"Total - {total_balance}")
+        print("\n")
 
         return total_balance
