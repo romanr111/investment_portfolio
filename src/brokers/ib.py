@@ -1,11 +1,15 @@
-import sys
+# import sys
 import csv
 
 from src.helpers import perform_request, sort_dict, convert
 
-sys.path.append(".")
-import support_data.portfolio_filters as filters
-from support_data.endpoints import SUMMARY_API, POSITIONS_API
+# sys.path.append(".")
+import data.portfolio_filters as filters
+from data.endpoints import SUMMARY_API, POSITIONS_API
+
+#
+# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
+#
 
 
 class InteractiveBrokers:
@@ -36,12 +40,25 @@ class InteractiveBrokers:
             return round(convert("HKD", "USD", mkt_value))
         return mkt_value
 
-    def _get_public_reits_names(self):
+    def _get_public_reits_names(self, file_path="data/List_U.S._REITs.csv"):
+        """
+        Extract REITs names from the given CSV file.
+
+        :param file_path: Path to the CSV file.
+        :return: List of REIT names.
+        """
         reit_list = []
-        f = open("support_data/List_U.S._REITs.csv")
-        csv_f = csv.reader(f)
-        for row in csv_f:
-            reit_list.append(str(row[0]))
+
+        try:
+            with open(file_path, "r") as f:
+                csv_reader = csv.reader(f)
+                reit_list = [str(row[0]) for row in csv_reader]
+
+        except FileNotFoundError:
+            print(f"Error: File {file_path} not found.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
         return reit_list
 
     @property
@@ -95,3 +112,8 @@ class InteractiveBrokers:
         print(f"--- IB ---")
 
         return portfolio
+
+
+if __name__ == "__main__":
+    ib = InteractiveBrokers()
+    x = ib.get_full_porfolio_data()

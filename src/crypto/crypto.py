@@ -4,7 +4,7 @@ from ..fixed_income.binance import BinanceFiltered
 from ..fixed_income.crypto_landing.coinloan import CoinLoan
 from ..fixed_income.crypto_landing.youholder import YouHodler
 from src.fixed_income.fixed_income import FixedIncomeAsset
-from support_data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
+from data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 
 
 class Crypto:

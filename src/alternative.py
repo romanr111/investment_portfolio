@@ -1,12 +1,14 @@
-from support_data.api_keys import PHYS_GOLD_API_KEY
-from support_data.endpoints import PHYS_GOLD_ENDPOINT
+from data.api_keys import PHYS_GOLD_API_KEY
+from data.endpoints import PHYS_GOLD_ENDPOINT
 import src.helpers as helpers
 
 CURRENCY = "USD"
 METAL = "XAU"
-GRAMS_AVAILABLE = 101.1
+GRAMS_AVAILABLE = 0
 PARAM = METAL + "/" + CURRENCY
 PHYS_GOLD_HEADERS = {"x-access-token": PHYS_GOLD_API_KEY}
+
+INVESTMENT_EQUIPMENT = 340 + 6000
 
 
 class PhysGold:

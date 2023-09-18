@@ -1,0 +1,84 @@
+{
+    ".DS_Store": null,
+    "__init__.py": null,
+    "start.py": null,
+    ".gitignore": null,
+    "dir_structure.py": null,
+    "__pycache__": {
+        "helpers.cpython-39.pyc": null,
+        "endpoints.cpython-39.pyc": null,
+        "api_keys.cpython-39.pyc": null
+    },
+    "data": {
+        "List_U.S._REITs.csv": null,
+        "__init__.py": null,
+        "portfolio_filters.py": null,
+        "credentials.json": null,
+        "api_keys.py": null,
+        "endpoints.py": null,
+        "__pycache__": {
+            "__init__.cpython-39.pyc": null,
+            "endpoints.cpython-39.pyc": null,
+            "api_keys.cpython-39.pyc": null,
+            "portfolio_filters.cpython-39.pyc": null
+        }
+    },
+    "src": {
+        ".DS_Store": null,
+        "__init__.py": null,
+        "phys_gold.py": null,
+        "helpers.py": null,
+        "brokers": {
+            "__init__.py": null,
+            "ib.py": null,
+            "__pycache__": {
+                "__init__.cpython-39.pyc": null,
+                "ib.cpython-39.pyc": null
+            }
+        },
+        "crypto": {
+            "general_crypto.py": null,
+            "__init__.py": null,
+            "bin_ance.py": null,
+            "__pycache__": {
+                "__init__.cpython-39.pyc": null,
+                "bin_ance.cpython-39.pyc": null
+            }
+        },
+        "__pycache__": {
+            "__init__.cpython-39.pyc": null,
+            "helpers.cpython-39.pyc": null,
+            "phys_gold.cpython-39.pyc": null
+        },
+        "cash_fixed_income": {
+            "privatbank.py": null,
+            "mono.py": null,
+            ".DS_Store": null,
+            "__init__.py": null,
+            "wise.py": null,
+            "all_cash_assets.py": null,
+            "__pycache__": {
+                "wise.cpython-39.pyc": null,
+                "__init__.cpython-39.pyc": null,
+                "fixed_income.cpython-39.pyc": null,
+                "privatbank.cpython-39.pyc": null,
+                "cash_assets_data.cpython-39.pyc": null,
+                "all_cash_assets.cpython-39.pyc": null,
+                "mono.cpython-39.pyc": null
+            },
+            "fixed_income": {
+                "fixed_income.py": null,
+                "fixed_inc_data.py": null,
+                "__init__.py": null,
+                "__pycache__": {
+                    "__init__.cpython-39.pyc": null,
+                    "all_crypto.cpython-39.pyc": null,
+                    "binance.cpython-39.pyc": null,
+                    "fixed_inc_data.cpython-39.pyc": null,
+                    "binance_data.cpython-39.pyc": null,
+                    "crypto_data.cpython-39.pyc": null
+                }
+            }
+        }
+    }
+}

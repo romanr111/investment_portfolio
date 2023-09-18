@@ -4,7 +4,7 @@ sys.path.append(".")
 import src.helpers as helpers
 import requests
 
-from support_data.api_keys import BEARER_TOKEN
+from data.api_keys import BEARER_TOKEN
 
 PROFILE_ID = 21629358
 BALANCE_IDS = {

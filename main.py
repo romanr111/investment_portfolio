@@ -5,6 +5,10 @@ import time
 # from src.phys_gold import PhysGold
 from src.brokers.ib import InteractiveBrokers
 
+#
+# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
+#
+
 
 def main():
     ib = InteractiveBrokers()

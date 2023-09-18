@@ -3,7 +3,7 @@ import sys
 sys.path.append(".")
 from ..fixed_income.fixed_income import FixedIncomeAsset, EstateGuru, PeerBerry
 from src.cash_fixed_income import mono, privatbank, wise
-from src.crypto import Crypto
+from src.crypto.crypto import Crypto
 
 
 class Cash:
@@ -15,7 +15,7 @@ class Cash:
         self.privat = privatbank.Privat()
         self.wise = wise.Wise()
         self.ib_cash = ib_cash
-        self.crypto = Crypto()
+        self.crypto_cash = Crypto()
         self.estateguru = EstateGuru()
         self.peerberry = PeerBerry()
         self.asset = FixedIncomeAsset()
@@ -29,7 +29,7 @@ class Cash:
             "Privat": self.privat.BALANCE,
             "Wise": self.wise.usd_balance,
             "IB_Free_Cash": self.ib_cash,
-            "Crypto_Free_Cash": self.crypto.get_all_free_cash_in_stablecoins(),
+            "Crypto_Free_Cash": self.crypto_cash.get_all_free_cash_in_stablecoins(),
         }
         print(all_cash)
         total_cash = 0

@@ -3,7 +3,7 @@ import sys
 sys.path.append(".")
 
 import src.helpers as helpers
-from support_data.endpoints import MONO_API, MONO_PERSONAL_TOKEN
+from data.endpoints import MONO_API, MONO_PERSONAL_TOKEN
 
 # Constants for currency codes
 UAH_CODE = 980

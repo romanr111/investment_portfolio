@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 
 from binance.spot import Spot
-from support_data.api_keys import BINANCE_KEY, BINANCE_SECRET
+from data.api_keys import BINANCE_KEY, BINANCE_SECRET
 
 class Binance:
     # Needs to be updated manually every time staking changes;
@@ -17,7 +17,8 @@ class Binance:
     }
 
     def __init__(self) -> None:
-        self.__binance_connection = Spot(key=BINANCE_KEY, secret=BINANCE_SECRET)
+        #self.__binance_connection = Spot(key=BINANCE_KEY, secret=BINANCE_SECRET)
+        self.__binance_connection = Spot(api_key=BINANCE_KEY, api_secret=BINANCE_SECRET)
 
         if self.__binance_connection:
             print('Binace connection is successful!')
@@ -128,7 +129,11 @@ class BinanceFiltered(Binance):
 
         # Preventive check for function that calculates avarage interest rate.
         total_cash = self.get_total_cash_savings()
-        percentage_diff = ((sum_of_all_principal - total_cash) / abs(total_cash)) * 100
+        print(f"Total cash DEBUG --> {total_cash}, type {type(total_cash)}")
+        if total_cash == 0:
+            percentage_diff = 0  # or any other default value
+        else:
+            percentage_diff = ((sum_of_all_principal - total_cash) / abs(total_cash)) * 100
         assert percentage_diff < 1 and percentage_diff > -1, \
         f'Incorrect principal amount: Actual {sum_of_all_principal}, Expected {total_cash}, Diff: {percentage_diff}%'
 
@@ -137,3 +142,7 @@ class BinanceFiltered(Binance):
         return (sum_of_all_principal, avarage_interest_rate)
         
 
+if __name__ == "__main__":
+    bin = BinanceFiltered()
+    x = bin.get_all_principal_plus_avg_interest_rate()
+    print(x)
