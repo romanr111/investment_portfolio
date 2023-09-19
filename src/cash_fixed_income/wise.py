@@ -1,6 +1,3 @@
-import sys
-
-sys.path.append(".")
 import src.helpers as helpers
 import requests
 

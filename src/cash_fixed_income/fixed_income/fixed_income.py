@@ -1,12 +1,9 @@
-import sys
 import time
-
-sys.path.append(".")
 
 import src.helpers as helpers
 
 from functools import lru_cache
-from fixed_inc_data import *
+from data.cash_and_fi_data import *
 
 
 class Asset:

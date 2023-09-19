@@ -1,34 +1,40 @@
 from src.cash_fixed_income import mono, wise
 from src.crypto.crypto import Crypto
 
+from data.cash_and_fi_data import CASH, LENDED, DEBT, PRIVAT
+
 
 class Cash:
-    def __init__(self, ib_cash):
-        self.cash = 10000
-        self.lended = 700
-        self.my_debt = -3000
-        self.privat = 100
+    """
+    Class representing cash from various sources.
+    """
+
+    def __init__(self, ib_cash=0):
+        self.cash = CASH
+        self.lended_amount = LENDED
+        self.own_debt = DEBT
+        self.private_funds = PRIVAT
+        self.ib_cash_amount = ib_cash
         self.mono = mono.Mono()
         self.wise = wise.Wise()
-        self.ib_cash = ib_cash
-        self.crypto_cash = Crypto()
+        self.crypto = Crypto()
 
-    def calculate_all_non_invested_cash(self):
-        all_cash = {
-            "Cash": self.cash,
-            "Lended": self.lended,
-            "My_Debt": self.my_debt,
-            "Mono": self.mono.get_total_balance_in_usd(),
-            "Privat": self.privat,
-        }
-        print(all_cash)
-        total_cash = 0
-        for cash in all_cash.values():
-            total_cash += cash
+    def as_dict(self):
+        instance_vars = vars(self).copy()
 
-        return total_cash
+        # Replacing object representations with their actual values
+        instance_vars["mono"] = self.mono.get_total_balance_in_usd()
+        instance_vars["wise"] = self.wise.get_total_balance_in_usd()
+        instance_vars["crypto"] = self.crypto.get_all_free_cash_in_stablecoins()
+        print(f"cash dict -> {instance_vars}")
+        return instance_vars
+
+    @property
+    def total_cash(self):
+        return sum(val for val in self.as_dict().values())
 
 
 if __name__ == "__main__":
-    c = Cash(ib_cash=100)
-    print(c.calculate_all_non_invested_cash())
+    example = 100
+    cash = Cash(ib_cash=example)
+    print(f"TOTAL FREE CASH = {cash.total_cash}")

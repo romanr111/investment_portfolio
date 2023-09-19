@@ -1,7 +1,3 @@
-import sys
-
-sys.path.append(".")
-
 import src.helpers as helpers
 from data.endpoints import MONO_API, MONO_PERSONAL_TOKEN
 
