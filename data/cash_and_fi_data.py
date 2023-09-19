@@ -21,6 +21,7 @@ PLATFORM_GROUPING = {
     "EstateGuru": "p2p_lending",
     "PeerBerry": "p2p_lending",
     "WhiteBit": "crypto_lending",
+    "Binance": "crypto_lending",
     "CoinLoan": "crypto_lending",
     "YouHodler": "crypto_lending",
 }

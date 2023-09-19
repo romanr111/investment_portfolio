@@ -1,13 +1,7 @@
 import src.helpers as helpers
 import requests
 
-from data.api_keys import BEARER_TOKEN
-
-PROFILE_ID = 21629358
-BALANCE_IDS = {
-    "USD": 39868508,
-    "EUR": 20834458,
-}
+from data.api_keys import BEARER_TOKEN, WISE_PROFILE_ID, WISE_BALANCE_IDS
 
 
 class Wise:
@@ -16,8 +10,8 @@ class Wise:
 
     def fetch_balances(self):
         balances = {}
-        for currency, balance_id in BALANCE_IDS.items():
-            url = f"https://api.transferwise.com/v4/profiles/{PROFILE_ID}/balances/{balance_id}"
+        for currency, balance_id in WISE_BALANCE_IDS.items():
+            url = f"https://api.transferwise.com/v4/profiles/{WISE_PROFILE_ID}/balances/{balance_id}"
             headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
             response = requests.get(url, headers=headers)
 

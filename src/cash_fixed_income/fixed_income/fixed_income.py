@@ -1,55 +1,9 @@
 import time
-
 import src.helpers as helpers
 
-from functools import lru_cache
+from src.base_asset import Asset
+from src.crypto.bin import BinanceFiltered
 from data.cash_and_fi_data import *
-
-
-class Asset:
-    def __init__(self, principal, interest):
-        self._principal = principal  # changed to protected member
-        self._interest = interest  # changed to protected member
-
-    @property
-    def principal(self):
-        return self._principal
-
-    @principal.setter
-    def principal(self, value):
-        self._principal = value
-
-    @property
-    def interest(self):
-        return self._interest
-
-    @interest.setter
-    def interest(self, value):
-        self._interest = value
-
-    @property
-    def data(self):
-        return {self.__class__.__name__: (self._principal, self._interest)}
-
-    @lru_cache(maxsize=None)
-    def calculate_weighted_interest(self, data):
-        """
-        Calculate weighted interest for given data.
-
-        Arguments:
-        - data: Either a tuple or a tuple of tuples representing (principal, interest)
-
-        Returns:
-        - A tuple containing total principal and average interest
-        """
-        print(f"Weighted DEBUG: {data}")
-
-        total_p = sum(principal for principal, _ in data)
-        weighted_int = sum(principal * interest for principal, interest in data)
-
-        avg_interest = round(weighted_int / total_p, 3)
-        print(f"Object weighted interest - {total_p}, {avg_interest} \n")
-        return total_p, avg_interest
 
 
 class EurAsset(Asset):
@@ -60,40 +14,6 @@ class EurAsset(Asset):
     def data(self):
         usd_amount = round(helpers.convert("EUR", "USD", self._principal))
         return {self.__class__.__name__: (usd_amount, self._interest)}
-
-
-class CryptoAssets(Asset):
-    def __init__(self, *data):
-        if self.is_tuple_of_tuples(data):
-            total_principal, average_interest = self.calculate_weighted_interest(data)
-            super().__init__(total_principal, average_interest)
-        else:
-            principal, interest = data
-            super().__init__(principal, interest)
-
-    def is_tuple_of_tuples(self, data):
-        """Check if the data is a tuple of tuples."""
-        return all(isinstance(item, tuple) for item in data)
-
-
-class WhiteBit(CryptoAssets):
-    def __init__(self, *data):
-        super().__init__(*data)
-
-
-class CoinLoan(CryptoAssets):
-    def __init__(self, *data):
-        super().__init__(*data)
-
-
-class EstateGuru(EurAsset):
-    def __init__(self, principal, interest):
-        super().__init__(principal, interest)
-
-
-class PeerBerry(EurAsset):
-    def __init__(self, *args):
-        super().__init__(*args)
 
 
 class FixedIncomeAssets(Asset):
@@ -135,6 +55,47 @@ class FixedIncomeAssets(Asset):
         return group_interest
 
 
+class CryptoAssets(Asset):
+    def __init__(self, *data):
+        if self.is_tuple_of_tuples(data):
+            total_principal, average_interest = self.calculate_weighted_interest(data)
+            super().__init__(total_principal, average_interest)
+        else:
+            principal, interest = data
+            super().__init__(principal, interest)
+
+    def is_tuple_of_tuples(self, data):
+        """Check if the data is a tuple of tuples."""
+        return all(isinstance(item, tuple) for item in data)
+
+
+class WhiteBit(CryptoAssets):
+    def __init__(self, *data):
+        super().__init__(*data)
+
+
+class CoinLoan(CryptoAssets):
+    def __init__(self, *data):
+        super().__init__(*data)
+
+
+class Binance(CryptoAssets):
+    def __init__(self, *data):
+        b = BinanceFiltered()
+        data = b.collect_savings_interest_data()
+        super().__init__(*data)
+
+
+class EstateGuru(EurAsset):
+    def __init__(self, principal, interest):
+        super().__init__(principal, interest)
+
+
+class PeerBerry(EurAsset):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
 class FixedIncomePortfolio:
     def __init__(self):
         self._portfolio = self._initialize_assets()
@@ -145,7 +106,8 @@ class FixedIncomePortfolio:
         pb = PeerBerry(*PEER_BERRY)
         wb = WhiteBit(*WHITE_BIT)
         cl = CoinLoan(COIN_LOAN)
-        return FixedIncomeAssets(eg, pb, wb, cl)
+        bin = Binance()
+        return FixedIncomeAssets(eg, pb, wb, cl, bin)
 
     @property
     def summary(self):

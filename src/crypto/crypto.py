@@ -1,13 +1,11 @@
 import src.helpers as helpers
 from src.crypto.bin import BinanceFiltered
 from data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
+from data.crypto_data import EXTERNAL_CRYPTO
 
 
 class Crypto:
     """Grouping and of crypto related data is performed here."""
-
-    # TREZOR + Other Crypto Wallets;
-    EXTERNAL_CRYPTO = {"BTC": 0.039994, "ETH": 0.50884, "EOS": 90, "NEO": 5, "SC": 4343}
 
     binance = BinanceFiltered()
 
@@ -28,7 +26,7 @@ class Crypto:
         """
         crypto = cls.binance.get_all_crypto_balances()
 
-        for token, amount in cls.EXTERNAL_CRYPTO.items():
+        for token, amount in EXTERNAL_CRYPTO.items():
             crypto[token] += amount
 
         for token, amount in crypto.items():
