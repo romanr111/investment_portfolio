@@ -1,0 +1,11 @@
+"""
+TODO:
+crypto.crypto
+dasha
+google_sheets
+inv_management
+alternative.py
+base_asset.py
+fire.py
+main.py
+"""

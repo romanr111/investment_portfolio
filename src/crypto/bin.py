@@ -117,14 +117,14 @@ class BinanceFiltered(Binance):
         """Sums up all crypto in different wallets (Spot + Earn).
 
         Returns:
-            dict: Name + Amount
+            defaultdict: Name + Amount
         """
         crypto = self._get_spot_account_crypto_balances()
 
         for token, amount in BINANCE_LOCKED_STACKING.items():
             crypto[token] += amount
 
-        return dict(crypto)
+        return crypto
 
 
 if __name__ == "__main__":
