@@ -1,7 +1,7 @@
 import csv
 
 import data.portfolio_filters as filters
-
+from abc import ABC, abstractmethod
 from src.helpers import perform_request, sort_dict, convert
 from data.endpoints import SUMMARY_API, POSITIONS_API
 
@@ -10,7 +10,13 @@ from data.endpoints import SUMMARY_API, POSITIONS_API
 #
 
 
-class InteractiveBrokers:
+class Broker(ABC):
+    @abstractmethod
+    def get_all_portfolio_info(self):
+        pass
+
+
+class InteractiveBrokers(Broker):
     def __init__(self):
         self.summary = perform_request(SUMMARY_API, verify=False)
         self.all_portfolio_info = perform_request(POSITIONS_API, verify=False)
@@ -63,6 +69,9 @@ class InteractiveBrokers:
     def cash_balance(self):
         balance = round(self.summary["totalcashvalue"]["amount"])
         return balance
+
+    def get_all_portfolio_info(self):
+        return self.all_portfolio_info
 
     def get_portfolio_positions(self):
         public_reit_names = self._get_public_reits_names()

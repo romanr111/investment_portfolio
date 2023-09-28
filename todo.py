@@ -1,6 +1,5 @@
 """
 TODO:
-crypto.crypto
 dasha
 google_sheets
 inv_management
