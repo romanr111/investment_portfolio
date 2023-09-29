@@ -98,6 +98,16 @@ class InteractiveBrokers(Broker):
         for k, dict_ in portfolio.items():
             portfolio[k] = sort_dict(dict_)
 
+        # Calculate total stocks market value in scope of this method
+        total_stocks = 0
+        for asset, value in portfolio.items():
+            if asset not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
+                print(value)
+                total_stocks += self.calculate_total_mkt_value(value)
+
+        portfolio["Total_Stocks_Value"] = round(total_stocks)
+        print(portfolio)
+
         return portfolio
 
     def calculate_total_mkt_value(self, dict):

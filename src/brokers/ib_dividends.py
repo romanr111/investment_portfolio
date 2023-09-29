@@ -1,4 +1,4 @@
-from ib import InteractiveBrokers
+from src.brokers.ib import InteractiveBrokers
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
 from src.helpers import perform_request
 from functools import lru_cache

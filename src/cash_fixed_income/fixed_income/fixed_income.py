@@ -3,7 +3,7 @@ import src.helpers as helpers
 
 from src.base_asset import Asset
 from src.crypto.bin import BinanceFiltered
-from data.cash_and_fi_data import *
+from data.assets_data import *
 
 
 class EurAsset(Asset):

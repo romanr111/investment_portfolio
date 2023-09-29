@@ -41,12 +41,10 @@ class CoinMarketCapFetcher(DataFetcher, DataProcessor):
         return cls._info["data"][mapped_name]["quote"]["USD"]["price"]
 
 
-class Crypto:
-    """Handles operations related to crypto quantities."""
-
+class CryptoData:
     @classmethod
-    def get_all_crypto_quantity(cls, binance):
-        crypto = binance.get_all_crypto_balances()
+    def get_all_crypto_quantity(cls, broker):
+        crypto = broker.get_all_crypto_balances()
 
         for token, amount in EXTERNAL_CRYPTO.items():
             crypto[token] += amount
@@ -56,8 +54,6 @@ class Crypto:
 
         return crypto
 
-
-class CryptoValue:
     @classmethod
     def get_market_value(cls, quantities, fetcher: DataProcessor):
         crypto_values = {}
@@ -67,17 +63,38 @@ class CryptoValue:
         return dict(sorted(crypto_values.items(), key=lambda x: x[1], reverse=True))
 
     @classmethod
-    def get_crypto_total_market_value(cls, crypto_market_values):
-        return sum(crypto_market_values.values())
+    def get_total(cls, data_dict):
+        return sum(data_dict.values())
+
+    @classmethod
+    def get_all_free_cash_in_stablecoins(cls, accounts):
+        total = 0
+        for account in accounts:
+            total += account.sum_up_all_stablecoins()
+        return total
+
+
+class CryptoEndpoint:
+    def __init__(self):
+        self.binance = BinanceFiltered()
+        self.cmc_fetcher = CoinMarketCapFetcher()
+        self.quantities = CryptoData.get_all_crypto_quantity(self.binance)
+        self.market_val = CryptoData.get_market_value(self.quantities, self.cmc_fetcher)
+        self.total_market_val = CryptoData.get_total(self.market_val)
+        self.cash = CryptoData.get_all_free_cash_in_stablecoins([self.binance])
+
+    def get_crypto_market_values(self):
+        return self.market_val
+
+    def get_total_crypto_market_value(self):
+        return self.total_market_val
+
+    def get_total_cash(self):
+        return self.cash
 
 
 if __name__ == "__main__":
-    binance = BinanceFiltered()
-    quantities = Crypto.get_all_crypto_quantity(binance)
-    fetcher = CoinMarketCapFetcher()
-    market_values = CryptoValue.get_market_value(quantities, fetcher)
-    total_market_value = CryptoValue.get_crypto_total_market_value(market_values)
-
-    print(f"Crypto Quantities - {quantities}")
-    print(f"Crypto Market Values - {market_values}")
-    print(f"Total Market Value - {total_market_value}")
+    endpoint = CryptoEndpoint()
+    print(f"Crypto Market Values - {endpoint.get_crypto_market_values()}")
+    print(f"Total Market Value - {endpoint.get_total_crypto_market_value()}")
+    print(f"Total Crypto Cash - {endpoint.get_total_cash()}")

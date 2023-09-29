@@ -1,24 +1,31 @@
-from ib import InteractiveBrokers
-from crypto_data import CryptoData
-from cash_balance import CashBalance
-from dasha_portfolio import DashaPortfolio
+from src.brokers.ib import InteractiveBrokers
+from src.crypto.bin import BinanceFiltered
+from src.crypto.crypto import Crypto, CryptoValue, CoinMarketCapFetcher
+from src.cash_fixed_income.cash_summary import Cash
+from src.dasha.dasha import Portfolio
 
 ib = InteractiveBrokers()
-crypto = CryptoData()
-cash = CashBalance()
-dasha = DashaPortfolio()
+crypto = Crypto()
+crypto_value = CryptoValue()
+cash = Cash()
+dasha = Portfolio(ib)
+binance = BinanceFiltered()
+quantities = Crypto.get_all_crypto_quantity(binance)
+fetcher = CoinMarketCapFetcher()
+market_values = CryptoValue.get_market_value(quantities, fetcher)
+total_market_value = CryptoValue.get_crypto_total_market_value(market_values)
 
 
 class Portfolio_Allocations:
-    total_stocks_mkt_val = ib.get_stocks_total_mkt_value()
-    bonds_mkt_value = ib.get_bonds_total_mkt_value()
-    total_reits_mkt_val = ib.get_reits_total_mkt_value()
-    ib_gold_mkt_value = ib.get_gold_total_mkt_value()
-    comm_mkt_value = ib.get_commodities_total_mkt_value()
-    crypto_mkt_value = crypto.getCryptoTotalValue()
-    mining_mkt_value = crypto.getMiningValue()
-    gld = ib_gold_mkt_value
-    cash_balance = cash.get_cash_balance()
+    ib_positions = ib.get_portfolio_positions()
+    total_stocks_mkt_val = ib_positions["Total_Stocks_Value"]
+    bonds_mkt_value = ib_positions["Bonds"]
+    total_reits_mkt_val = ib_positions["REIT"]
+    ib_gold_mkt_value = ib_positions["Gold"]
+    comm_mkt_value = ib_positions["Commodities"]
+    crypto_mkt_value = crypto
+    gld = ib_positions["Gold"]
+    cash_balance = cash.total_cash()
 
     dasha_net_worth = dasha.get_portfolio_value()
 
@@ -30,7 +37,6 @@ class Portfolio_Allocations:
         + ib_gold_mkt_value
         + comm_mkt_value
         + crypto_mkt_value
-        + mining_mkt_value
         + cash_balance
     ) - dasha_net_worth
 
@@ -44,7 +50,6 @@ class Portfolio_Allocations:
     gold_allocation = calculate_allocation(gld, net_worth)
     commodities_allocation = calculate_allocation(comm_mkt_value, net_worth)
     crypto_allocation = calculate_allocation(crypto_mkt_value, net_worth)
-    mining_allocation = calculate_allocation(mining_mkt_value, net_worth)
     cash_allocation = calculate_allocation(cash_balance, net_worth)
 
     actual_allocations = {
@@ -54,7 +59,6 @@ class Portfolio_Allocations:
         "I7:K7": crypto_allocation,
         "I8:K8": gold_allocation,
         "I9:K9": commodities_allocation,
-        "I10:K10": mining_allocation,
         "I11:K11": cash_allocation,
     }
 
@@ -65,6 +69,5 @@ class Portfolio_Allocations:
         "Crypto": 5,
         "Gold": 1,
         "Commodities": 5,
-        "Mining": 2,
         "Cash & Equivalents": 38,
     }

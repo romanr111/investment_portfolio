@@ -16,6 +16,8 @@ WHITE_BIT = (
     (1273, 0.1739),
 )
 
+INVESTMENT_EQUIPMENT = 340 + 6000
+GLD_GRAMS_AVAILABLE = 0
 
 PLATFORM_GROUPING = {
     "EstateGuru": "p2p_lending",

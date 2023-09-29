@@ -1,67 +1,86 @@
 import gspread
-from endpoints import SCOPE
+from data.endpoints import SCOPE
 from google.oauth2.service_account import Credentials
-from ib import InteractiveBrokers
-from crypto_data import CryptoData
-from cash_balance import CashBalance
-from dividends import Dividends
-from portfolio_allocation import Portfolio_Allocations
-from spreadsheet_formatting import SpreadsheetFromatting
-from financial_freedom import FinancialFreedom
+from src.brokers.ib import InteractiveBrokers
+from src.brokers.ib_dividends import PublicDividends
+from src.crypto.crypto import CryptoValue
+from src.cash_fixed_income.cash_summary import Cash
+from allocation import Portfolio_Allocations
+from formatting import SpreadsheetFromatting
+from src.fire import FinancialFreedom
 
-#
-# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
-#
+CREDENTIALS_PATH = "credentials.json"
+SPREADSHEET_NAME = "portfolio_automated"
+WORKSHEET_NAME = "Test 2023"
 
-summary_info = {}
-positions_info = {}
 
-creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
-client = gspread.authorize(creds)
-s = client.open("portfolio_automated")
-# sheet = s.add_worksheet(title="31 May 2023", rows="70", cols="20")
-sheet = s.worksheet("31 May 2023")
+def authorize_google_client():
+    creds = Credentials.from_service_account_file(CREDENTIALS_PATH, scopes=SCOPE)
+    return gspread.authorize(creds)
 
-ib = InteractiveBrokers()
-crypto = CryptoData()
-cash = CashBalance()
-d = Dividends()
-p_alloc = Portfolio_Allocations()
-frm = SpreadsheetFromatting()
-ff = FinancialFreedom()
 
-if __name__ == "__main__":
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+def fetch_data_sources():
+    ib = InteractiveBrokers()
+    crypto = CryptoValue()
+    cash = Cash()
+    p_alloc = Portfolio_Allocations()
+    return {
+        "banks": ib.get_banks_positions(),
+        "other_stocks": ib.get_stocks_without_banks_reits_gld_cmd(),
+        "reits": ib.get_reits_positions(),
+        "bonds": ib.get_bonds_positions(),
+        "ib_gold": ib.get_gold_positions(),
+        "ib_comm": ib.get_commodities_positions(),
+        "crypto": crypto.getCryptoPositions(),
+        "cash": cash.getCashPositions(),
+        "portfolio_allocations": p_alloc,
+    }
+
+
+def prepare_data_for_update(data_sources):
+    data_ranges = []
+
+    def add_data_range(start, finish, keys, values):
+        data_ranges.append(
+            {
+                "range": f"D{start}:D{finish}",
+                "values": [keys],
+                "major_dimension": "COLUMNS",
+            }
+        )
+        data_ranges.append(
+            {
+                "range": f"E{start}:E{finish}",
+                "values": [values],
+                "major_dimension": "COLUMNS",
+            }
+        )
+
     # Data fetching
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+    banks_keys = list(map(str, data_sources["banks"].keys()))
+    other_stocks_keys = list(map(str, data_sources["other_stocks"].keys()))
+    reits_keys = list(map(str, data_sources["reits"].keys()))
+    bonds_keys = list(map(str, data_sources["bonds"].keys()))
+    gold_keys = list(data_sources["ib_gold"].keys())
+    comm_keys = list(data_sources["ib_comm"].keys())
+    crypto_keys = list(data_sources["crypto"].keys())
 
-    banks = ib.get_banks_positions()
-    other_stocks = ib.get_stocks_without_banks_reits_gld_cmd()
-    reits = ib.get_reits_positions()
-    bonds = ib.get_bonds_positions()
-    ib_gold = ib.get_gold_positions()
-    ib_comm = ib.get_commodities_positions()
-    crypto_data = crypto.getCryptoPositions()
+    start_pos = 2
+    for asset in [
+        banks_keys,
+        other_stocks_keys,
+        reits_keys,
+        bonds_keys,
+        gold_keys,
+        comm_keys,
+        crypto_keys,
+    ]:
+        finish_pos = start_pos + len(asset)
+        add_data_range(start_pos, finish_pos, asset, data_sources[asset])
+        start_pos = finish_pos + 1
 
-    bank_keys = [str(eachvalue) for eachvalue in banks.keys()]
-    bank_values = [eachvalue for eachvalue in banks.values()]
-
-    other_stocks_keys = [str(eachvalue) for eachvalue in other_stocks.keys()]
-    other_stocks_values = [eachvalue for eachvalue in other_stocks.values()]
-
-    reit_keys = [str(eachvalue) for eachvalue in reits.keys()]
-    reit_values = [eachvalue for eachvalue in reits.values()]
-
-    bonds_keys = [str(eachvalue) for eachvalue in bonds.keys()]
-    bonds_values = [eachvalue for eachvalue in bonds.values()]
-
-    gold_keys = [eachvalue for eachvalue in ib_gold.keys()]
-    gold_values = [eachvalue for eachvalue in ib_gold.values()]
-
-    comm_keys = [eachvalue for eachvalue in ib_comm.keys()]
-    comm_values = [eachvalue for eachvalue in ib_comm.values()]
-    total_gold = p_alloc.ib_gold_mkt_value
-
+    # Summary table
+    p_alloc = data_sources["portfolio_allocations"]
     asset_types = [
         "Net worth",
         "Stocks",
@@ -73,14 +92,13 @@ if __name__ == "__main__":
         "Mining",
         "Cash & Equivalents",
     ]
-
     total_values = [
         p_alloc.net_worth,
         p_alloc.total_stocks_mkt_val,
         p_alloc.total_reits_mkt_val,
         p_alloc.bonds_mkt_value,
         p_alloc.crypto_mkt_value,
-        total_gold,
+        p_alloc.ib_gold_mkt_value,
         p_alloc.comm_mkt_value,
         p_alloc.mining_mkt_value,
         p_alloc.cash_balance,
@@ -108,121 +126,42 @@ if __name__ == "__main__":
         p_alloc.expected_allocations["Cash & Equivalents"],
     ]
 
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-    # Data Positions for individual assets in spreadsheet
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+    data_ranges.extend(
+        [
+            {"range": f"H3:H11", "values": [asset_types], "major_dimension": "COLUMNS"},
+            {
+                "range": f"I3:I11",
+                "values": [total_values],
+                "major_dimension": "COLUMNS",
+            },
+            {"range": f"J3:J11", "values": [allocations], "major_dimension": "COLUMNS"},
+            {
+                "range": f"K3:K11",
+                "values": [expected_allocations],
+                "major_dimension": "COLUMNS",
+            },
+        ]
+    )
 
-    banks_start = 2
-    banks_finish = banks_start + len(bank_keys)
-    other_stocks_start = banks_finish + 1
-    other_stocks_finish = other_stocks_start + len(other_stocks_keys)
-    reits_start = other_stocks_finish + 1
-    reits_finish = reits_start + len(reit_keys)
-    bonds_start = reits_finish + 1
-    bonds_finish = bonds_start + len(bonds_keys)
-    gold_position_start = bonds_finish + 1
-    gold_position_finish = gold_position_start + len(gold_keys)
-    comm_position_start = gold_position_finish + 2
-    comm_position_finish = comm_position_start + len(comm_keys)
-    crypto_position_start = comm_position_finish + 1
-    crypto_position_finish = crypto_position_start + len(crypto_data.keys())
+    return data_ranges
 
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-    # Data preparation for batch update
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
-    prepared_data = [
-        {
-            "range": f"D{banks_start}:D{banks_finish}",
-            "values": [bank_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{banks_start}:E{banks_finish}",
-            "values": [bank_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{other_stocks_start}:D{other_stocks_finish}",
-            "values": [other_stocks_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{other_stocks_start}:E{other_stocks_finish}",
-            "values": [other_stocks_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{reits_start}:D{reits_finish}",
-            "values": [reit_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{reits_start}:E{reits_finish}",
-            "values": [reit_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{bonds_start}:D{bonds_finish}",
-            "values": [bonds_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{bonds_start}:E{bonds_finish}",
-            "values": [bonds_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{gold_position_start}:D{gold_position_finish}",
-            "values": [gold_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{gold_position_start}:E{gold_position_finish}",
-            "values": [gold_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{comm_position_start}:D{comm_position_finish}",
-            "values": [comm_keys],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{comm_position_start}:E{comm_position_finish}",
-            "values": [comm_values],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"D{crypto_position_start}:D{crypto_position_finish}",
-            "values": [list(crypto_data.keys())],
-            "major_dimension": "COLUMNS",
-        },
-        {
-            "range": f"E{crypto_position_start}:E{crypto_position_finish}",
-            "values": [list(crypto_data.values())],
-            "major_dimension": "COLUMNS",
-        },
-        # Summary table
-        {"range": f"H3:H11", "values": [asset_types], "major_dimension": "COLUMNS"},
-        {"range": f"I3:I11", "values": [total_values], "major_dimension": "COLUMNS"},
-        {"range": f"J3:J11", "values": [allocations], "major_dimension": "COLUMNS"},
-        {
-            "range": f"K3:K11",
-            "values": [expected_allocations],
-            "major_dimension": "COLUMNS",
-        },
-    ]
+def main():
+    client = authorize_google_client()
+    sheet = client.open(SPREADSHEET_NAME).worksheet(WORKSHEET_NAME)
 
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+    data_sources = fetch_data_sources()
+
     # Filling data into the spreadsheet:
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-
+    prepared_data = prepare_data_for_update(data_sources)
     sheet.batch_update(prepared_data)
 
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
     # Individual cells update
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+    p_alloc = data_sources["portfolio_allocations"]
+    ff = FinancialFreedom()
+    d = PublicDividends()
 
+    crypto_position_finish = len(data_sources["crypto"].keys()) + 2
     sheet.update(f"D{crypto_position_finish + 1}", "Mining")
     sheet.update(f"E{crypto_position_finish + 1}", f"{p_alloc.mining_mkt_value}")
 
@@ -235,10 +174,10 @@ if __name__ == "__main__":
     sheet.update("M1", "Dasha")
     sheet.update("N1", f"{p_alloc.dasha_net_worth}")
 
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-    # Cells formating
-    ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-
+    # Cells formatting
+    frm = SpreadsheetFromatting()
     frm.formatSpreadheet(sheet)
 
-### ### ### ### ### ### ### ###
+
+if __name__ == "__main__":
+    main()

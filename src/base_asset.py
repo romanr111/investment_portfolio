@@ -1,5 +1,5 @@
 from functools import lru_cache
-from data.cash_and_fi_data import *
+from data.assets_data import *
 
 
 class Asset:

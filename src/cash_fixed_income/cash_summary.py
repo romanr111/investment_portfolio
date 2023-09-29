@@ -1,7 +1,7 @@
 from src.cash_fixed_income import mono, wise
-from src.crypto.crypto import Crypto
+from src.crypto.crypto import CryptoValue
 
-from data.cash_and_fi_data import CASH, LENDED, DEBT, PRIVAT
+from data.assets_data import CASH, LENDED, DEBT, PRIVAT
 
 
 class Cash:
@@ -17,7 +17,7 @@ class Cash:
         self.ib_cash_amount = ib_cash
         self.mono = mono.Mono()
         self.wise = wise.Wise()
-        self.crypto = Crypto()
+        self.crypto = CryptoValue()
 
     def as_dict(self):
         instance_vars = vars(self).copy()
