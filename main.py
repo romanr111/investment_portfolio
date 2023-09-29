@@ -1,9 +1,17 @@
 import time
 
-# from src.cash_fixed_income.all_cash_assets import Cash
-# from src.crypto.all_crypto import Crypto
-# from src.phys_gold import PhysGold
 from src.brokers.ib import InteractiveBrokers
+from src.crypto.crypto import CryptoEndpoint
+from src.cash_fixed_income.cash_summary import Cash
+from src.dasha.dasha import DashaPortfolio
+from src.brokers.ib import InteractiveBrokers
+from src.brokers.ib_dividends import PublicDividends
+from src.crypto.crypto import CryptoEndpoint
+from src.cash_fixed_income.cash_summary import Cash
+from src.google_sheets.allocation import PortfolioAllocations
+from src.google_sheets.formatting import SpreadsheetFormatter
+from src.google_sheets.structure import DataSource, PortfolioManager
+from src.fire import FinancialFreedom
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
@@ -11,24 +19,12 @@ from src.brokers.ib import InteractiveBrokers
 
 
 def main():
+    worksheet_name = "Test 2023"
     ib = InteractiveBrokers()
-
-    ib.get_full_porfolio_data()
-
-    """
-    print(f'Monthly Fixed Income: {c.get_montly_fixed_income()}')
-
-    print('\n')
-    print(f'Gold Value: {gold.get_total_phys_gold_value()}')
-
-    print('\n')
-    print(f'All Fixed Income: {c.get_all_fixed_income_info()}')
-    print('\n')
-    print(c.get_all_p2p_income())
-    print('\n')
-    print(crypto.get_all_crypto_fixed_income())
-    print('\n')
-    """
+    crypto = CryptoEndpoint()
+    portfolio_manager = PortfolioManager(worksheet_name, ib, crypto)
+    portfolio_manager.update_data()
+    portfolio_manager.format_spreadsheet()
 
 
 if __name__ == "__main__":

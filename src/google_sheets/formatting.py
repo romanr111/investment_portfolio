@@ -1,16 +1,20 @@
 import gspread_formatting as gsf
-from gspread_formatting import batch_updater
-from portfolio_allocation import Portfolio_Allocations
-
-alloc = Portfolio_Allocations()
+from src.google_sheets.allocation import PortfolioAllocations
 
 
-class SpreadsheetFromatting:
-    def calculate_allocation_ratio(self, real, exp):
-        ratio = int((real / exp) * 100)
-        return ratio
+class AllocationRatioCalculator:
+    @staticmethod
+    def calculate_allocation_ratio(real, exp):
+        return int((real / exp) * 100)
 
-    def formatSpreadheet(self, sheet):
+
+class SpreadsheetFormatter:
+    def __init__(self, alloc: PortfolioAllocations):
+        self.alloc = alloc
+        self.calculator = AllocationRatioCalculator()
+
+    def format_spreadsheet(self, sheet):
+        # Setting column widths
         gsf.set_column_widths(
             sheet,
             [
@@ -28,6 +32,11 @@ class SpreadsheetFromatting:
             ],
         )
 
+        # Formatting cells
+        self._set_static_cell_formats(sheet)
+        self._color_allocation_cells_based_on_ratio(sheet)
+
+    def _set_static_cell_formats(self, sheet):
         net_worth = gsf.cellFormat(
             textFormat=gsf.textFormat(bold=True, fontSize=12),
             horizontalAlignment="CENTER",
@@ -69,28 +78,31 @@ class SpreadsheetFromatting:
             ],
         )
 
+    def _color_allocation_cells_based_on_ratio(self, sheet):
         for cell, actual, expected in zip(
-            list(alloc.actual_allocations.keys()),
-            list(alloc.actual_allocations.values()),
-            list(alloc.expected_allocations.values()),
+            list(self.alloc.actual_allocations.keys()),
+            list(self.alloc.actual_allocations.values()),
+            list(self.alloc.expected_allocations.values()),
         ):
-            if (self.calculate_allocation_ratio(actual, expected) < 50) or (
-                self.calculate_allocation_ratio(actual, expected) > 200
-            ):
-                # Red
-                sheet.format(
-                    cell,
-                    {"backgroundColor": {"red": 0.76, "green": 0.13, "blue": 0.13}},
-                )
-            elif self.calculate_allocation_ratio(actual, expected) in range(80, 120):
-                # Green
-                sheet.format(
-                    cell,
-                    {"backgroundColor": {"red": 0.72, "green": 0.84, "blue": 0.66}},
-                )
-            else:
-                # Yellow
-                sheet.format(
-                    cell,
-                    {"backgroundColor": {"red": 0.973, "green": 0.793, "blue": 0.115}},
-                )
+            ratio = self.calculator.calculate_allocation_ratio(actual, expected)
+            self._color_cell_based_on_ratio(sheet, cell, ratio)
+
+    def _color_cell_based_on_ratio(self, sheet, cell, ratio):
+        if ratio < 50 or ratio > 200:
+            # Red
+            color = {"red": 0.76, "green": 0.13, "blue": 0.13}
+        elif 80 <= ratio <= 120:
+            # Green
+            color = {"red": 0.72, "green": 0.84, "blue": 0.66}
+        else:
+            # Yellow
+            color = {"red": 0.973, "green": 0.793, "blue": 0.115}
+
+        sheet.format(cell, {"backgroundColor": color})
+
+
+if __name__ == "__main__":
+    alloc = PortfolioAllocations()
+    formatter = SpreadsheetFormatter(alloc)
+    sheet = ...  # Get your Google Sheet instance here
+    formatter.format_spreadsheet(sheet)

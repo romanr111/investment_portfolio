@@ -114,6 +114,7 @@ class BinanceFiltered(Binance):
         return crypto_cash
 
     def sum_up_all_stablecoins(self):
+        # TODO
         return self.get_spot_account_cash_balance()
 
     def get_all_crypto_balances(self):

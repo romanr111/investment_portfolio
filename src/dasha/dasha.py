@@ -27,7 +27,7 @@ CASH = 6.48 + DIVS_2023
 #
 
 
-class Portfolio:
+class DashaPortfolio:
     def __init__(self, broker):
         self.broker = broker
 
@@ -55,7 +55,7 @@ class Portfolio:
 
 if __name__ == "__main__":
     ib_broker = InteractiveBrokers()
-    dasha_portfolio = Portfolio(ib_broker)
+    dasha_portfolio = DashaPortfolio(ib_broker)
     total_value = dasha_portfolio.get_portfolio_value()
     print(total_value)
     print(f"cash - {round(CASH)}")
