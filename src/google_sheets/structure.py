@@ -1,14 +1,30 @@
 import gspread
-from data.endpoints import SCOPE
+
 from google.oauth2.service_account import Credentials
+
+from data_source import DataSource
+from data.endpoints import SCOPE
+
 from src.brokers.ib_dividends import PublicDividends
-from src.cash_fixed_income.cash_summary import Cash
-from src.google_sheets.allocation import PortfolioAllocations
 from src.google_sheets.formatting import SpreadsheetFormatter
 from src.fire import FinancialFreedom
 
+
 CREDENTIALS_PATH = "data/credentials.json"
 SPREADSHEET_NAME = "portfolio_automated"
+
+CATEGORIES = [
+    "Banks",
+    "China",
+    "USA_Stocks",
+    "Short",
+    "REIT",
+    "Bonds",
+    "P2P",
+    "Gold",
+    "Commodities",
+    "Crypto",
+]
 
 
 class GoogleSheet:
@@ -34,71 +50,51 @@ class GoogleSheet:
         return gspread.authorize(creds)
 
 
-class DataSource:
-    def __init__(self, ib_endpoint, crypto_endpoint):
-        self.ib = ib_endpoint
-        self.ib_cash = self.ib.cash_balance
-        self.crypto = crypto_endpoint
-        self.cash = Cash(self.ib_cash, self.crypto)
-        self.p_alloc = PortfolioAllocations(self.ib, self.crypto, self.cash)
-
-    def fetch_data(self):
-        data = self.ib.get_full_porfolio_data()
-        data["crypto"] = self.crypto.get_crypto_market_values()
-        data["cash"] = self.cash.total_cash
-        data["portfolio_allocations"] = self.p_alloc
-        return data
-
-
 class SpreadsheetManager:
     def __init__(self, sheet, data_sources):
         self.sheet = sheet
         self.data_sources = data_sources
 
-    def prepare_data_for_update(self):
-        data_ranges = []
-        p_alloc = self.data_sources["portfolio_allocations"]
-
-        def add_data_range(start, finish, keys, values):
-            data_ranges.append(
+    def _add_data_range(self, start, finish, keys, values_dict, data_ranges):
+        """Helper function to append data ranges."""
+        values = [values_dict[key] for key in keys]
+        data_ranges.extend(
+            [
                 {
                     "range": f"D{start}:D{finish}",
                     "values": [keys],
                     "major_dimension": "COLUMNS",
-                }
-            )
-            data_ranges.append(
+                },
                 {
                     "range": f"E{start}:E{finish}",
                     "values": [values],
                     "major_dimension": "COLUMNS",
-                }
+                },
+            ]
+        )
+        return data_ranges
+
+    def prepare_data_for_update(self):
+        data_ranges = []
+
+        # Loop over categories and construct keys and values
+        start_pos = 2
+        for category in CATEGORIES:
+            asset_keys = list(self.data_sources[category].keys())
+            finish_pos = start_pos + len(asset_keys)
+
+            print(f"{category}:", asset_keys)
+            data_ranges = self._add_data_range(
+                start_pos,
+                finish_pos,
+                asset_keys,
+                self.data_sources[category],
+                data_ranges,
             )
 
-        # Data fetching
-        banks_keys = list(map(str, self.data_sources["banks"].keys()))
-        other_stocks_keys = list(map(str, self.data_sources["other_stocks"].keys()))
-        reits_keys = list(map(str, self.data_sources["reits"].keys()))
-        bonds_keys = list(map(str, self.data_sources["bonds"].keys()))
-        gold_keys = list(self.data_sources["ib_gold"].keys())
-        comm_keys = list(self.data_sources["ib_comm"].keys())
-        crypto_keys = list(self.data_sources["crypto"].keys())
-
-        start_pos = 2
-        for asset in [
-            banks_keys,
-            other_stocks_keys,
-            reits_keys,
-            bonds_keys,
-            gold_keys,
-            comm_keys,
-            crypto_keys,
-        ]:
-            finish_pos = start_pos + len(asset)
-            add_data_range(start_pos, finish_pos, asset, self.data_sources[asset])
             start_pos = finish_pos + 1
 
-        # Summary table
+        # Summary table data
         p_alloc = self.data_sources["portfolio_allocations"]
         asset_types = [
             "Net worth",
@@ -108,7 +104,7 @@ class SpreadsheetManager:
             "Crypto",
             "Gold",
             "Commodities",
-            "Mining",
+            "P2P",
             "Cash & Equivalents",
         ]
         total_values = [
@@ -119,7 +115,6 @@ class SpreadsheetManager:
             p_alloc.crypto_mkt_value,
             p_alloc.ib_gold_mkt_value,
             p_alloc.comm_mkt_value,
-            p_alloc.mining_mkt_value,
             p_alloc.cash_balance,
         ]
         allocations = [
@@ -130,7 +125,6 @@ class SpreadsheetManager:
             p_alloc.crypto_allocation,
             p_alloc.gold_allocation,
             p_alloc.commodities_allocation,
-            p_alloc.mining_allocation,
             p_alloc.cash_allocation,
         ]
         expected_allocations = [
@@ -141,7 +135,6 @@ class SpreadsheetManager:
             p_alloc.expected_allocations["Crypto"],
             p_alloc.expected_allocations["Gold"],
             p_alloc.expected_allocations["Commodities"],
-            p_alloc.expected_allocations["Mining"],
             p_alloc.expected_allocations["Cash & Equivalents"],
         ]
 
@@ -174,6 +167,7 @@ class SpreadsheetManager:
 
     def update_spreadsheet(self):
         prepared_data = self.prepare_data_for_update()
+        print(f"prepared_data --- {prepared_data}")
         self.sheet.batch_update(prepared_data)
 
     def update_individual_cells(self, allocation, broker):
@@ -181,17 +175,11 @@ class SpreadsheetManager:
         ff = FinancialFreedom(allocation)
         d = PublicDividends(broker)
 
-        crypto_position_finish = len(self.data_sources["crypto"].keys()) + 2
-        self.sheet.update(f"D{crypto_position_finish + 1}", "Mining")
-        self.sheet.update(
-            f"E{crypto_position_finish + 1}", f"{p_alloc.mining_mkt_value}"
-        )
-
         self.sheet.update("H1", "Financial Freedom")
         self.sheet.update("I1", f"{ff.calculate_financial_freedom_goal_progress()}")
 
         self.sheet.update("H12", "Monthly Dividend")
-        self.sheet.update("I12", f"{d.get_my_monthly_and_yearly_dividends()[0]}")
+        self.sheet.update("I12", f"{d.get_my_total_monthly_and_yearly_divs()[0]}")
 
         self.sheet.update("M1", "Dasha")
         self.sheet.update("N1", f"{p_alloc.dasha_net_worth}")
@@ -218,7 +206,7 @@ class PortfolioManager:
     def format_spreadsheet(self):
         """Applies formatting to the spreadsheet."""
         frm = SpreadsheetFormatter(self.data_source_obj.p_alloc)
-        frm.formatSpreadheet(self.google_sheet.sheet)
+        frm.format_spreadsheet(self.google_sheet.sheet)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import csv
 from abc import ABC, abstractmethod
-from src.helpers import perform_request, sort_dict, convert
+from src.helpers import perform_request, sort_dict, convert, calculate_total_mkt_value
 from data.endpoints import SUMMARY_API, POSITIONS_API
 import data.portfolio_filters as filters
 
@@ -75,6 +75,12 @@ class InteractiveBrokers(Broker):
     def cash_balance(self):
         return round(self.summary["totalcashvalue"]["amount"])
 
+    @property
+    def net_cash_balance(self):
+        portfolio = self.get_portfolio_positions()
+        short_mkt_value = calculate_total_mkt_value(portfolio["Short"])
+        return self.cash_balance + short_mkt_value
+
     def get_all_portfolio_info(self):
         return self.all_portfolio_info
 
@@ -109,15 +115,12 @@ class InteractiveBrokers(Broker):
         for asset, value in portfolio.items():
             if asset not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
                 print(value)
-                total_stocks += self.calculate_total_mkt_value(value)
+                total_stocks += calculate_total_mkt_value(value)
 
         portfolio["Total_Stocks_Value"] = round(total_stocks)
         print(portfolio)
 
         return portfolio
-
-    def calculate_total_mkt_value(self, dict):
-        return round(sum([value for value in dict.values()]))
 
     def get_stocks_quantity(self):
         stocks = {
@@ -128,14 +131,12 @@ class InteractiveBrokers(Broker):
 
     def get_full_porfolio_data(self):
         portfolio = self.get_portfolio_positions()
-        short_mkt_value = self.calculate_total_mkt_value(portfolio["Short"])
-        net_cash = self.cash_balance + short_mkt_value
-        portfolio.update({"Net_cash": net_cash})
+        short_mkt_value = calculate_total_mkt_value(portfolio["Short"])
+        portfolio.update({"Net_cash": self.net_cash_balance})
         print(f"\n")
         print(f"--- IB ---")
         print(f"Short total: {short_mkt_value}")
-        print(f"Cash total: {self.cash_balance}")
-        print(f"Net cash: {net_cash}")
+        print(f"Cash total: {self.net_cash_balance}")
         print(f"\n")
         print(f"{portfolio}")
         print(f"\n")

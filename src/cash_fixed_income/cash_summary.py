@@ -21,7 +21,6 @@ class Cash:
 
     def as_dict(self):
         instance_vars = vars(self).copy()
-
         # Replacing object representations with their actual values
         instance_vars["mono"] = self.mono.get_total_balance_in_usd()
         instance_vars["wise"] = self.wise.get_total_balance_in_usd()
