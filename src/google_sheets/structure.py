@@ -50,7 +50,7 @@ class GoogleSheet:
         return gspread.authorize(creds)
 
 
-class SpreadsheetManager:
+class SpreadsheetConstructor:
     def __init__(self, sheet, data_sources):
         self.sheet = sheet
         self.data_sources = data_sources
@@ -185,7 +185,7 @@ class SpreadsheetManager:
         self.sheet.update("N1", f"{p_alloc.dasha_net_worth}")
 
 
-class PortfolioManager:
+class SpreadsheetManager:
     def __init__(self, worksheet_name: str, ib_endpoint, crypto_endpoint):
         self.google_sheet = GoogleSheet(
             CREDENTIALS_PATH,
@@ -197,7 +197,7 @@ class PortfolioManager:
 
     def update_data(self):
         """Updates the spreadsheet with data from various sources."""
-        manager = SpreadsheetManager(self.google_sheet.sheet, self.data_source)
+        manager = SpreadsheetConstructor(self.google_sheet.sheet, self.data_source)
         manager.update_spreadsheet()
         manager.update_individual_cells(
             self.data_source_obj.p_alloc, self.data_source_obj.ib
@@ -211,6 +211,6 @@ class PortfolioManager:
 
 if __name__ == "__main__":
     worksheet_name = "Test 2023"
-    portfolio_manager = PortfolioManager(worksheet_name)
+    portfolio_manager = SpreadsheetManager(worksheet_name)
     portfolio_manager.update_data()
     portfolio_manager.format_spreadsheet()

@@ -1,5 +1,5 @@
 from src.cash_fixed_income import mono, wise
-from src.crypto.crypto import CryptoEndpoint
+from src.crypto.crypto_tokens import CryptoEndpoint
 
 from data.assets_data import CASH, LENDED, DEBT, PRIVAT
 

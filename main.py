@@ -1,10 +1,8 @@
 import time
 
 from src.brokers.ib import InteractiveBrokers
-from src.crypto.crypto import CryptoEndpoint
-from src.brokers.ib import InteractiveBrokers
-from src.crypto.crypto import CryptoEndpoint
-from src.google_sheets.structure import PortfolioManager
+from src.crypto.crypto_tokens import CryptoEndpoint
+from src.google_sheets.structure import SpreadsheetManager
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
@@ -12,10 +10,10 @@ from src.google_sheets.structure import PortfolioManager
 
 
 def main():
-    worksheet_name = "Test 2023"
+    worksheet_name = "Test 2024"
     ib = InteractiveBrokers()
     crypto = CryptoEndpoint()
-    portfolio_manager = PortfolioManager(worksheet_name, ib, crypto)
+    portfolio_manager = SpreadsheetManager(worksheet_name, ib, crypto)
     portfolio_manager.update_data()
     portfolio_manager.format_spreadsheet()
 

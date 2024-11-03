@@ -20,7 +20,7 @@ class DataSource:
 
     def fetch_data(self):
         data = self.ib.get_full_porfolio_data()
-        data["Crypto"] = self.crypto.get_crypto_market_values()
+        data["Crypto"] = self.crypto.get_tokens_market_values()
         data["Cash"] = self.cash.total_cash
         data["portfolio_allocations"] = self.p_alloc
         data["P2P"] = self.p2p.total_prinicpal_interest_in_p2p[0]
@@ -62,7 +62,7 @@ class DataSource:
 
     @property
     def crypto_mkt_value(self):
-        return self.crypto.get_total_crypto_market_value()
+        return self.crypto.get_total_crypto_value()
 
     @property
     def cash_balance(self):
