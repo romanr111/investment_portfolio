@@ -124,20 +124,19 @@ class OKX:
 
     def get_account_balances(self) -> Dict[str, float]:
         """
-        Retrieves the account balances from OKX.
+        Retrieves the account balances from OKX's Funding account, filtering out balances less than 0.5.
 
         Returns:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
-        endpoint = "/account/balance"
+        endpoint = "/asset/balances"
         data = self._send_request("GET", endpoint)
         balances = {}
-        for entry in data:
-            for detail in entry.get("details", []):
-                currency = detail.get("ccy")
-                balance = float(detail.get("eq", 0))
-                if balance > 0:
-                    balances[currency] = balances.get(currency, 0) + balance
+        for detail in data:
+            currency = detail.get("ccy")
+            balance = float(detail.get("bal", 0))
+            if balance >= 0.001:  # Only include balances >= 0.5
+                balances[currency] = balance
         print(f"Account Balances: {balances}")
         return balances
 
@@ -169,7 +168,7 @@ class OKXFiltered(OKX):
 
     def get_crypto_balances(self) -> Dict[str, float]:
         """
-        Retrieves and filters cryptocurrency balances, excluding stablecoins.
+        Retrieves and filters cryptocurrency balances, excluding stablecoins and balances less than 0.5.
 
         Returns:
             Dict[str, float]: Filtered cryptocurrency balances.
@@ -178,23 +177,23 @@ class OKXFiltered(OKX):
         crypto_balances = {
             asset: balance
             for asset, balance in self.account_balances.items()
-            if asset not in STABLECOINS and balance > 0
+            if asset not in STABLECOINS and balance >= 0.5  # Filter out low balances
         }
         print(f"Crypto Balances: {crypto_balances}")
         return crypto_balances
 
     def get_stablecoin_balances(self) -> Dict[str, float]:
         """
-        Retrieves balances of stablecoins.
+        Retrieves balances of stablecoins, filtering out balances less than 0.5.
 
         Returns:
-            Dict[str, float]: Stablecoin balances.
+            Dict[str, float]: Filtered stablecoin balances.
         """
         STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
         stablecoin_balances = {
             asset: balance
             for asset, balance in self.account_balances.items()
-            if asset in STABLECOINS and balance > 0
+            if asset in STABLECOINS and balance >= 0.5  # Filter out low balances
         }
         print(f"Stablecoin Balances: {stablecoin_balances}")
         return stablecoin_balances
