@@ -2,7 +2,7 @@ import time
 import src.helpers as helpers
 
 from src.base_asset import Asset
-from src.crypto.bin import BinanceFiltered
+from src.crypto.binance_client import BinanceFiltered
 from data.assets_data import *
 
 

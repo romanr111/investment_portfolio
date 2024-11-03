@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List
 
 import src.helpers as helpers
-from src.crypto.bin import BinanceFiltered
+from src.crypto.binance_client import BinanceFiltered
 from data.endpoints import COINMARKETCAP_API, COINMARKETCAP_HEADERS
 from data.crypto_data import COLD_STORAGE
 
