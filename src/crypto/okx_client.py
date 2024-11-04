@@ -140,16 +140,11 @@ class OKX:
         print(f"Account Balances: {balances}")
         return balances
 
-    def get_lending_products(self) -> List[Dict]:
-        """
-        Retrieves flexible lending positions information.
-
-        Returns:
-            List[Dict]: A list of flexible lending positions with their details.
-        """
+    def get_simple_earn_data(self) -> List[Dict]:
+        """Retrieves simple earn lending positions information."""
         endpoint = "/finance/savings/balance"  # Updated endpoint
         data = self._send_request("GET", endpoint)
-        print(f"Lending Products: {data}")
+        print(f"Simple Earn Data: {data}")
         return data
 
     def get_active_defi_orders(
@@ -183,7 +178,6 @@ class OKX:
             params["state"] = state
 
         data = self._send_request("GET", endpoint, params=params)
-        print(f"Active DeFi Orders: {data}")
         return data
 
     def get_staking_defi_order_history(
@@ -233,16 +227,13 @@ class OKXFiltered(OKX):
     """
 
     def __init__(self) -> None:
-        """
-        Initializes the OKXFiltered object by pre-fetching and caching necessary data.
-        """
         super().__init__()
         self.account_balances = self.get_account_balances()
-        self.lending_products = self.get_lending_products()
+        self.simple_earn_data = self.get_simple_earn_data()
 
     def get_crypto_balances(self) -> Dict[str, float]:
         """
-        Retrieves and filters cryptocurrency balances, excluding stablecoins and balances less than 0.5.
+        Retrieves and filters cryptocurrency balances, excluding stablecoins and balances less than 0.001.
 
         Returns:
             Dict[str, float]: Filtered cryptocurrency balances.
@@ -251,14 +242,13 @@ class OKXFiltered(OKX):
         crypto_balances = {
             asset: balance
             for asset, balance in self.account_balances.items()
-            if asset not in STABLECOINS and balance >= 0.5  # Filter out low balances
+            if asset not in STABLECOINS and balance >= 0.001
         }
-        print(f"Crypto Balances: {crypto_balances}")
         return crypto_balances
 
     def get_stablecoin_balances(self) -> Dict[str, float]:
         """
-        Retrieves balances of stablecoins, filtering out balances less than 0.5.
+        Retrieves balances of stablecoins, filtering out balances less than 1.
 
         Returns:
             Dict[str, float]: Filtered stablecoin balances.
@@ -267,24 +257,23 @@ class OKXFiltered(OKX):
         stablecoin_balances = {
             asset: balance
             for asset, balance in self.account_balances.items()
-            if asset in STABLECOINS and balance >= 0.5  # Filter out low balances
+            if asset in STABLECOINS and balance >= 1
         }
-        print(f"Stablecoin Balances: {stablecoin_balances}")
         return stablecoin_balances
 
-    def get_lending_positions(self) -> Dict[str, Tuple[float, float]]:
+    def get_simple_earn_positions(self) -> Dict[str, Tuple[float, float]]:
         """
-        Processes flexible lending products to extract principal and effective yield.
+        Processes simple earn lending products to extract principal and effective yield.
 
         Returns:
             Dict[str, Tuple[float, float]]: A dictionary with assets as keys and a tuple of
             (principal, effective_yield) as values.
         """
         lending_positions = {}
-        for product in self.lending_products:
+        for product in self.simple_earn_data:
             asset = product.get("ccy")
             principal = float(product.get("amt", 0))
-            yield_rate = float(product.get("rate", 0))  # Ensure to use the correct key
+            yield_rate = float(product.get("rate", 0))
             if principal > 0:
                 if asset in lending_positions:
                     existing_principal, existing_yield = lending_positions[asset]
@@ -295,140 +284,213 @@ class OKXFiltered(OKX):
                     lending_positions[asset] = (total_principal, weighted_yield)
                 else:
                     lending_positions[asset] = (principal, yield_rate)
-        print(f"Lending Positions: {lending_positions}")
         return lending_positions
+
+    def get_defi_protocol_list(self) -> List[Dict]:
+        """
+        Retrieves the list of supported DeFi protocols and their products.
+        """
+        endpoint = "/finance/staking-defi/offers"
+        params = {"protocolType": "defi"}
+        data = self._send_request("GET", endpoint, params=params)
+        return data
 
     def get_active_defi_lending_positions(
         self,
         product_id: Optional[str] = None,
         protocol_type: Optional[str] = "defi",
         ccy: Optional[str] = None,
-        state: Optional[str] = "1",  # Example: '1' for Earning
     ) -> Dict[str, Dict]:
         """
-        Retrieves and processes active DeFi lending positions.
-
-        Args:
-            product_id (str, optional): Product ID to filter.
-            protocol_type (str, optional): Protocol type, default is 'defi'.
-            ccy (str, optional): Investment currency, e.g., 'BTC'.
-            state (str, optional): Order state to filter, default is '1' (Earning).
-
-        Returns:
-            Dict[str, Dict]: Processed DeFi lending positions.
+        Enhanced version that focuses on active DeFi orders only.
         """
         active_orders = self.get_active_defi_orders(
-            product_id=product_id, protocol_type=protocol_type, ccy=ccy, state=state
+            product_id=product_id, protocol_type=protocol_type, ccy=ccy
         )
+
         defi_lending_positions = {}
+
+        # Process active orders
         for order in active_orders:
-            ccy = order.get("ccy")
-            apy = float(order.get("apy", 0))
-            invest_data = order.get("investData", [])
-            earnings_data = order.get("earningData", [])
+            self._process_defi_position(order, defi_lending_positions)
 
-            invested_amount = sum(float(item.get("amt", 0)) for item in invest_data)
-            earnings = sum(float(item.get("earnings", 0)) for item in earnings_data)
+        # Print summary with improved formatting
+        if not defi_lending_positions:
+            print("\nNo active DeFi lending positions found.")
+        else:
+            print("\n=== Active DeFi Lending Positions ===")
+            for key, data in defi_lending_positions.items():
+                print("\n" + "=" * 40)
+                print(f"Asset-Protocol: {key}")
+                print("-" * 40)
+                print(f"Protocol: {data['protocol']}")
+                print(f"State: {data['state']}")
+                print(f"Invested Amount: {data['invested_amount']:.6f}")
+                print(f"APY: {data['apy']*100:.2f}%")
+                print(f"Earnings: {data['earnings']:.6f}")
 
-            if ccy:
-                if ccy in defi_lending_positions:
-                    existing = defi_lending_positions[ccy]
-                    existing["invested_amount"] += invested_amount
-                    existing["earnings"] += earnings
-                    # Recalculate weighted APY
-                    total_invested = existing["invested_amount"] + invested_amount
-                    existing["apy"] = (
-                        (existing["apy"] * existing["invested_amount"])
-                        + (apy * invested_amount)
-                    ) / total_invested
-                else:
-                    defi_lending_positions[ccy] = {
-                        "invested_amount": invested_amount,
-                        "earnings": earnings,
-                        "apy": apy,
-                    }
-        print(f"Active DeFi Lending Positions: {defi_lending_positions}")
+                if data["protocol_details"]:
+                    print("\nProtocol Details:")
+                    for k, v in data["protocol_details"].items():
+                        print(f"  {k}: {v}")
+
         return defi_lending_positions
 
-    def get_latest_order_history(
-        self,
-        product_id: Optional[str] = None,
-        protocol_type: Optional[str] = None,
-        ccy: Optional[str] = None,
-        limit: int = 5,
-    ) -> List[Dict]:
+    def _process_defi_position(self, position_data: Dict, positions_dict: Dict) -> None:
         """
-        Retrieves the latest 5 staking and DeFi order history records.
-
-        Args:
-            product_id (str, optional): Product ID to filter.
-            protocol_type (str, optional): Protocol type, e.g., 'defi' or 'staking'.
-            ccy (str, optional): Investment currency, e.g., 'BTC'.
-            limit (int, optional): Number of records to retrieve, default is 5.
-
-        Returns:
-            List[Dict]: A list of the latest 5 staking and DeFi order history records.
+        Helper method to process individual DeFi position data with improved protocol handling.
         """
-        order_history = self.get_staking_defi_order_history(
-            product_id=product_id, protocol_type=protocol_type, ccy=ccy, limit=limit
+        ccy = position_data.get("ccy")
+        protocol = position_data.get(
+            "protocol", position_data.get("protocolName", "unknown")
         )
-        print(f"Latest {limit} Order History Records: {order_history}")
-        return order_history
+        state = position_data.get("state", "unknown")
+        apy = float(position_data.get("apy", position_data.get("earningRate", 0)))
+
+        # Handle different data structures for amount
+        invested_amount = 0
+        if "investData" in position_data:
+            invest_data = position_data.get("investData", [])
+            invested_amount = sum(float(item.get("amt", 0)) for item in invest_data)
+        else:
+            # Try different possible field names for amount
+            amount_fields = ["balance", "investAmount", "amt", "amount"]
+            for field in amount_fields:
+                if field in position_data:
+                    invested_amount = float(position_data.get(field, 0))
+                    break
+
+        # Handle different data structures for earnings
+        earnings = 0
+        if "earningData" in position_data:
+            earnings_data = position_data.get("earningData", [])
+            earnings = sum(float(item.get("earnings", 0)) for item in earnings_data)
+        else:
+            earnings = float(position_data.get("earnings", 0))
+
+        # Skip positions with zero investment
+        if invested_amount <= 0:
+            return
+
+        position_key = f"{ccy}-{protocol}"
+
+        position_info = {
+            "protocol": protocol,
+            "state": state,
+            "invested_amount": invested_amount,
+            "earnings": earnings,
+            "apy": apy,
+            "protocol_details": {},
+        }
+
+        # Add protocol-specific details
+        protocol_lower = protocol.lower()
+        if protocol_lower == "compound":
+            position_info["protocol_details"].update(
+                {
+                    "supply_rate": float(position_data.get("supplyRate", 0)),
+                    "collateral_factor": float(
+                        position_data.get("collateralFactor", 0)
+                    ),
+                    "market": position_data.get("market", ""),
+                    "product_id": position_data.get("productId", ""),
+                }
+            )
+        elif protocol_lower == "aave":
+            position_info["protocol_details"].update(
+                {
+                    "market": position_data.get("market", ""),
+                    "product_id": position_data.get("productId", ""),
+                    "network": position_data.get("chain", ""),
+                    "version": position_data.get("version", "v3"),
+                }
+            )
+
+        # Aggregate or add position
+        if position_key in positions_dict:
+            existing = positions_dict[position_key]
+            total_invested = existing["invested_amount"] + invested_amount
+            weighted_apy = (
+                (
+                    (
+                        existing["invested_amount"] * existing["apy"]
+                        + invested_amount * apy
+                    )
+                    / total_invested
+                )
+                if total_invested > 0
+                else 0
+            )
+
+            existing.update(
+                {
+                    "invested_amount": total_invested,
+                    "earnings": existing["earnings"] + earnings,
+                    "apy": weighted_apy,
+                }
+            )
+        else:
+            positions_dict[position_key] = position_info
 
     def get_pending_defi_orders(self, limit: int = 5) -> List[Dict]:
         """
-        Retrieves the latest 5 pending staking and DeFi orders.
+        Retrieves the latest pending staking and DeFi orders.
 
         Args:
             limit (int, optional): Number of pending orders to retrieve, default is 5.
 
         Returns:
-            List[Dict]: A list of the latest 5 pending staking and DeFi orders.
+            List[Dict]: A list of the latest pending staking and DeFi orders.
         """
-        # Retrieve all active orders with state=8 (Pending)
         active_pending_orders = self.get_active_defi_orders(state="8")
 
         if not active_pending_orders:
             print("No pending orders found.")
             return []
 
-        # Sort orders by purchasedTime in descending order to get the latest ones
         sorted_orders = sorted(
             active_pending_orders,
             key=lambda x: int(x.get("purchasedTime", "0")),
             reverse=True,
         )
 
-        # Limit to the latest 'limit' orders
         latest_pending_orders = sorted_orders[:limit]
-        print(f"Latest {limit} Pending DeFi Orders: {latest_pending_orders}")
         return latest_pending_orders
 
 
 def main():
-    """Main function to execute the OKXEndpoint."""
+    """Main function with improved output formatting."""
     try:
         okx_filtered = OKXFiltered()
 
-        # Get and print crypto balances
-        crypto_balances = okx_filtered.get_crypto_balances()
-        print(f"Crypto Balances: {crypto_balances}\n")
+        print("\n=== Account Overview ===")
+        print("\nCrypto Balances:")
+        for asset, balance in okx_filtered.get_crypto_balances().items():
+            print(f"{asset}: {balance:.6f}")
 
-        # Get and print stablecoin balances
-        stablecoin_balances = okx_filtered.get_stablecoin_balances()
-        print(f"Stablecoin Balances: {stablecoin_balances}\n")
+        print("\nStablecoin Balances:")
+        for asset, balance in okx_filtered.get_stablecoin_balances().items():
+            print(f"{asset}: {balance:.2f}")
 
-        # Get and print flexible lending positions
-        lending_positions = okx_filtered.get_lending_positions()
-        print(f"Lending Positions: {lending_positions}\n")
+        print("\n=== Lending Positions ===")
+        lending_positions = okx_filtered.get_simple_earn_positions()
+        for asset, (principal, yield_rate) in lending_positions.items():
+            print(f"\n{asset}:")
+            print(f"  Principal: {principal:.6f}")
+            print(f"  Yield Rate: {yield_rate*100:.2f}%")
 
         # Get and print active DeFi lending positions
         defi_lending_positions = okx_filtered.get_active_defi_lending_positions()
-        print(f"Active DeFi Lending Positions: {defi_lending_positions}\n")
 
         # Get and print the latest 5 pending orders
+        print("\n=== Latest Pending Orders ===")
         latest_pending_orders = okx_filtered.get_pending_defi_orders(limit=5)
-        print(f"Latest 5 Pending DeFi Orders: {latest_pending_orders}\n")
+        for order in latest_pending_orders:
+            print(f"\nOrder ID: {order.get('ordId', 'N/A')}")
+            print(f"Asset: {order.get('ccy', 'N/A')}")
+            print(f"Protocol: {order.get('protocol', 'N/A')}")
+            print(f"Amount: {float(order.get('amt', 0)):.6f}")
+            print(f"Status: {order.get('state', 'N/A')}")
 
     except Exception as e:
         print(f"ERROR: An error occurred: {e}")
