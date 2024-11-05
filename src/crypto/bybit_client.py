@@ -1,10 +1,19 @@
 import time
 import hmac
 import hashlib
+import logging
 from typing import Dict, List
-from urllib.parse import urlencode
-from data.api_keys import BYBIT_API_KEY, BYBIT_API_SECRET
 import requests
+
+from data.api_keys import BYBIT_API_KEY, BYBIT_API_SECRET
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Changed to DEBUG for detailed logs
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.FileHandler("bybit_api.log"), logging.StreamHandler()],
+)
+logger = logging.getLogger(__name__)
 
 
 class Bybit:
@@ -24,7 +33,9 @@ class Bybit:
         self.api_secret = BYBIT_API_SECRET
 
         if not all([self.api_key, self.api_secret]):
-            raise ValueError("API key and secret key must be provided.")
+            raise ValueError(
+                "API key and secret key must be set in environment variables."
+            )
 
     def _generate_signature(self, params: Dict, timestamp: int) -> str:
         """
@@ -56,6 +67,9 @@ class Bybit:
             prehash_string.encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
+
+        logger.debug(f"Prehash String: {prehash_string}")
+        logger.debug(f"Generated Signature: {signature}")
 
         return signature
 
@@ -94,6 +108,10 @@ class Bybit:
 
         url = f"{self.API_URL}{self.API_VERSION}{endpoint}"
 
+        logger.info(
+            f"Sending {method.upper()} request to {url} with params {sorted_params} and headers {headers}"
+        )
+
         try:
             if method.upper() == "GET":
                 response = requests.get(
@@ -109,41 +127,95 @@ class Bybit:
             response.raise_for_status()
             data = response.json()
 
-            print(f"Raw API Response for {endpoint}: {data}")  # Debugging line
+            logger.debug(f"Raw API Response for {endpoint}: {data}")
 
             if data.get("retCode") != 0:
-                raise Exception(f"API Error: {data.get('retMsg')}")
+                ret_code = data.get("retCode")
+                ret_msg = data.get("retMsg")
+                raise Exception(f"API Error {ret_code}: {ret_msg}")
 
             return data.get("result", {})
         except requests.exceptions.HTTPError as http_err:
-            print(f"HTTP ERROR: {http_err}")
+            logger.error(f"HTTP ERROR: {http_err}")
             raise
         except Exception as e:
-            print(f"ERROR: API request failed: {e}")
+            logger.error(f"ERROR: API request failed: {e}")
             raise
 
-    def get_account_balances(self) -> Dict[str, float]:
+    def get_account_balances(self, account_type: str = "UNIFIED") -> Dict[str, float]:
         """
-        Retrieves the account balances from Bybit's Unified Trading Account.
+        Retrieves the account balances from Bybit's specified Trading Account.
+
+        Args:
+            account_type (str): The type of account to retrieve balances for.
+                                Options: "UNIFIED", "FUNDING", "EARN"
 
         Returns:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
-        endpoint = "/account/wallet-balance"
-        params = {"accountType": "UNIFIED"}
+        account_type_map = {
+            "UNIFIED": ("UNIFIED", "/account/wallet-balance"),
+            # Uncomment and adjust these lines when handling FUNDING and EARN accounts
+            # "FUNDING": ("FUND", "/asset/transfer/query-account-coins-balance"),
+            # "EARN": ("INVESTMENT", "/asset/transfer/query-account-coins-balance"),
+        }
 
+        mapped_account_type, endpoint = account_type_map.get(
+            account_type.upper(), (None, None)
+        )
+        if not mapped_account_type or not endpoint:
+            raise ValueError(f"Invalid account type: {account_type}")
+
+        params = {"accountType": mapped_account_type}
+
+        logger.info(f"Fetching {account_type} account balances.")
         wallet_data = self._send_request("GET", endpoint, params)
+
+        # Log the type and content of wallet_data for debugging
+        logger.debug(f"wallet_data type: {type(wallet_data)}, content: {wallet_data}")
+
         balances = {}
 
-        # Process unified account balances
-        if "coins" in wallet_data:
-            for coin in wallet_data.get("coins", []):
-                currency = coin.get("coin")
-                total_balance = float(coin.get("walletBalance", "0"))
-                if total_balance >= 0.001:  # Only include balances >= 0.001
-                    balances[currency] = total_balance
+        try:
+            if account_type.upper() == "UNIFIED":
+                coins_list = wallet_data.get("list", [])[0].get("coin", [])
+            else:
+                coins_list = wallet_data.get("balance", [])
+
+            for coin in coins_list:
+                if isinstance(coin, dict):
+                    currency = coin.get("coin")
+                    available_balance = float(coin.get("availableToWithdraw", "0"))
+                    if available_balance >= 0.001:
+                        balances[currency] = available_balance
+                else:
+                    logger.warning(f"Unexpected coin data format: {coin}")
+        except (AttributeError, IndexError) as e:
+            logger.error(f"Error processing wallet data for {account_type}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+
+        logger.debug(f"{account_type} Balances: {balances}")
 
         return balances
+
+    def get_funding_balances(self) -> Dict[str, float]:
+        """
+        Retrieves the account balances from Bybit's Funding Account.
+
+        Returns:
+            Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
+        """
+        return self.get_account_balances(account_type="FUNDING")
+
+    def get_earn_balances(self) -> Dict[str, float]:
+        """
+        Retrieves the account balances from Bybit's Earn Account.
+
+        Returns:
+            Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
+        """
+        return self.get_account_balances(account_type="EARN")
 
     def get_earning_products(self) -> List[Dict]:
         """
@@ -155,8 +227,27 @@ class Bybit:
         endpoint = "/asset/spot-margin-trade/data"
         params = {}  # Add any required parameters if necessary
 
+        logger.info("Fetching earning products.")
         data = self._send_request("GET", endpoint, params)
-        return data.get("spotMarginMode", [])
+        earning_products = data.get("spotMarginMode", [])
+
+        logger.debug(f"Earning Products: {earning_products}")
+
+        return earning_products
+
+    def get_earn_positions(self) -> List[Dict]:
+        endpoint = "/asset/v3/private/investment-product-position/list"
+        params = {}
+        
+        logger.info("Fetching Earn positions.")
+        try:
+            data = self._send_request("GET", endpoint, params)
+            positions = data.get("result", {}).get("list", [])
+            logger.debug(f"Earn Positions: {positions}")
+            return positions
+        except Exception as e:
+            logger.error(f"Error getting Earn positions: {e}")
+            return []
 
     def get_active_earning_positions(self) -> List[Dict]:
         """
@@ -172,30 +263,18 @@ class Bybit:
             "limit": 50,
         }
 
+        logger.info("Fetching active earning positions.")
         try:
             data = self._send_request("GET", endpoint, params)
             positions = data.get("list", [])
             # Filter out positions with zero size
-            return [pos for pos in positions if float(pos.get("size", 0)) > 0]
+            active_positions = [
+                pos for pos in positions if float(pos.get("size", 0)) > 0
+            ]
+            logger.debug(f"Active Positions: {active_positions}")
+            return active_positions
         except Exception as e:
-            print(f"Error getting positions: {str(e)}")
-            return []
-
-    def get_savings_products(self) -> List[Dict]:
-        """
-        Retrieves active savings products.
-
-        Returns:
-            List[Dict]: List of active savings products.
-        """
-        endpoint = "/asset/earnings/record"  # Updated to the correct endpoint
-        params = {"category": "DEFI", "limit": 50}
-
-        try:
-            data = self._send_request("GET", endpoint, params)
-            return data.get("list", [])
-        except Exception as e:
-            print(f"Error getting savings products: {str(e)}")
+            logger.error(f"Error getting positions: {e}")
             return []
 
 
@@ -206,38 +285,64 @@ class BybitFiltered(Bybit):
 
     def __init__(self) -> None:
         super().__init__()
-        self.account_balances = self.get_account_balances()
+        logger.info("Initializing BybitFiltered class.")
+        self.unified_balances = self.get_account_balances()
+        self.earn_positions = self.get_earn_positions()
+        # Uncomment the following lines when handling FUNDING and EARN accounts
+        # self.funding_balances = self.get_funding_balances()
+        # self.earn_balances = self.get_earn_balances()
         self.earning_positions = self.get_active_earning_positions()
-        self.savings_positions = self.get_savings_products()
 
     def get_crypto_balances(self) -> Dict[str, float]:
         """
-        Retrieves and filters cryptocurrency balances, excluding stablecoins.
+        Retrieves and filters cryptocurrency balances from Unified, Funding, and Earn accounts, excluding stablecoins.
 
         Returns:
             Dict[str, float]: Filtered cryptocurrency balances.
         """
         STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
-        crypto_balances = {
-            asset: balance
-            for asset, balance in self.account_balances.items()
-            if asset not in STABLECOINS and balance >= 0.001
-        }
+        crypto_balances = {}
+
+        logger.info(
+            "Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts."
+        )
+        for account, balances in [
+            ("Unified", self.unified_balances),
+            # ("Funding", self.funding_balances),
+            # ("Earn", self.earn_balances),
+        ]:
+            for asset, balance in balances.items():
+                if asset not in STABLECOINS and balance >= 0.001:
+                    crypto_balances[asset] = crypto_balances.get(asset, 0) + balance
+
+        logger.debug(f"Aggregated Crypto Balances: {crypto_balances}")
         return crypto_balances
 
     def get_stablecoin_balances(self) -> Dict[str, float]:
         """
-        Retrieves balances of stablecoins.
+        Retrieves balances of stablecoins from Unified, Funding, and Earn accounts.
 
         Returns:
             Dict[str, float]: Filtered stablecoin balances.
         """
         STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
-        stablecoin_balances = {
-            asset: balance
-            for asset, balance in self.account_balances.items()
-            if asset in STABLECOINS and balance >= 1
-        }
+        stablecoin_balances = {}
+
+        logger.info(
+            "Aggregating stablecoin balances from Unified, Funding, and Earn accounts."
+        )
+        for account, balances in [
+            ("Unified", self.unified_balances),
+            # ("Funding", self.funding_balances),
+            # ("Earn", self.earn_balances),
+        ]:
+            for asset, balance in balances.items():
+                if asset in STABLECOINS and balance >= 1:
+                    stablecoin_balances[asset] = (
+                        stablecoin_balances.get(asset, 0) + balance
+                    )
+
+        logger.debug(f"Aggregated Stablecoin Balances: {stablecoin_balances}")
         return stablecoin_balances
 
     def get_earning_positions_summary(self) -> Dict[str, Dict]:
@@ -249,6 +354,7 @@ class BybitFiltered(Bybit):
         """
         positions_summary = {}
 
+        logger.info("Processing earning positions and savings products for summary.")
         try:
             # Process regular positions
             for position in self.earning_positions:
@@ -305,38 +411,14 @@ class BybitFiltered(Bybit):
 
                 summary["positions"].append(position_info)
 
-            # Process savings positions
-            for savings in self.savings_positions:
-                asset = savings.get("asset", "")
-                amount = float(savings.get("amount", 0))
-                apy = float(savings.get("apy", 0))
+            # (No processing of savings positions since it's commented out)
 
-                if amount <= 0:
-                    continue
-
-                if asset not in positions_summary:
-                    positions_summary[asset] = {
-                        "total_size": 0,
-                        "total_value": 0,
-                        "total_pnl": 0,
-                        "positions": [],
-                        "savings": [],
-                        "avg_entry_price": 0,
-                        "current_price": 0,
-                    }
-
-                savings_info = {
-                    "amount": amount,
-                    "apy": apy,
-                }
-
-                positions_summary[asset]["savings"].append(savings_info)
-                positions_summary[asset]["total_size"] += amount
+            logger.debug(f"Positions Summary: {positions_summary}")
+            return positions_summary
 
         except Exception as e:
-            print(f"Error processing positions: {str(e)}")
-
-        return positions_summary
+            logger.error(f"Error processing positions: {e}")
+            return {}
 
 
 def main():
@@ -345,6 +427,7 @@ def main():
         bybit_filtered = BybitFiltered()
 
         print("\n=== Account Overview ===")
+
         print("\nCrypto Balances:")
         crypto_balances = bybit_filtered.get_crypto_balances()
         if crypto_balances:
@@ -360,6 +443,9 @@ def main():
                 print(f"{asset}: {balance:.2f}")
         else:
             print("No stablecoin balances found.")
+
+        
+        print(f"bybit_filtered.earn_positions - {bybit_filtered.earn_positions}")
 
         print("\n=== Positions Summary ===")
         positions_summary = bybit_filtered.get_earning_positions_summary()
@@ -392,7 +478,7 @@ def main():
             print("No positions found.")
 
     except Exception as e:
-        print(f"ERROR: An error occurred: {e}")
+        logger.error(f"ERROR: An error occurred: {e}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,180 @@
+2024-11-05 14:31:36,052 [ERROR] ERROR: An error occurred: API key and secret key must be set in environment variables.
+2024-11-05 14:32:12,709 [ERROR] ERROR: An error occurred: API key and secret key must be set in environment variables.
+2024-11-05 14:32:53,537 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:32:53,539 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:32:53,540 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730809973539', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'ac73c196463e681c0ec00b62d4d8ff03060f9f8abf8eb6d72ec0554d2144be22', 'Content-Type': 'application/json'}
+2024-11-05 14:32:53,976 [WARNING] No coins data found for UNIFIED account.
+2024-11-05 14:32:53,976 [INFO] Fetching FUNDING account balances.
+2024-11-05 14:32:53,977 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'FUNDING')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730809973977', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '98e9708f19622279ff451d4879ce92ec112c3f6b473fcc5a3c792e8d4bb1ea09', 'Content-Type': 'application/json'}
+2024-11-05 14:32:54,264 [ERROR] ERROR: API request failed: API Error 10001: accountType only support UNIFIED.
+2024-11-05 14:32:54,264 [ERROR] ERROR: An error occurred: API Error 10001: accountType only support UNIFIED.
+2024-11-05 14:35:31,696 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:35:31,697 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:35:31,697 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730810131697', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '3d8c1a1bd2abfae2c671416288191ccaeb9024a2c4f53e541e98ec00c8e1eeec', 'Content-Type': 'application/json'}
+2024-11-05 14:35:32,553 [WARNING] No coins data found for UNIFIED account.
+2024-11-05 14:35:32,553 [INFO] Fetching FUNDING account balances.
+2024-11-05 14:35:32,554 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'FUNDING')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730810132554', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '71f3bdc3f23ecedf9e47894c3f98848ab92c3e8a33b36f9e1a9317f9e4ce2cde', 'Content-Type': 'application/json'}
+2024-11-05 14:35:33,711 [ERROR] ERROR: API request failed: API Error 10001: accountType only support UNIFIED.
+2024-11-05 14:35:33,711 [ERROR] ERROR: An error occurred: API Error 10001: accountType only support UNIFIED.
+2024-11-05 14:50:04,647 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:50:04,647 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:50:04,647 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811004647', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '3e61c08e03995e5dce2e6e9f710bcbac2443cfaec9831fb22f35cade11c0500f', 'Content-Type': 'application/json'}
+2024-11-05 14:50:05,071 [ERROR] ERROR: An error occurred: 'list' object has no attribute 'get'
+2024-11-05 14:52:16,487 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:52:16,489 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:52:16,489 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811136489', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '23bea05caab89f0ead9bee7a6e67136be03691dfc824dd60fa023ab62a26b1ee', 'Content-Type': 'application/json'}
+2024-11-05 14:52:17,311 [INFO] Fetching FUNDING account balances.
+2024-11-05 14:52:17,311 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coins-balance with params [('accountType', 'FUND')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811137311', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '64d3fb6cd2e37845a26e42fbc8433983958ec529f103270a0b733d3ef99919e1', 'Content-Type': 'application/json'}
+2024-11-05 14:52:17,603 [INFO] Fetching EARN account balances.
+2024-11-05 14:52:17,603 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coins-balance with params [('accountType', 'INVESTMENT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811137603', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '738a0164d23dc52e30fff2b61f16604b689762f47ce65c96303553d7bf3d72c6', 'Content-Type': 'application/json'}
+2024-11-05 14:52:18,350 [ERROR] ERROR: API request failed: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:52:18,350 [ERROR] ERROR: An error occurred: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:53:03,847 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:53:03,847 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:53:03,848 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811183848', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '938c16906afa0468fe7c2cecec5211e4e0c4fe809f47ee2d0d228677319ba57f', 'Content-Type': 'application/json'}
+2024-11-05 14:53:04,624 [INFO] Fetching FUNDING account balances.
+2024-11-05 14:53:04,624 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coins-balance with params [('accountType', 'FUNDING')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811184624', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '8a14501ccff191e1da8e9c7dec7ae9d9787960ae251fea0ee54874febb3f9c0c', 'Content-Type': 'application/json'}
+2024-11-05 14:53:05,250 [ERROR] ERROR: API request failed: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:53:05,250 [ERROR] ERROR: An error occurred: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:56:57,233 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:56:57,234 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:56:57,236 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811417236', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '83bebd9f01f1d46175475b6eb2e0a1980fb6edc18bed7d391487887f67825df8', 'Content-Type': 'application/json'}
+2024-11-05 14:56:57,988 [INFO] Fetching FUNDING account balances.
+2024-11-05 14:56:57,988 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coins-balance with params [('accountType', 'FUND')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811417988', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '037342fc9ce91224a4daaa19b7e96b07c3fd2e5f579ff436eece26749e429c09', 'Content-Type': 'application/json'}
+2024-11-05 14:56:58,621 [INFO] Fetching EARN account balances.
+2024-11-05 14:56:58,622 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coins-balance with params [('accountType', 'EARN')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811418622', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '4c20cb692e89614b5aaaa332a31ee64ec0143711f3e6130640224e228454f12c', 'Content-Type': 'application/json'}
+2024-11-05 14:56:59,246 [ERROR] ERROR: API request failed: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:56:59,246 [ERROR] ERROR: An error occurred: API Error 131203: request parameter err: accountType invalid
+2024-11-05 14:57:56,916 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:57:56,917 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:57:56,917 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811476917', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '41605e7521700ef8c907ba889ef657f42b014cb9bfc910511f633ae2f1109ad0', 'Content-Type': 'application/json'}
+2024-11-05 14:57:57,687 [INFO] Fetching active earning positions.
+2024-11-05 14:57:57,688 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811477688', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'a1aa9e83a9894c42ac1b4c4fece5ed237ff18b618fe11802977d0fa62a1fd82b', 'Content-Type': 'application/json'}
+2024-11-05 14:57:58,347 [INFO] Fetching savings products.
+2024-11-05 14:57:58,347 [INFO] Sending GET request to https://api.bybit.com/v5/asset/earnings/records with params [('category', 'DEFI'), ('limit', 50)] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811478347', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'a4112852e509d6f70a839449e9bc6bff8435dad9ae736d24522cb102a598b57e', 'Content-Type': 'application/json'}
+2024-11-05 14:57:58,970 [ERROR] HTTP ERROR: 404 Client Error: Not Found for url: https://api.bybit.com/v5/asset/earnings/records?category=DEFI&limit=50
+2024-11-05 14:57:58,971 [ERROR] Error getting savings products: 404 Client Error: Not Found for url: https://api.bybit.com/v5/asset/earnings/records?category=DEFI&limit=50
+2024-11-05 14:57:58,975 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 14:57:58,976 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 14:57:58,977 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 14:59:56,451 [INFO] Initializing BybitFiltered class.
+2024-11-05 14:59:56,452 [INFO] Fetching UNIFIED account balances.
+2024-11-05 14:59:56,453 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811596453', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '1f22c056fa29f46418f2ba223c6e6649cab4fb1625cd1efdd8c542df47df64e6', 'Content-Type': 'application/json'}
+2024-11-05 14:59:57,290 [INFO] Fetching active earning positions.
+2024-11-05 14:59:57,291 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811597290', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '607a63d3d778f08f047764c4c94c834a5615e836efb0b96f512cf374252f1b7d', 'Content-Type': 'application/json'}
+2024-11-05 14:59:57,907 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 14:59:57,907 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 14:59:57,907 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 14:59:57,908 [ERROR] Error processing positions: 'BybitFiltered' object has no attribute 'savings_positions'
+2024-11-05 15:00:55,077 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:00:55,077 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:00:55,077 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811655077', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '91acf9790030a80cbc0ec77e254122f85a7ec30df91af05fdbcd7ee78bea068d', 'Content-Type': 'application/json'}
+2024-11-05 15:00:55,407 [INFO] Fetching active earning positions.
+2024-11-05 15:00:55,415 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811655415', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '6f898cb29195a7c3bacbb7f83491b673d2048b61642b1eb30ffdbb5ccc371d8b', 'Content-Type': 'application/json'}
+2024-11-05 15:00:55,742 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:00:55,742 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:00:55,742 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:02:22,844 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:02:22,844 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:02:22,845 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811742845', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '41bd2d9acb02cde02ee0f3a925158a2da765ff2ab11c8a6ebcef716cbd066491', 'Content-Type': 'application/json'}
+2024-11-05 15:02:23,453 [INFO] Fetching active earning positions.
+2024-11-05 15:02:23,453 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811743453', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '8c15e554b7e43ea6acfc77688f05c479892dd7c3f700f84099cb4fb2f33e9377', 'Content-Type': 'application/json'}
+2024-11-05 15:02:24,101 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:02:24,101 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:02:24,102 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:04:01,144 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:04:01,144 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:04:01,144 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811841144', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '66430423a5e8d5b33b03fd84c43f5776d20eb5359ee4f30d178c8b909c01c85c', 'Content-Type': 'application/json'}
+2024-11-05 15:04:01,652 [INFO] Fetching active earning positions.
+2024-11-05 15:04:01,652 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811841652', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'd107d5b5b8825b7601da67c339bc627f1e2fad5b1694d64fc65e558aa375f3b5', 'Content-Type': 'application/json'}
+2024-11-05 15:04:02,282 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:04:02,282 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:04:02,282 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:06:17,182 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:06:17,184 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:06:17,184 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811977184', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '374c55196d23cdbe733f2c21ed7f01ef03a0fa634e790ee78018296eadad35a7', 'Content-Type': 'application/json'}
+2024-11-05 15:06:18,999 [INFO] Fetching active earning positions.
+2024-11-05 15:06:19,000 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730811979000', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '71c23e4cace25cdb0623776d1069329aba8df0110c1ab1113b120def61f3ab06', 'Content-Type': 'application/json'}
+2024-11-05 15:06:19,822 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:06:19,823 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:06:19,823 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:09:27,513 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:09:27,514 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:09:27,514 [DEBUG] Prehash String: 17308121675141vPSgOkj9HSqADHQPn5000accountType=UNIFIED
+2024-11-05 15:09:27,514 [DEBUG] Generated Signature: b7654fdee8edde5c2c32cfa09fdfa34fc0c30eb267007da242e468b938d3dad9
+2024-11-05 15:09:27,515 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812167514', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'b7654fdee8edde5c2c32cfa09fdfa34fc0c30eb267007da242e468b938d3dad9', 'Content-Type': 'application/json'}
+2024-11-05 15:09:27,529 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:09:29,237 [DEBUG] https://api.bybit.com:443 "GET /v5/account/wallet-balance?accountType=UNIFIED HTTP/1.1" 200 751
+2024-11-05 15:09:29,240 [DEBUG] Raw API Response for /account/wallet-balance: {'retCode': 0, 'retMsg': 'OK', 'result': {'list': [{'totalEquity': '2.999217', 'accountIMRate': '0', 'totalMarginBalance': '2.999217', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.999217', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.999217', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.999217', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}, 'retExtInfo': {}, 'time': 1730812169231}
+2024-11-05 15:09:29,246 [DEBUG] wallet_data type: <class 'dict'>, content: {'list': [{'totalEquity': '2.999217', 'accountIMRate': '0', 'totalMarginBalance': '2.999217', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.999217', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.999217', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.999217', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}
+2024-11-05 15:09:29,246 [DEBUG] UNIFIED Balances: {}
+2024-11-05 15:09:29,247 [INFO] Fetching active earning positions.
+2024-11-05 15:09:29,247 [DEBUG] Prehash String: 17308121692471vPSgOkj9HSqADHQPn5000category=linear&limit=50&settleCoin=USDT
+2024-11-05 15:09:29,247 [DEBUG] Generated Signature: 0020e5143442c4faa4000bb1693b8005b176e6a8131ab8ea7ca9bfd0861fe5c4
+2024-11-05 15:09:29,248 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812169247', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '0020e5143442c4faa4000bb1693b8005b176e6a8131ab8ea7ca9bfd0861fe5c4', 'Content-Type': 'application/json'}
+2024-11-05 15:09:29,253 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:09:29,634 [DEBUG] https://api.bybit.com:443 "GET /v5/position/list?category=linear&limit=50&settleCoin=USDT HTTP/1.1" 200 125
+2024-11-05 15:09:29,635 [DEBUG] Raw API Response for /position/list: {'retCode': 0, 'retMsg': 'OK', 'result': {'nextPageCursor': '', 'category': 'linear', 'list': []}, 'retExtInfo': {}, 'time': 1730812169626}
+2024-11-05 15:09:29,637 [DEBUG] Active Positions: []
+2024-11-05 15:09:29,637 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:09:29,637 [DEBUG] Aggregated Crypto Balances: {}
+2024-11-05 15:09:29,637 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:09:29,638 [DEBUG] Aggregated Stablecoin Balances: {}
+2024-11-05 15:09:29,638 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:09:29,638 [DEBUG] Positions Summary: {}
+2024-11-05 15:16:05,934 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:16:05,935 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:16:05,936 [DEBUG] Prehash String: 17308125659361vPSgOkj9HSqADHQPn5000accountType=UNIFIED
+2024-11-05 15:16:05,936 [DEBUG] Generated Signature: b619207dc2a8f3360fab55b84d041602f6ec35878c7edf935a0d47832135de17
+2024-11-05 15:16:05,937 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812565936', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'b619207dc2a8f3360fab55b84d041602f6ec35878c7edf935a0d47832135de17', 'Content-Type': 'application/json'}
+2024-11-05 15:16:05,970 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:16:06,429 [DEBUG] https://api.bybit.com:443 "GET /v5/account/wallet-balance?accountType=UNIFIED HTTP/1.1" 200 751
+2024-11-05 15:16:06,430 [DEBUG] Raw API Response for /account/wallet-balance: {'retCode': 0, 'retMsg': 'OK', 'result': {'list': [{'totalEquity': '2.998941', 'accountIMRate': '0', 'totalMarginBalance': '2.998941', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.998941', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.998941', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.998941', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}, 'retExtInfo': {}, 'time': 1730812566434}
+2024-11-05 15:16:06,434 [DEBUG] wallet_data type: <class 'dict'>, content: {'list': [{'totalEquity': '2.998941', 'accountIMRate': '0', 'totalMarginBalance': '2.998941', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.998941', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.998941', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.998941', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}
+2024-11-05 15:16:06,434 [DEBUG] UNIFIED Balances: {'USDT': 3.0}
+2024-11-05 15:16:06,434 [INFO] Fetching active earning positions.
+2024-11-05 15:16:06,435 [DEBUG] Prehash String: 17308125664351vPSgOkj9HSqADHQPn5000category=linear&limit=50&settleCoin=USDT
+2024-11-05 15:16:06,436 [DEBUG] Generated Signature: 794821f627c897a4d82b0fea0355edeb8a5530df6f3dd8b4b5eff73454577841
+2024-11-05 15:16:06,436 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812566435', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '794821f627c897a4d82b0fea0355edeb8a5530df6f3dd8b4b5eff73454577841', 'Content-Type': 'application/json'}
+2024-11-05 15:16:06,441 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:16:06,880 [DEBUG] https://api.bybit.com:443 "GET /v5/position/list?category=linear&limit=50&settleCoin=USDT HTTP/1.1" 200 125
+2024-11-05 15:16:06,881 [DEBUG] Raw API Response for /position/list: {'retCode': 0, 'retMsg': 'OK', 'result': {'nextPageCursor': '', 'category': 'linear', 'list': []}, 'retExtInfo': {}, 'time': 1730812566772}
+2024-11-05 15:16:06,883 [DEBUG] Active Positions: []
+2024-11-05 15:16:06,883 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:16:06,883 [DEBUG] Aggregated Crypto Balances: {}
+2024-11-05 15:16:06,883 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:16:06,883 [DEBUG] Aggregated Stablecoin Balances: {'USDT': 3.0}
+2024-11-05 15:16:06,884 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:16:06,884 [DEBUG] Positions Summary: {}
+2024-11-05 15:18:20,861 [INFO] Initializing BybitFiltered class.
+2024-11-05 15:18:20,864 [INFO] Fetching UNIFIED account balances.
+2024-11-05 15:18:20,864 [DEBUG] Prehash String: 17308127008641vPSgOkj9HSqADHQPn5000accountType=UNIFIED
+2024-11-05 15:18:20,866 [DEBUG] Generated Signature: f6bae83d468726b0a073ccd6f9c85276964dfbd1bc53e484ce0a15921ffeae20
+2024-11-05 15:18:20,866 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812700864', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'f6bae83d468726b0a073ccd6f9c85276964dfbd1bc53e484ce0a15921ffeae20', 'Content-Type': 'application/json'}
+2024-11-05 15:18:20,912 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:18:21,285 [DEBUG] https://api.bybit.com:443 "GET /v5/account/wallet-balance?accountType=UNIFIED HTTP/1.1" 200 751
+2024-11-05 15:18:21,286 [DEBUG] Raw API Response for /account/wallet-balance: {'retCode': 0, 'retMsg': 'OK', 'result': {'list': [{'totalEquity': '2.998848', 'accountIMRate': '0', 'totalMarginBalance': '2.998848', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.998848', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.998848', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.998848', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}, 'retExtInfo': {}, 'time': 1730812701290}
+2024-11-05 15:18:21,289 [DEBUG] wallet_data type: <class 'dict'>, content: {'list': [{'totalEquity': '2.998848', 'accountIMRate': '0', 'totalMarginBalance': '2.998848', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '2.998848', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '2.998848', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '2.998848', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}
+2024-11-05 15:18:21,290 [DEBUG] UNIFIED Balances: {'USDT': 3.0}
+2024-11-05 15:18:21,290 [INFO] Fetching Earn positions.
+2024-11-05 15:18:21,290 [DEBUG] Prehash String: 17308127012901vPSgOkj9HSqADHQPn5000
+2024-11-05 15:18:21,291 [DEBUG] Generated Signature: 451915a7784f683bc5bfb8ac6d1521ead65849656dff6b1a3626ec31e6d312b3
+2024-11-05 15:18:21,291 [INFO] Sending GET request to https://api.bybit.com/v5/asset/v3/private/investment-product-position/list with params [] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812701290', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '451915a7784f683bc5bfb8ac6d1521ead65849656dff6b1a3626ec31e6d312b3', 'Content-Type': 'application/json'}
+2024-11-05 15:18:21,304 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:18:21,623 [DEBUG] https://api.bybit.com:443 "GET /v5/asset/v3/private/investment-product-position/list HTTP/1.1" 404 0
+2024-11-05 15:18:21,624 [ERROR] HTTP ERROR: 404 Client Error: Not Found for url: https://api.bybit.com/v5/asset/v3/private/investment-product-position/list
+2024-11-05 15:18:21,624 [ERROR] Error getting Earn positions: 404 Client Error: Not Found for url: https://api.bybit.com/v5/asset/v3/private/investment-product-position/list
+2024-11-05 15:18:21,627 [INFO] Fetching active earning positions.
+2024-11-05 15:18:21,628 [DEBUG] Prehash String: 17308127016281vPSgOkj9HSqADHQPn5000category=linear&limit=50&settleCoin=USDT
+2024-11-05 15:18:21,628 [DEBUG] Generated Signature: 7a406097622e3d54c83efecfe4c7c71bdff8dc7ce829a25661c917be8e88ee4d
+2024-11-05 15:18:21,628 [INFO] Sending GET request to https://api.bybit.com/v5/position/list with params [('category', 'linear'), ('limit', 50), ('settleCoin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730812701628', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '7a406097622e3d54c83efecfe4c7c71bdff8dc7ce829a25661c917be8e88ee4d', 'Content-Type': 'application/json'}
+2024-11-05 15:18:21,631 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-05 15:18:21,998 [DEBUG] https://api.bybit.com:443 "GET /v5/position/list?category=linear&limit=50&settleCoin=USDT HTTP/1.1" 200 125
+2024-11-05 15:18:21,999 [DEBUG] Raw API Response for /position/list: {'retCode': 0, 'retMsg': 'OK', 'result': {'nextPageCursor': '', 'category': 'linear', 'list': []}, 'retExtInfo': {}, 'time': 1730812702004}
+2024-11-05 15:18:22,002 [DEBUG] Active Positions: []
+2024-11-05 15:18:22,002 [INFO] Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:18:22,003 [DEBUG] Aggregated Crypto Balances: {}
+2024-11-05 15:18:22,003 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-05 15:18:22,003 [DEBUG] Aggregated Stablecoin Balances: {'USDT': 3.0}
+2024-11-05 15:18:22,003 [INFO] Processing earning positions and savings products for summary.
+2024-11-05 15:18:22,004 [DEBUG] Positions Summary: {}
