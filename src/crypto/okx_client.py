@@ -137,14 +137,12 @@ class OKX:
             balance = float(detail.get("bal", 0))
             if balance >= 0.001:  # Only include balances >= 0.001
                 balances[currency] = balance
-        print(f"Account Balances: {balances}")
         return balances
 
     def get_simple_earn_data(self) -> List[Dict]:
         """Retrieves simple earn lending positions information."""
         endpoint = "/finance/savings/balance"  # Updated endpoint
         data = self._send_request("GET", endpoint)
-        print(f"Simple Earn Data: {data}")
         return data
 
     def get_active_defi_orders(
@@ -155,7 +153,7 @@ class OKX:
         state: Optional[str] = None,
     ) -> List[Dict]:
         """
-        Retrieves active staking and DeFi orders.
+        Retrieves active On-chain earn and DeFi orders.
 
         Args:
             product_id (str, optional): Product ID to filter.
@@ -298,11 +296,11 @@ class OKXFiltered(OKX):
     def get_active_defi_lending_positions(
         self,
         product_id: Optional[str] = None,
-        protocol_type: Optional[str] = "defi",
+        protocol_type: Optional[str] = None,  # Changed default to None
         ccy: Optional[str] = None,
     ) -> Dict[str, Dict]:
         """
-        Enhanced version that focuses on active DeFi orders only.
+        Retrieves all active DeFi lending positions without filtering by protocol type.
         """
         active_orders = self.get_active_defi_orders(
             product_id=product_id, protocol_type=protocol_type, ccy=ccy
@@ -340,6 +338,7 @@ class OKXFiltered(OKX):
         """
         Helper method to process individual DeFi position data with improved protocol handling.
         """
+        # print(f"Processing position data: {position_data}")  # Debug statemen
         ccy = position_data.get("ccy")
         protocol = position_data.get(
             "protocol", position_data.get("protocolName", "unknown")
@@ -472,7 +471,7 @@ def main():
         for asset, balance in okx_filtered.get_stablecoin_balances().items():
             print(f"{asset}: {balance:.2f}")
 
-        print("\n=== Lending Positions ===")
+        print("\n=== Simple Earn Positions ===")
         lending_positions = okx_filtered.get_simple_earn_positions()
         for asset, (principal, yield_rate) in lending_positions.items():
             print(f"\n{asset}:")
@@ -480,7 +479,7 @@ def main():
             print(f"  Yield Rate: {yield_rate*100:.2f}%")
 
         # Get and print active DeFi lending positions
-        defi_lending_positions = okx_filtered.get_active_defi_lending_positions()
+        okx_filtered.get_active_defi_lending_positions()
 
         # Get and print the latest 5 pending orders
         print("\n=== Latest Pending Orders ===")
