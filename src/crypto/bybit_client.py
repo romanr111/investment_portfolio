@@ -148,56 +148,63 @@ class Bybit:
 
         Args:
             account_type (str): The type of account to retrieve balances for.
-                                Options: "UNIFIED", "FUNDING", "EARN"
+                                Options: "UNIFIED", "FUNDING"
 
         Returns:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
-        account_type_map = {
-            "UNIFIED": ("UNIFIED", "/account/wallet-balance"),
-            # Uncomment and adjust these lines when handling FUNDING and EARN accounts
-            # "FUNDING": ("FUND", "/asset/transfer/query-account-coins-balance"),
-            # "EARN": ("INVESTMENT", "/asset/transfer/query-account-coins-balance"),
-        }
+        if account_type == "UNIFIED":
+            endpoint = "/account/wallet-balance"
+            params = {"accountType": "UNIFIED"}
 
-        mapped_account_type, endpoint = account_type_map.get(
-            account_type.upper(), (None, None)
-        )
-        if not mapped_account_type or not endpoint:
-            raise ValueError(f"Invalid account type: {account_type}")
+            logger.info(f"Fetching {account_type} account balances.")
+            wallet_data = self._send_request("GET", endpoint, params)
 
-        params = {"accountType": mapped_account_type}
-
-        logger.info(f"Fetching {account_type} account balances.")
-        wallet_data = self._send_request("GET", endpoint, params)
-
-        # Log the type and content of wallet_data for debugging
-        logger.debug(f"wallet_data type: {type(wallet_data)}, content: {wallet_data}")
-
-        balances = {}
-
-        try:
-            if account_type.upper() == "UNIFIED":
+            balances = {}
+            try:
                 coins_list = wallet_data.get("list", [])[0].get("coin", [])
-            else:
-                coins_list = wallet_data.get("balance", [])
+                for coin in coins_list:
+                    if isinstance(coin, dict):
+                        currency = coin.get("coin")
+                        available_balance = float(coin.get("availableToWithdraw", "0"))
+                        if available_balance >= 0.001:
+                            balances[currency] = available_balance
+            except (AttributeError, IndexError) as e:
+                logger.error(f"Error processing wallet data for {account_type}: {e}")
 
-            for coin in coins_list:
-                if isinstance(coin, dict):
-                    currency = coin.get("coin")
-                    available_balance = float(coin.get("availableToWithdraw", "0"))
-                    if available_balance >= 0.001:
-                        balances[currency] = available_balance
-                else:
-                    logger.warning(f"Unexpected coin data format: {coin}")
-        except (AttributeError, IndexError) as e:
-            logger.error(f"Error processing wallet data for {account_type}: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.debug(f"{account_type} Balances: {balances}")
+            return balances
 
-        logger.debug(f"{account_type} Balances: {balances}")
+        elif account_type == "FUNDING":
+            # For funding account, we need to use a different endpoint and get balances one by one
+            endpoint = "/asset/transfer/query-account-coin-balance"
+            balances = {}
 
-        return balances
+            # Common coins to check - extend this list as needed
+            coins_to_check = ["USDT", "USDC"]
+
+            logger.info(f"Fetching {account_type} account balances for multiple coins.")
+
+            for coin in coins_to_check:
+                params = {"accountType": "FUND", "coin": coin}
+
+                try:
+                    coin_data = self._send_request("GET", endpoint, params)
+                    if coin_data:
+                        available_balance = float(
+                            coin_data.get("balance", {}).get("walletBalance", "0")
+                        )
+                        if available_balance >= 0.001:
+                            balances[coin] = available_balance
+                except Exception as e:
+                    logger.warning(f"Could not fetch balance for {coin}: {e}")
+                    continue
+
+            logger.debug(f"{account_type} Balances: {balances}")
+            return balances
+
+        else:
+            raise ValueError(f"Invalid account type: {account_type}")
 
     def get_funding_balances(self) -> Dict[str, float]:
         """
@@ -206,7 +213,11 @@ class Bybit:
         Returns:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
-        return self.get_account_balances(account_type="FUNDING")
+        try:
+            return self.get_account_balances(account_type="FUNDING")
+        except Exception as e:
+            logger.error(f"Error getting funding balances: {e}")
+            return {}
 
     def get_earn_balances(self) -> Dict[str, float]:
         """
@@ -217,99 +228,106 @@ class Bybit:
         """
         return self.get_account_balances(account_type="EARN")
 
-    def get_earning_products(self) -> List[Dict]:
+    def get_earn_positions(self) -> List[Dict]:
         """
-        Retrieves all available earning products.
+        Retrieves active positions in Bybit Earn products.
 
         Returns:
-            List[Dict]: List of available earning products.
+            List[Dict]: List of active earn positions
         """
-        endpoint = "/asset/spot-margin-trade/data"
-        params = {}  # Add any required parameters if necessary
+        endpoint = "/v5/asset/deposit/query-sub-member-record"  # Updated endpoint
+        params = {
+            "limit": 50,
+            "queryType": "STAKING",  # Add query type for staking positions
+        }
 
-        logger.info("Fetching earning products.")
-        data = self._send_request("GET", endpoint, params)
-        earning_products = data.get("spotMarginMode", [])
-
-        logger.debug(f"Earning Products: {earning_products}")
-
-        return earning_products
-
-    def get_earn_positions(self) -> List[Dict]:
-        endpoint = "/asset/v3/private/investment-product-position/list"
-        params = {}
-        
         logger.info("Fetching Earn positions.")
         try:
             data = self._send_request("GET", endpoint, params)
-            positions = data.get("result", {}).get("list", [])
+            positions = data.get("list", [])  # Changed from rows to list
             logger.debug(f"Earn Positions: {positions}")
             return positions
         except Exception as e:
             logger.error(f"Error getting Earn positions: {e}")
             return []
 
-    def get_active_earning_positions(self) -> List[Dict]:
+    def get_earning_products(self) -> List[Dict]:
         """
-        Retrieves active positions from the unified margin account.
+        Retrieves all available earning products from Bybit.
 
         Returns:
-            List[Dict]: List of active positions.
+            List[Dict]: List of available earning products
         """
-        endpoint = "/position/list"
-        params = {
-            "category": "linear",
-            "settleCoin": "USDT",
-            "limit": 50,
-        }
+        endpoint = "/v5/spot/staking-product/quota"  # Updated endpoint
+        params = {"productId": "", "limit": 50}  # Empty string to get all products
 
-        logger.info("Fetching active earning positions.")
+        logger.info("Fetching available earning products.")
         try:
             data = self._send_request("GET", endpoint, params)
-            positions = data.get("list", [])
-            # Filter out positions with zero size
-            active_positions = [
-                pos for pos in positions if float(pos.get("size", 0)) > 0
-            ]
-            logger.debug(f"Active Positions: {active_positions}")
-            return active_positions
+            products = data.get("list", [])  # Changed from rows to list
+            logger.debug(f"Available Earning Products: {products}")
+            return products
         except Exception as e:
-            logger.error(f"Error getting positions: {e}")
+            logger.error(f"Error getting earning products: {e}")
             return []
+
+    def get_earn_summary(self) -> Dict:
+        """
+        Provides a summary of all earn positions and their details.
+
+        Returns:
+            Dict: Summary of earn positions including APY, invested amount, etc.
+        """
+        try:
+            positions = self.get_earn_positions()
+
+            summary = {"total_invested": 0, "positions": []}
+
+            for position in positions:
+                position_info = {
+                    "product_id": position.get("productId", ""),
+                    "asset": position.get("coin", ""),
+                    "invested_amount": float(
+                        position.get("quantity", 0)
+                    ),  # Updated field name
+                    "apy": float(position.get("yield", 0))
+                    * 100,  # Updated field name for APY
+                    "start_time": position.get("createTime", ""),  # Updated field name
+                    "status": position.get("status", ""),
+                }
+
+                summary["total_invested"] += position_info["invested_amount"]
+                summary["positions"].append(position_info)
+
+            logger.debug(f"Earn Summary: {summary}")
+            return summary
+        except Exception as e:
+            logger.error(f"Error getting earn summary: {e}")
+            return {"total_invested": 0, "positions": []}
 
 
 class BybitFiltered(Bybit):
-    """
-    Extends Bybit class with additional filtering and data processing capabilities.
-    """
-
     def __init__(self) -> None:
         super().__init__()
         logger.info("Initializing BybitFiltered class.")
         self.unified_balances = self.get_account_balances()
-        self.earn_positions = self.get_earn_positions()
-        # Uncomment the following lines when handling FUNDING and EARN accounts
-        # self.funding_balances = self.get_funding_balances()
-        # self.earn_balances = self.get_earn_balances()
-        self.earning_positions = self.get_active_earning_positions()
+        self.funding_balances = self.get_funding_balances()
+        self.earn_positions = self.get_earn_summary()  # Updated to use new method
+        self.available_earn_products = self.get_earning_products()
 
     def get_crypto_balances(self) -> Dict[str, float]:
         """
-        Retrieves and filters cryptocurrency balances from Unified, Funding, and Earn accounts, excluding stablecoins.
-
-        Returns:
-            Dict[str, float]: Filtered cryptocurrency balances.
+        Retrieves and filters cryptocurrency balances from both accounts, excluding stablecoins.
         """
         STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
         crypto_balances = {}
 
         logger.info(
-            "Aggregating cryptocurrency balances from Unified, Funding, and Earn accounts."
+            "Aggregating cryptocurrency balances from Unified and Funding accounts."
         )
         for account, balances in [
             ("Unified", self.unified_balances),
-            # ("Funding", self.funding_balances),
-            # ("Earn", self.earn_balances),
+            ("Funding", self.funding_balances),  # Uncommented
         ]:
             for asset, balance in balances.items():
                 if asset not in STABLECOINS and balance >= 0.001:
@@ -356,8 +374,8 @@ class BybitFiltered(Bybit):
 
         logger.info("Processing earning positions and savings products for summary.")
         try:
-            # Process regular positions
-            for position in self.earning_positions:
+            # Use earn_positions.get('positions', []) instead of earning_positions
+            for position in self.earn_positions.get("positions", []):
                 symbol = position.get("symbol", "")
                 # Extract the base asset (remove USDT suffix)
                 asset = symbol.replace("USDT", "")
@@ -411,8 +429,6 @@ class BybitFiltered(Bybit):
 
                 summary["positions"].append(position_info)
 
-            # (No processing of savings positions since it's commented out)
-
             logger.debug(f"Positions Summary: {positions_summary}")
             return positions_summary
 
@@ -444,8 +460,39 @@ def main():
         else:
             print("No stablecoin balances found.")
 
-        
-        print(f"bybit_filtered.earn_positions - {bybit_filtered.earn_positions}")
+        print("\nFunding Balances:")
+        if bybit_filtered.funding_balances:
+            for asset, balance in bybit_filtered.funding_balances.items():
+                print(f"{asset}: {balance:.6f}")
+        else:
+            print("No funding balances found.")
+
+        print(f"\nEarn positions - {bybit_filtered.earn_positions}")
+
+        print("\n=== Earn Products Summary ===")
+        earn_summary = bybit_filtered.earn_positions
+        if earn_summary["positions"]:
+            print(f"Total Invested: {earn_summary['total_invested']}")
+            print("\nActive Positions:")
+            for position in earn_summary["positions"]:
+                print(f"\nProduct ID: {position['product_id']}")
+                print(f"Asset: {position['asset']}")
+                print(f"Invested Amount: {position['invested_amount']}")
+                print(f"APY: {position['apy']}%")
+                print(f"Status: {position['status']}")
+        else:
+            print("No active earn positions found.")
+
+        print("\n=== Available Earn Products ===")
+        available_products = bybit_filtered.available_earn_products
+        if available_products:
+            for product in available_products:
+                print(f"\nProduct: {product.get('productName')}")
+                print(f"APY Range: {product.get('apyMin')}% - {product.get('apyMax')}%")
+                print(f"Asset: {product.get('coin')}")
+                print(f"Status: {product.get('status')}")
+        else:
+            print("No available earn products found.")
 
         print("\n=== Positions Summary ===")
         positions_summary = bybit_filtered.get_earning_positions_summary()
@@ -457,23 +504,26 @@ def main():
                 print(f"  Total PnL: {summary['total_pnl']:.2f}")
                 print(f"  Average Entry Price: {summary['avg_entry_price']:.2f}")
                 print(f"  Current Price: {summary['current_price']:.2f}")
-                print(f"  Savings:")
-                for saving in summary["savings"]:
-                    print(
-                        f"    Amount: {saving['amount']:.6f}, APY: {saving['apy']*100:.2f}%"
-                    )
 
-                print("\n  Individual Positions:")
-                for position in summary["positions"]:
-                    print(f"    Symbol: {position['symbol']}")
-                    print(f"    Size: {position['size']:.6f}")
-                    print(f"    Entry Price: {position['entry_price']:.2f}")
-                    print(f"    Mark Price: {position['mark_price']:.2f}")
-                    print(f"    Position Value: {position['position_value']:.2f}")
-                    print(f"    Unrealized PnL: {position['unrealized_pnl']:.2f}")
-                    print(f"    Leverage: {position['leverage']:.2f}x")
-                    print(f"    PnL Percentage: {position['pnl_percentage']:.2f}%")
-                    print("    ---")
+                if summary["savings"]:
+                    print(f"  Savings:")
+                    for saving in summary["savings"]:
+                        print(
+                            f"    Amount: {saving['amount']:.6f}, APY: {saving['apy']*100:.2f}%"
+                        )
+
+                if summary["positions"]:
+                    print("\n  Individual Positions:")
+                    for position in summary["positions"]:
+                        print(f"    Symbol: {position['symbol']}")
+                        print(f"    Size: {position['size']:.6f}")
+                        print(f"    Entry Price: {position['entry_price']:.2f}")
+                        print(f"    Mark Price: {position['mark_price']:.2f}")
+                        print(f"    Position Value: {position['position_value']:.2f}")
+                        print(f"    Unrealized PnL: {position['unrealized_pnl']:.2f}")
+                        print(f"    Leverage: {position['leverage']:.2f}x")
+                        print(f"    PnL Percentage: {position['pnl_percentage']:.2f}%")
+                        print("    ---")
         else:
             print("No positions found.")
 
