@@ -139,10 +139,47 @@ class OKX:
                 balances[currency] = balance
         return balances
 
+    def _get_simple_earn_market_rates(self) -> Dict[str, float]:
+        """
+        Retrieves current market rates for Simple Earn products.
+
+        Returns:
+            Dict[str, float]: Dictionary mapping currency to its current market rate
+        """
+        endpoint = "/finance/savings/lending-rate-summary"
+        data = self._send_request("GET", endpoint)
+
+        rates = {}
+        for item in data:
+            ccy = item.get("ccy")
+            # Get estimated rate (future rate), or average rate if estimated not available,
+            # or previous rate as last resort
+            rate = float(
+                item.get("estRate", item.get("avgRate", item.get("preRate", 0)))
+            )
+            # Convert rate from percentage to decimal if needed (e.g., 1.69 -> 0.0169)
+            rate = rate / 100 if rate > 0 else 0
+            rates[ccy] = rate
+
+        return rates
+
     def get_simple_earn_data(self) -> List[Dict]:
         """Retrieves simple earn lending positions information."""
-        endpoint = "/finance/savings/balance"  # Updated endpoint
+        endpoint = "/finance/savings/balance"
         data = self._send_request("GET", endpoint)
+
+        # Get current market rates for each currency
+        market_rates = self._get_simple_earn_market_rates()
+
+        # Update rates in the data
+        for position in data:
+            ccy = position.get("ccy")
+            if ccy in market_rates:
+                position["rate"] = market_rates[ccy]
+                print(f"DEBUG: Updated rate for {ccy}: {market_rates[ccy]:.4%}")
+            else:
+                print(f"DEBUG: No market rate found for {ccy}")
+
         return data
 
     def get_active_defi_orders(
@@ -202,7 +239,7 @@ class OKX:
             List[Dict]: A list of staking and DeFi order history records.
         """
         endpoint = "/finance/staking-defi/orders-history"
-        params = {"limit": str(limit)}  # Limit the number of records
+        params = {"limit": str(limit)}
         if product_id:
             params["productId"] = product_id
         if protocol_type:
@@ -215,7 +252,6 @@ class OKX:
             params["before"] = before
 
         data = self._send_request("GET", endpoint, params=params)
-        print(f"Staking/DeFi Order History: {data}")
         return data
 
 
@@ -296,7 +332,7 @@ class OKXFiltered(OKX):
     def get_active_defi_lending_positions(
         self,
         product_id: Optional[str] = None,
-        protocol_type: Optional[str] = None,  # Changed default to None
+        protocol_type: Optional[str] = None,
         ccy: Optional[str] = None,
     ) -> Dict[str, Dict]:
         """
@@ -338,7 +374,6 @@ class OKXFiltered(OKX):
         """
         Helper method to process individual DeFi position data with improved protocol handling.
         """
-        # print(f"Processing position data: {position_data}")  # Debug statemen
         ccy = position_data.get("ccy")
         protocol = position_data.get(
             "protocol", position_data.get("protocolName", "unknown")
@@ -352,7 +387,6 @@ class OKXFiltered(OKX):
             invest_data = position_data.get("investData", [])
             invested_amount = sum(float(item.get("amt", 0)) for item in invest_data)
         else:
-            # Try different possible field names for amount
             amount_fields = ["balance", "investAmount", "amt", "amount"]
             for field in amount_fields:
                 if field in position_data:
@@ -433,7 +467,7 @@ class OKXFiltered(OKX):
 
     def get_pending_defi_orders(self, limit: int = 5) -> List[Dict]:
         """
-        Retrieves the latest pending staking and DeFi orders.
+        Retrieves the latest pending staking and DeFi orders with amount >= 1.
 
         Args:
             limit (int, optional): Number of pending orders to retrieve, default is 5.
@@ -443,12 +477,17 @@ class OKXFiltered(OKX):
         """
         active_pending_orders = self.get_active_defi_orders(state="8")
 
-        if not active_pending_orders:
-            print("No pending orders found.")
+        # Filter orders with amount >= 1
+        filtered_orders = [
+            order for order in active_pending_orders if float(order.get("amt", 0)) >= 1
+        ]
+
+        if not filtered_orders:
+            print("No pending orders found with amount >= 1.")
             return []
 
         sorted_orders = sorted(
-            active_pending_orders,
+            filtered_orders,
             key=lambda x: int(x.get("purchasedTime", "0")),
             reverse=True,
         )
@@ -476,13 +515,13 @@ def main():
         for asset, (principal, yield_rate) in lending_positions.items():
             print(f"\n{asset}:")
             print(f"  Principal: {principal:.6f}")
-            print(f"  Yield Rate: {yield_rate*100:.2f}%")
+            print(f"  APY: {yield_rate*100:.2f}%")
 
         # Get and print active DeFi lending positions
         okx_filtered.get_active_defi_lending_positions()
 
-        # Get and print the latest 5 pending orders
-        print("\n=== Latest Pending Orders ===")
+        # Get and print the latest 5 pending orders with amount >= 1
+        print("\n=== Latest Pending Orders (Amount >= 1) ===")
         latest_pending_orders = okx_filtered.get_pending_defi_orders(limit=5)
         for order in latest_pending_orders:
             print(f"\nOrder ID: {order.get('ordId', 'N/A')}")

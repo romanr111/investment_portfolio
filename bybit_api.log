@@ -503,3 +503,49 @@
 2024-11-05 15:39:41,812 [DEBUG] Aggregated Stablecoin Balances: {'USDT': 3.0}
 2024-11-05 15:39:41,813 [INFO] Processing earning positions and savings products for summary.
 2024-11-05 15:39:41,814 [DEBUG] Positions Summary: {}
+2024-11-06 12:32:54,489 [INFO] Initializing BybitFiltered class.
+2024-11-06 12:32:54,489 [INFO] Fetching UNIFIED account balances.
+2024-11-06 12:32:54,489 [DEBUG] Prehash String: 17308891744891vPSgOkj9HSqADHQPn5000accountType=UNIFIED
+2024-11-06 12:32:54,491 [DEBUG] Generated Signature: ff2588c5ae507f5a323fb62de68be6049ab739a354d7d63d4d22dc2bf9524fe3
+2024-11-06 12:32:54,491 [INFO] Sending GET request to https://api.bybit.com/v5/account/wallet-balance with params [('accountType', 'UNIFIED')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730889174489', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'ff2588c5ae507f5a323fb62de68be6049ab739a354d7d63d4d22dc2bf9524fe3', 'Content-Type': 'application/json'}
+2024-11-06 12:32:54,505 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-06 12:32:55,342 [DEBUG] https://api.bybit.com:443 "GET /v5/account/wallet-balance?accountType=UNIFIED HTTP/1.1" 200 751
+2024-11-06 12:32:55,344 [DEBUG] Raw API Response for /account/wallet-balance: {'retCode': 0, 'retMsg': 'OK', 'result': {'list': [{'totalEquity': '3.001551', 'accountIMRate': '0', 'totalMarginBalance': '3.001551', 'totalInitialMargin': '0', 'accountType': 'UNIFIED', 'totalAvailableBalance': '3.001551', 'accountMMRate': '0', 'totalPerpUPL': '0', 'totalWalletBalance': '3.001551', 'accountLTV': '0', 'totalMaintenanceMargin': '0', 'coin': [{'availableToBorrow': '', 'bonus': '0', 'accruedInterest': '0', 'availableToWithdraw': '3', 'totalOrderIM': '0', 'equity': '3', 'totalPositionMM': '0', 'usdValue': '3.001551', 'unrealisedPnl': '0', 'collateralSwitch': True, 'spotHedgingQty': '0', 'borrowAmount': '0.000000000000000000', 'totalPositionIM': '0', 'walletBalance': '3', 'cumRealisedPnl': '0', 'locked': '0', 'marginCollateral': True, 'coin': 'USDT'}]}]}, 'retExtInfo': {}, 'time': 1730889175336}
+2024-11-06 12:32:55,347 [DEBUG] UNIFIED Balances: {'USDT': 3.0}
+2024-11-06 12:32:55,347 [INFO] Fetching FUNDING account balances for multiple coins.
+2024-11-06 12:32:55,347 [DEBUG] Prehash String: 17308891753471vPSgOkj9HSqADHQPn5000accountType=FUND&coin=USDT
+2024-11-06 12:32:55,348 [DEBUG] Generated Signature: 98070c96ece856dfebaca6a990357d49977b446890c71e527703c10f957a643f
+2024-11-06 12:32:55,348 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coin-balance with params [('accountType', 'FUND'), ('coin', 'USDT')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730889175347', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '98070c96ece856dfebaca6a990357d49977b446890c71e527703c10f957a643f', 'Content-Type': 'application/json'}
+2024-11-06 12:32:55,351 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-06 12:32:56,069 [DEBUG] https://api.bybit.com:443 "GET /v5/asset/transfer/query-account-coin-balance?accountType=FUND&coin=USDT HTTP/1.1" 200 291
+2024-11-06 12:32:56,070 [DEBUG] Raw API Response for /asset/transfer/query-account-coin-balance: {'retCode': 0, 'retMsg': 'success', 'result': {'accountType': 'FUND', 'bizType': 1, 'accountId': '126869688', 'memberId': '126869680', 'balance': {'coin': 'USDT', 'walletBalance': '0', 'transferBalance': '0', 'bonus': '0', 'transferSafeAmount': '', 'ltvTransferSafeAmount': ''}}, 'retExtInfo': {}, 'time': 1730889176063}
+2024-11-06 12:32:56,073 [DEBUG] Prehash String: 17308891760731vPSgOkj9HSqADHQPn5000accountType=FUND&coin=USDC
+2024-11-06 12:32:56,073 [DEBUG] Generated Signature: 1e5af5cb2547334ea3b85d3944907aae5db4124458ed97c4c111ef7025c65c4b
+2024-11-06 12:32:56,073 [INFO] Sending GET request to https://api.bybit.com/v5/asset/transfer/query-account-coin-balance with params [('accountType', 'FUND'), ('coin', 'USDC')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730889176073', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '1e5af5cb2547334ea3b85d3944907aae5db4124458ed97c4c111ef7025c65c4b', 'Content-Type': 'application/json'}
+2024-11-06 12:32:56,078 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-06 12:32:56,416 [DEBUG] https://api.bybit.com:443 "GET /v5/asset/transfer/query-account-coin-balance?accountType=FUND&coin=USDC HTTP/1.1" 200 305
+2024-11-06 12:32:56,416 [DEBUG] Raw API Response for /asset/transfer/query-account-coin-balance: {'retCode': 0, 'retMsg': 'success', 'result': {'accountType': 'FUND', 'bizType': 1, 'accountId': '126869688', 'memberId': '126869680', 'balance': {'coin': 'USDC', 'walletBalance': '0.637494', 'transferBalance': '0.637494', 'bonus': '0', 'transferSafeAmount': '', 'ltvTransferSafeAmount': ''}}, 'retExtInfo': {}, 'time': 1730889176412}
+2024-11-06 12:32:56,419 [DEBUG] FUNDING Balances: {'USDC': 0.637494}
+2024-11-06 12:32:56,419 [INFO] Fetching Earn positions.
+2024-11-06 12:32:56,419 [DEBUG] Prehash String: 17308891764191vPSgOkj9HSqADHQPn5000limit=50&queryType=STAKING
+2024-11-06 12:32:56,419 [DEBUG] Generated Signature: 0912aa0f237fdb7fddabc3fae858dfa4b51a0fd4daa529281982d9ced0f12b86
+2024-11-06 12:32:56,420 [INFO] Sending GET request to https://api.bybit.com/v5/v5/asset/deposit/query-sub-member-record with params [('limit', 50), ('queryType', 'STAKING')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730889176419', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': '0912aa0f237fdb7fddabc3fae858dfa4b51a0fd4daa529281982d9ced0f12b86', 'Content-Type': 'application/json'}
+2024-11-06 12:32:56,423 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-06 12:32:57,159 [DEBUG] https://api.bybit.com:443 "GET /v5/v5/asset/deposit/query-sub-member-record?limit=50&queryType=STAKING HTTP/1.1" 404 0
+2024-11-06 12:32:57,160 [ERROR] HTTP ERROR: 404 Client Error: Not Found for url: https://api.bybit.com/v5/v5/asset/deposit/query-sub-member-record?limit=50&queryType=STAKING
+2024-11-06 12:32:57,160 [ERROR] Error getting Earn positions: 404 Client Error: Not Found for url: https://api.bybit.com/v5/v5/asset/deposit/query-sub-member-record?limit=50&queryType=STAKING
+2024-11-06 12:32:57,163 [DEBUG] Earn Summary: {'total_invested': 0, 'positions': []}
+2024-11-06 12:32:57,163 [INFO] Fetching available earning products.
+2024-11-06 12:32:57,163 [DEBUG] Prehash String: 17308891771631vPSgOkj9HSqADHQPn5000limit=50&productId=
+2024-11-06 12:32:57,163 [DEBUG] Generated Signature: ae3ac5d1f6e73046a192f48bf36d81add9ebedd0852f83acce55706dd9a45b4d
+2024-11-06 12:32:57,163 [INFO] Sending GET request to https://api.bybit.com/v5/v5/spot/staking-product/quota with params [('limit', 50), ('productId', '')] and headers {'X-BAPI-API-KEY': '1vPSgOkj9HSqADHQPn', 'X-BAPI-TIMESTAMP': '1730889177163', 'X-BAPI-RECV-WINDOW': '5000', 'X-BAPI-SIGN': 'ae3ac5d1f6e73046a192f48bf36d81add9ebedd0852f83acce55706dd9a45b4d', 'Content-Type': 'application/json'}
+2024-11-06 12:32:57,166 [DEBUG] Starting new HTTPS connection (1): api.bybit.com:443
+2024-11-06 12:32:57,473 [DEBUG] https://api.bybit.com:443 "GET /v5/v5/spot/staking-product/quota?limit=50&productId= HTTP/1.1" 404 0
+2024-11-06 12:32:57,474 [ERROR] HTTP ERROR: 404 Client Error: Not Found for url: https://api.bybit.com/v5/v5/spot/staking-product/quota?limit=50&productId=
+2024-11-06 12:32:57,474 [ERROR] Error getting earning products: 404 Client Error: Not Found for url: https://api.bybit.com/v5/v5/spot/staking-product/quota?limit=50&productId=
+2024-11-06 12:32:57,477 [INFO] Aggregating cryptocurrency balances from Unified and Funding accounts.
+2024-11-06 12:32:57,477 [DEBUG] Aggregated Crypto Balances: {}
+2024-11-06 12:32:57,477 [INFO] Aggregating stablecoin balances from Unified, Funding, and Earn accounts.
+2024-11-06 12:32:57,477 [DEBUG] Aggregated Stablecoin Balances: {'USDT': 3.0}
+2024-11-06 12:32:57,477 [INFO] Processing earning positions and savings products for summary.
+2024-11-06 12:32:57,477 [DEBUG] Positions Summary: {}
