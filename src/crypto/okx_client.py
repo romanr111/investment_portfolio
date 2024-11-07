@@ -515,7 +515,9 @@ def main():
         for asset, (principal, yield_rate) in lending_positions.items():
             print(f"\n{asset}:")
             print(f"  Principal: {principal:.6f}")
-            print(f"  APY: {yield_rate*100:.2f}%")
+            print(
+                f"  APY: {yield_rate*100*100:.2f}%"
+            )  # Multiply by 100 twice to convert from decimal to percentage
 
         # Get and print active DeFi lending positions
         okx_filtered.get_active_defi_lending_positions()
