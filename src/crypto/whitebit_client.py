@@ -1,4 +1,4 @@
-# TODO
+# -------------------------------- TODO --------------------------------
 from data.api_keys import WHITEBIT_API_KEY, WHITEBIT_API_SECRET
 import base64
 import hashlib

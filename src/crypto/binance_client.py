@@ -1,8 +1,8 @@
+# -------------------------------- DONE --------------------------------
 from binance import Client
 from data.api_keys import BINANCE_KEY, BINANCE_SECRET
 from typing import Dict, Tuple
-from collections import defaultdict
-from exchange_client import ExchangeBase
+from src.crypto.base_exchange_client import ExchangeBase
 
 
 class BinanceClient(ExchangeBase):
@@ -144,7 +144,7 @@ class BinanceClient(ExchangeBase):
         """Get aggregated crypto balances from spot and savings."""
         crypto_spot = self.get_crypto_balances(self.spot_balances)
 
-        aggregated = defaultdict(float)
+        aggregated = {}
         for asset, balance in crypto_spot.items():
             if asset not in self.CRYPTO_EXCLUDE:
                 aggregated[asset] = balance
@@ -169,17 +169,22 @@ def main():
         binance_client = BinanceClient()
         print("\n=== Binance ===")
         print("\nAggregated Crypto Balances:")
-        for asset, balance in binance_client.get_all_crypto_balances().items():
+        crypto = binance_client.get_all_crypto_balances()
+        print(crypto)
+        for asset, balance in crypto.items():
             print(f"{asset}: {balance:.6f}")
 
         print("\nStablecoin Balances:")
-        for asset, balance in binance_client.get_stablecoin_balances(
+        stablecoins = binance_client.get_stablecoin_balances(
             binance_client.spot_balances
-        ).items():  # Added .items()
+        )
+        print(stablecoins)
+        for asset, balance in stablecoins.items():  # Added .items()
             print(f"{asset}: {balance:.2f}")
 
         print("\nSavings Positions:")
         binance_savings = binance_client.get_savings_positions()
+        print(binance_savings)
         for asset, (principal, yield_rate) in binance_savings.items():
             print(f"{asset}: Principal={principal}, APY={yield_rate*100:.2f}%")
 

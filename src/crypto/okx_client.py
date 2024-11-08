@@ -1,3 +1,4 @@
+# -------------------------------- DONE --------------------------------
 from decimal import Decimal
 import time
 import json
@@ -7,7 +8,7 @@ import hashlib
 from typing import Dict, List, Tuple, Optional
 import requests
 from data.api_keys import OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE
-from exchange_client import ExchangeBase
+from src.crypto.base_exchange_client import ExchangeBase
 
 
 class OKXClient(ExchangeBase):
@@ -120,25 +121,6 @@ class OKXClient(ExchangeBase):
             position["rate"] = decimal_rate
             print(f"DEBUG: Updated rate for {ccy}: {decimal_rate*10000:.2f}%")
         return data
-
-    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
-        """Get stablecoin savings positions with weighted yields."""
-        savings_positions = {}
-
-        for product in self.simple_earn_data:
-            asset = product.get("ccy")
-            if asset not in self.STABLECOINS:
-                continue
-
-            principal = round(float(product.get("amt", 0)))
-            yield_rate = float(product.get("rate", 0))
-
-            if principal > 0:
-                savings_positions = self.aggregate_positions(
-                    savings_positions, (asset, principal, yield_rate)
-                )
-
-        return savings_positions if savings_positions else {"None": (0.0, 0.0)}
 
     # Rest of the DeFi-related methods remain unchanged as they're OKX-specific
     def get_active_defi_orders(
@@ -257,6 +239,11 @@ class OKXFiltered(OKXClient):
         }
         return crypto_balances
 
+    def get_all_crypto_balances(self) -> Dict[str, float]:
+        """Get aggregated crypto balances from spot and savings."""
+        crypto_spot = self.get_crypto_balances()
+        return crypto_spot
+
     def get_stablecoin_balances(self) -> Dict[str, float]:
         """
         Retrieves balances of stablecoins, filtering out balances less than 1.
@@ -282,7 +269,6 @@ class OKXFiltered(OKXClient):
             (principal, effective_yield) as values.
         """
         lending_positions = {}
-        print(f"self.simple_earn_data - {self.simple_earn_data}")
         for product in self.simple_earn_data:
             asset = product.get("ccy")
             principal = int(Decimal(product.get("amt", 0)))
@@ -475,86 +461,107 @@ class OKXFiltered(OKXClient):
         latest_pending_orders = sorted_orders[:limit]
         return latest_pending_orders
 
-    def get_all_earning_positions(self) -> Dict[str, Tuple[int, float]]:
+    def get_savings_positions(self) -> Dict[str, Tuple[int, float]]:
         """
-        Combines all earning positions from Simple Earn and DeFi products.
+        Combines all earning positions from Simple Earn and DeFi products with detailed logging.
+
+        Returns:
+            Dict[str, Tuple[int, float]]: Dictionary with assets as keys and (principal, yield_rate) as values
         """
+        print("\n=== Aggregated Earnings Report ===\n")
         combined_positions = {}
 
         # Process Simple Earn positions
-        print("\nDEBUG: Processing Simple Earn positions")
+        print("Processing Simple Earn positions...")
         simple_earn_positions = self.get_simple_earn_positions()
+
         for asset, (principal, yield_rate) in simple_earn_positions.items():
-            print(f"DEBUG: Simple Earn {asset}: {principal}@{yield_rate}")
+            print(f"Simple Earn Position - {asset}:")
+            print(f"  Principal: {principal}")
+            print(f"  Rate: {yield_rate*100:.2f}%")
+
             if principal > 0:
                 combined_positions = self.aggregate_positions(
                     combined_positions, (asset, principal, yield_rate)
                 )
-                print(f"DEBUG: After Simple Earn {asset}: {combined_positions[asset]}")
+                print(
+                    f"  Updated combined position for {asset}: {combined_positions[asset]}\n"
+                )
 
         # Process DeFi positions
-        print("\nDEBUG: Processing DeFi positions")
+        print("\nProcessing DeFi positions...")
         defi_positions = self.get_active_defi_lending_positions()
+
         for position_key, position_data in defi_positions.items():
             asset = position_key.split("-")[0]
             principal = int(position_data["invested_amount"])
             yield_rate = float(position_data["apy"])
-            print(f"DEBUG: DeFi {asset}: {principal}@{yield_rate}")
+
+            print(f"DeFi Position - {asset}:")
+            print(f"  Protocol: {position_data['protocol']}")
+            print(f"  Principal: {principal}")
+            print(f"  Rate: {yield_rate*100:.2f}%")
 
             if principal > 0:
                 combined_positions = self.aggregate_positions(
                     combined_positions, (asset, principal, yield_rate)
                 )
-                print(f"DEBUG: After DeFi {asset}: {combined_positions[asset]}")
+                print(
+                    f"  Updated combined position for {asset}: {combined_positions[asset]}\n"
+                )
 
-        return {
+        # Final combined positions
+        print("\nFinal Combined Positions:")
+        final_positions = {
             asset: (int(principal), yield_rate)
             for asset, (principal, yield_rate) in combined_positions.items()
         }
+        print(final_positions)
+        for asset, (principal, rate) in final_positions.items():
+            print(f"{asset}:")
+            print(f"  Total Principal: {principal}")
+            print(f"  Weighted Rate: {rate*100:.2f}%")
+
+        return final_positions
 
 
 def main():
-    """Main function with improved output formatting."""
+    """Main function with cleaner output structure."""
     try:
         okx_filtered = OKXFiltered()
 
         print("\n=== Account Overview ===")
-        print("\nCrypto Balances:")
-        for asset, balance in okx_filtered.get_crypto_balances().items():
-            print(f"{asset}: {balance:.6f}")
 
-        print("\nStablecoin Balances:")
-        for asset, balance in okx_filtered.get_stablecoin_balances().items():
-            print(f"{asset}: {balance:.2f}")
+        # Display crypto balances
+        crypto_balances = okx_filtered.get_crypto_balances()
+        if crypto_balances:
+            print("\nCrypto Balances:")
+            for asset, balance in crypto_balances.items():
+                print(f"{asset}: {balance:.6f}")
+        else:
+            print("\nNo significant crypto balances found.")
 
-        print("\n=== Simple Earn Positions ===")
-        lending_positions = okx_filtered.get_simple_earn_positions()
-        for asset, (principal, yield_rate) in lending_positions.items():
-            print(f"\n{asset}:")
-            print(f"  Principal: {principal}")
-            print(
-                f"  APY: {yield_rate*100*100:.2f}%"
-            )  # Multiply by 100 twice to convert from decimal to percentage
+        # Display stablecoin balances
+        stablecoin_balances = okx_filtered.get_stablecoin_balances()
+        if stablecoin_balances:
+            print("\nStablecoin Balances:")
+            for asset, balance in stablecoin_balances.items():
+                print(f"{asset}: {balance:.2f}")
+        else:
+            print("\nNo significant stablecoin balances found.")
 
-        # Get and print active DeFi lending positions
-        okx_filtered.get_active_defi_lending_positions()
+        # Get and display savings positions
+        okx_filtered.get_savings_positions()
 
-        # Get and print the latest 5 pending orders with amount >= 1
+        # Display pending orders if any exist
         print("\n=== Latest Pending Orders (Amount >= 1) ===")
         latest_pending_orders = okx_filtered.get_pending_defi_orders(limit=5)
-        for order in latest_pending_orders:
-            print(f"\nOrder ID: {order.get('ordId', 'N/A')}")
-            print(f"Asset: {order.get('ccy', 'N/A')}")
-            print(f"Protocol: {order.get('protocol', 'N/A')}")
-            print(f"Amount: {float(order.get('amt', 0)):.6f}")
-            print(f"Status: {order.get('state', 'N/A')}")
-
-        print("\n=== Aggregated Earnings ===")
-        aggregated = okx_filtered.get_all_earning_positions()
-        print(aggregated)
+        if not latest_pending_orders:
+            print("No pending orders found.")
 
     except Exception as e:
-        print(f"ERROR: An error occurred: {e}")
+        print(f"ERROR: An error occurred: {str(e)}")
+        raise
 
 
 if __name__ == "__main__":
