@@ -1,29 +1,23 @@
+from decimal import Decimal
 import time
 import json
 import hmac
 import base64
 import hashlib
 from typing import Dict, List, Tuple, Optional
-
 import requests
-
-# Replace these with your actual API keys
 from data.api_keys import OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE
+from exchange_client import ExchangeBase
 
 
-class OKX:
-    """
-    OKX API wrapper for retrieving account balances and lending product information.
-    """
+class OKXClient(ExchangeBase):
+    """OKX API wrapper with common exchange functionality."""
 
-    # Constants
     API_URL = "https://www.okx.com"
     API_VERSION = "/api/v5"
 
     def __init__(self) -> None:
-        """
-        Initializes the OKX API client.
-        """
+        """Initialize OKX client and validate connection."""
         self.api_key = OKX_API_KEY
         self.secret_key = OKX_SECRET_KEY
         self.passphrase = OKX_PASSPHRASE
@@ -31,58 +25,34 @@ class OKX:
         if not all([self.api_key, self.secret_key, self.passphrase]):
             raise ValueError("API key, secret key, and passphrase must be provided.")
 
+        super().__init__()
+        self.account_balances = self.get_account_balances()
+        self.simple_earn_data = self.get_simple_earn_data()
+
+    def _validate_connection(self) -> bool:
+        """Validate OKX API connection."""
+        return all([self.api_key, self.secret_key, self.passphrase])
+
     def _generate_signature(
         self, timestamp: str, method: str, request_path: str, body: str = ""
     ) -> str:
-        """
-        Generates a signature for OKX API authentication.
-
-        Args:
-            timestamp (str): The timestamp for the request.
-            method (str): HTTP method (GET, POST, etc.).
-            request_path (str): The API endpoint path.
-            body (str): The request body.
-
-        Returns:
-            str: The generated signature.
-        """
+        """Generate signature for OKX API authentication."""
         message = f"{timestamp}{method.upper()}{request_path}{body}"
         mac = hmac.new(
             bytes(self.secret_key, "utf-8"),
             msg=bytes(message, "utf-8"),
             digestmod=hashlib.sha256,
         )
-        d = mac.digest()
-        signature = base64.b64encode(d).decode("utf-8")
-        return signature
+        return base64.b64encode(mac.digest()).decode("utf-8")
 
     def _get_timestamp(self) -> str:
-        """
-        Retrieves the current timestamp in ISO format (UTC).
-
-        Returns:
-            str: The current timestamp.
-        """
+        """Get current timestamp in ISO format (UTC)."""
         return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
     def _send_request(
         self, method: str, endpoint: str, params: Dict = None, body: Dict = None
     ) -> Dict:
-        """
-        Sends a request to the OKX API.
-
-        Args:
-            method (str): HTTP method (GET, POST, etc.).
-            endpoint (str): API endpoint (e.g., '/account/balance').
-            params (Dict): Query parameters.
-            body (Dict): Request body.
-
-        Returns:
-            Dict: The API response.
-
-        Raises:
-            Exception: If the API request fails.
-        """
+        """Send request to OKX API."""
         timestamp = self._get_timestamp()
         body_str = json.dumps(body) if body else ""
         params_str = (
@@ -91,7 +61,6 @@ class OKX:
         request_path = f"{self.API_VERSION}{endpoint}{params_str}"
 
         signature = self._generate_signature(timestamp, method, request_path, body_str)
-
         headers = {
             "OK-ACCESS-KEY": self.api_key,
             "OK-ACCESS-SIGN": signature,
@@ -100,87 +69,97 @@ class OKX:
             "Content-Type": "application/json",
         }
 
-        url = f"{self.API_URL}{request_path}"
-
         try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers)
-            elif method.upper() == "POST":
-                response = requests.post(url, headers=headers, data=body_str)
-            else:
-                raise ValueError("Unsupported HTTP method")
-
+            response = requests.request(
+                method,
+                f"{self.API_URL}{request_path}",
+                headers=headers,
+                data=body_str if method.upper() == "POST" else None,
+            )
             response.raise_for_status()
             data = response.json()
             if data.get("code") != "0":
                 raise Exception(f"API Error: {data.get('msg')}")
             return data.get("data", [])
-        except requests.exceptions.HTTPError as http_err:
-            print(f"HTTP ERROR: {http_err}")
-            raise
         except Exception as e:
             print(f"ERROR: API request failed: {e}")
             raise
 
     def get_account_balances(self) -> Dict[str, float]:
-        """
-        Retrieves the account balances from OKX's Funding account, filtering out balances less than 0.001.
-
-        Returns:
-            Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
-        """
+        """Get all account balances."""
         endpoint = "/asset/balances"
         data = self._send_request("GET", endpoint)
-        balances = {}
-        for detail in data:
-            currency = detail.get("ccy")
-            balance = float(detail.get("bal", 0))
-            if balance >= 0.001:  # Only include balances >= 0.001
-                balances[currency] = balance
-        return balances
+        raw_balances = {
+            detail.get("ccy"): float(detail.get("bal", 0)) for detail in data
+        }
+        return self._filter_small_balances(raw_balances)
 
     def _get_simple_earn_market_rates(self) -> Dict[str, float]:
-        """
-        Retrieves current market rates for Simple Earn products.
-
-        Returns:
-            Dict[str, float]: Dictionary mapping currency to its current market rate
-        """
+        """Get current market rates for Simple Earn products."""
         endpoint = "/finance/savings/lending-rate-summary"
         data = self._send_request("GET", endpoint)
 
         rates = {}
         for item in data:
             ccy = item.get("ccy")
-            # Get estimated rate (future rate), or average rate if estimated not available,
-            # or previous rate as last resort
             rate = float(
                 item.get("estRate", item.get("avgRate", item.get("preRate", 0)))
             )
-            # Convert rate from percentage to decimal if needed (e.g., 1.69 -> 0.0169)
-            rate = rate / 100 if rate > 0 else 0
-            rates[ccy] = rate
-
+            rates[ccy] = rate / 100 if rate > 0 else 0
         return rates
 
     def get_simple_earn_data(self) -> List[Dict]:
-        """Retrieves simple earn lending positions information."""
+        """Get Simple Earn lending positions with current rates."""
         endpoint = "/finance/savings/balance"
         data = self._send_request("GET", endpoint)
-
-        # Get current market rates for each currency
         market_rates = self._get_simple_earn_market_rates()
 
-        # Update rates in the data
         for position in data:
             ccy = position.get("ccy")
-            if ccy in market_rates:
-                position["rate"] = market_rates[ccy]
-                print(f"DEBUG: Updated rate for {ccy}: {market_rates[ccy]:.4%}")
-            else:
-                print(f"DEBUG: No market rate found for {ccy}")
-
+            decimal_rate = market_rates.get(ccy, 0)
+            position["rate"] = decimal_rate
+            print(f"DEBUG: Updated rate for {ccy}: {decimal_rate*10000:.2f}%")
         return data
+
+    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
+        """Get stablecoin savings positions with weighted yields."""
+        savings_positions = {}
+
+        for product in self.simple_earn_data:
+            asset = product.get("ccy")
+            if asset not in self.STABLECOINS:
+                continue
+
+            principal = round(float(product.get("amt", 0)))
+            yield_rate = float(product.get("rate", 0))
+
+            if principal > 0:
+                savings_positions = self.aggregate_positions(
+                    savings_positions, (asset, principal, yield_rate)
+                )
+
+        return savings_positions if savings_positions else {"None": (0.0, 0.0)}
+
+    # Rest of the DeFi-related methods remain unchanged as they're OKX-specific
+    def get_active_defi_orders(
+        self,
+        product_id: Optional[str] = None,
+        protocol_type: Optional[str] = None,
+        ccy: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> List[Dict]:
+        endpoint = "/finance/staking-defi/orders-active"
+        params = {
+            k: v
+            for k, v in {
+                "productId": product_id,
+                "protocolType": protocol_type,
+                "ccy": ccy,
+                "state": state,
+            }.items()
+            if v is not None
+        }
+        return self._send_request("GET", endpoint, params=params)
 
     def get_active_defi_orders(
         self,
@@ -255,15 +234,13 @@ class OKX:
         return data
 
 
-class OKXFiltered(OKX):
+class OKXFiltered(OKXClient):
     """
     Extends OKX class with additional filtering and data processing capabilities.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self.account_balances = self.get_account_balances()
-        self.simple_earn_data = self.get_simple_earn_data()
 
     def get_crypto_balances(self) -> Dict[str, float]:
         """
@@ -295,19 +272,22 @@ class OKXFiltered(OKX):
         }
         return stablecoin_balances
 
-    def get_simple_earn_positions(self) -> Dict[str, Tuple[float, float]]:
+    # TODO
+    def get_simple_earn_positions(self) -> Dict[str, Tuple[int, float]]:
         """
         Processes simple earn lending products to extract principal and effective yield.
 
         Returns:
-            Dict[str, Tuple[float, float]]: A dictionary with assets as keys and a tuple of
+            Dict[str, Tuple[int, float]]: A dictionary with assets as keys and a tuple of
             (principal, effective_yield) as values.
         """
         lending_positions = {}
+        print(f"self.simple_earn_data - {self.simple_earn_data}")
         for product in self.simple_earn_data:
             asset = product.get("ccy")
-            principal = float(product.get("amt", 0))
-            yield_rate = float(product.get("rate", 0))
+            principal = int(Decimal(product.get("amt", 0)))
+            # Convert rate from decimal to percentage (e.g., 0.0005 -> 0.055 for 5.5%)
+            yield_rate = float(product.get("rate", 0)) * 100
             if principal > 0:
                 if asset in lending_positions:
                     existing_principal, existing_yield = lending_positions[asset]
@@ -359,7 +339,7 @@ class OKXFiltered(OKX):
                 print("-" * 40)
                 print(f"Protocol: {data['protocol']}")
                 print(f"State: {data['state']}")
-                print(f"Invested Amount: {data['invested_amount']:.6f}")
+                print(f"Invested Amount: {round(data['invested_amount']):.0f}")
                 print(f"APY: {data['apy']*100:.2f}%")
                 print(f"Earnings: {data['earnings']:.6f}")
 
@@ -410,7 +390,7 @@ class OKXFiltered(OKX):
         position_info = {
             "protocol": protocol,
             "state": state,
-            "invested_amount": invested_amount,
+            "invested_amount": round(invested_amount),
             "earnings": earnings,
             "apy": apy,
             "protocol_details": {},
@@ -495,6 +475,43 @@ class OKXFiltered(OKX):
         latest_pending_orders = sorted_orders[:limit]
         return latest_pending_orders
 
+    def get_all_earning_positions(self) -> Dict[str, Tuple[int, float]]:
+        """
+        Combines all earning positions from Simple Earn and DeFi products.
+        """
+        combined_positions = {}
+
+        # Process Simple Earn positions
+        print("\nDEBUG: Processing Simple Earn positions")
+        simple_earn_positions = self.get_simple_earn_positions()
+        for asset, (principal, yield_rate) in simple_earn_positions.items():
+            print(f"DEBUG: Simple Earn {asset}: {principal}@{yield_rate}")
+            if principal > 0:
+                combined_positions = self.aggregate_positions(
+                    combined_positions, (asset, principal, yield_rate)
+                )
+                print(f"DEBUG: After Simple Earn {asset}: {combined_positions[asset]}")
+
+        # Process DeFi positions
+        print("\nDEBUG: Processing DeFi positions")
+        defi_positions = self.get_active_defi_lending_positions()
+        for position_key, position_data in defi_positions.items():
+            asset = position_key.split("-")[0]
+            principal = int(position_data["invested_amount"])
+            yield_rate = float(position_data["apy"])
+            print(f"DEBUG: DeFi {asset}: {principal}@{yield_rate}")
+
+            if principal > 0:
+                combined_positions = self.aggregate_positions(
+                    combined_positions, (asset, principal, yield_rate)
+                )
+                print(f"DEBUG: After DeFi {asset}: {combined_positions[asset]}")
+
+        return {
+            asset: (int(principal), yield_rate)
+            for asset, (principal, yield_rate) in combined_positions.items()
+        }
+
 
 def main():
     """Main function with improved output formatting."""
@@ -514,7 +531,7 @@ def main():
         lending_positions = okx_filtered.get_simple_earn_positions()
         for asset, (principal, yield_rate) in lending_positions.items():
             print(f"\n{asset}:")
-            print(f"  Principal: {principal:.6f}")
+            print(f"  Principal: {principal}")
             print(
                 f"  APY: {yield_rate*100*100:.2f}%"
             )  # Multiply by 100 twice to convert from decimal to percentage
@@ -531,6 +548,10 @@ def main():
             print(f"Protocol: {order.get('protocol', 'N/A')}")
             print(f"Amount: {float(order.get('amt', 0)):.6f}")
             print(f"Status: {order.get('state', 'N/A')}")
+
+        print("\n=== Aggregated Earnings ===")
+        aggregated = okx_filtered.get_all_earning_positions()
+        print(aggregated)
 
     except Exception as e:
         print(f"ERROR: An error occurred: {e}")
