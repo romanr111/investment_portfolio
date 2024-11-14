@@ -1,3 +1,4 @@
+import time
 from binance import Client
 from data.api_keys import BINANCE_KEY, BINANCE_SECRET
 from typing import Dict, Tuple
@@ -161,12 +162,9 @@ class BinanceClient(ExchangeBase):
     def get_all_crypto_balances(self) -> Dict[str, float]:
         """Get aggregated crypto balances from spot and savings."""
         crypto_spot = self.filter_out_crypto_balances(self.spot_balances)
-
         crypto_savings = self._get_savings_crypto_balances()
 
-        # Combine spot and savings balances
         aggregated = {}
-
         # Add spot balances
         for asset, balance in crypto_spot.items():
             if asset not in self.CRYPTO_EXCLUDE:
@@ -178,6 +176,11 @@ class BinanceClient(ExchangeBase):
                 aggregated[asset] += balance
             else:
                 aggregated[asset] = balance
+
+        # Convert WBETH to ETH if WBETH is present
+        if "WBETH" in aggregated:
+            aggregated["ETH"] = aggregated.get("ETH", 0) + aggregated["WBETH"]
+            del aggregated["WBETH"]
 
         return {asset: balance for asset, balance in aggregated.items() if balance > 0}
 
@@ -205,7 +208,6 @@ def main():
         print("\n=== Binance ===")
         print("\nAggregated Crypto Balances:")
         crypto = binance_client.get_all_crypto_balances()
-        print(crypto)
         for asset, balance in crypto.items():
             print(f"{asset}: {balance:.6f}")
 
@@ -213,13 +215,11 @@ def main():
         stablecoins = binance_client.get_stablecoin_balances(
             binance_client.spot_balances
         )
-        print(stablecoins)
-        for asset, balance in stablecoins.items():  # Added .items()
+        for asset, balance in stablecoins.items():
             print(f"{asset}: {balance:.2f}")
 
         print("\nSavings Positions:")
         binance_savings = binance_client.get_savings_positions()
-        print(binance_savings)
         for asset, (principal, yield_rate) in binance_savings.items():
             print(f"{asset}: Principal={principal}, APY={yield_rate*100:.2f}%")
 
@@ -228,4 +228,8 @@ def main():
 
 
 if __name__ == "__main__":
+    start_time = time.time()  # Start time
     main()
+    end_time = time.time()  # End time
+    execution_time = end_time - start_time
+    print(f"\nExecution time of main(): {execution_time:.2f} seconds")
