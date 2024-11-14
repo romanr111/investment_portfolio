@@ -536,7 +536,7 @@ def main():
         print("\n=== Account Overview ===")
 
         # Display crypto balances
-        crypto_balances = okx_filtered.get_crypto_balances()
+        crypto_balances = okx_filtered.get_all_crypto_balances()
         if crypto_balances:
             print("\nCrypto Balances:")
             for asset, balance in crypto_balances.items():

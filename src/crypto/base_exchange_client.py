@@ -101,7 +101,12 @@ class ExchangeBase(ABC):
         return positions
 
     @abstractmethod
-    def get_cash_balance(self) -> Dict[str, float]:
+    def get_cash_balance(self) -> int:
+        """Retrieve spot account cash balance from exchange."""
+        pass
+
+    @abstractmethod
+    def get_all_crypto_balances(self) -> Dict[str, float]:
         """Retrieve spot account balances from exchange."""
         pass
 
