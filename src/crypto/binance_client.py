@@ -90,7 +90,7 @@ class BinanceClient(ExchangeBase):
             weighted_yield, 4
         )  # Round to 4 decimal places for percentage accuracy
 
-    def get_account_balances(self) -> Dict[str, float]:
+    def get_spot_account_balances(self) -> Dict[str, float]:
         """Get SPOT account balances."""
         return self.spot_balances
 
@@ -184,10 +184,15 @@ class BinanceClient(ExchangeBase):
 
         return {asset: balance for asset, balance in aggregated.items() if balance > 0}
 
-    def get_spot_cash_balance(self) -> int:
+    def get_cash_balance(self) -> int:
         """Get total stablecoin balance in spot account."""
-        stablecoin_balances = self.get_stablecoin_balances(self.spot_balances)
-        return sum(round(float(balance)) for balance in stablecoin_balances.values())
+        stablecoin_balances = self.filter_out_stablecoin_balances(
+            dict(self.spot_balances)
+        )
+        if not stablecoin_balances:
+            return 0
+        else:
+            return sum(stablecoin_balances.values())
 
     def get_earn_total_cash_savings(self) -> int:
         """Get total stablecoin savings in Binance Earn."""
@@ -211,12 +216,8 @@ def main():
         for asset, balance in crypto.items():
             print(f"{asset}: {balance:.6f}")
 
-        print("\nStablecoin Balances:")
-        stablecoins = binance_client.get_stablecoin_balances(
-            binance_client.spot_balances
-        )
-        for asset, balance in stablecoins.items():
-            print(f"{asset}: {balance:.2f}")
+        cash = binance_client.get_cash_balance()
+        print(f"\nStablecoin Balances: {cash}")
 
         print("\nSavings Positions:")
         binance_savings = binance_client.get_savings_positions()
@@ -224,7 +225,7 @@ def main():
             print(f"{asset}: Principal={principal}, APY={yield_rate*100:.2f}%")
 
     except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"ERROR inside main(): {e}")
 
 
 if __name__ == "__main__":

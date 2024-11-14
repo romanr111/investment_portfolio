@@ -143,7 +143,9 @@ class Bybit:
             logger.error(f"ERROR: API request failed: {e}")
             raise
 
-    def get_account_balances(self, account_type: str = "UNIFIED") -> Dict[str, float]:
+    def get_spot_account_balances(
+        self, account_type: str = "UNIFIED"
+    ) -> Dict[str, float]:
         """
         Retrieves the account balances from Bybit's specified Trading Account.
 
@@ -215,7 +217,7 @@ class Bybit:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
         try:
-            return self.get_account_balances(account_type="FUNDING")
+            return self.get_spot_account_balances(account_type="FUNDING")
         except Exception as e:
             logger.error(f"Error getting funding balances: {e}")
             return {}
@@ -227,7 +229,7 @@ class Bybit:
         Returns:
             Dict[str, float]: A dictionary with asset symbols as keys and balances as values.
         """
-        return self.get_account_balances(account_type="EARN")
+        return self.get_spot_account_balances(account_type="EARN")
 
     def get_earn_positions(self) -> List[Dict]:
         """
@@ -311,7 +313,7 @@ class BybitFiltered(Bybit):
     def __init__(self) -> None:
         super().__init__()
         logger.info("Initializing BybitFiltered class.")
-        self.unified_balances = self.get_account_balances()
+        self.unified_balances = self.get_spot_account_balances()
         self.funding_balances = self.get_funding_balances()
         self.earn_positions = self.get_earn_summary()  # Updated to use new method
         self.available_earn_products = self.get_earning_products()

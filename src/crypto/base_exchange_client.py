@@ -52,12 +52,16 @@ class ExchangeBase(ABC):
 
         return (self._round_amount(total_principal), self._round_amount(weighted_yield))
 
-    def get_stablecoin_balances(self, balances: Dict[str, float]) -> Dict[str, float]:
+    def filter_out_stablecoin_balances(
+        self, balances: Dict[str, float]
+    ) -> Dict[str, float]:
         """Filter and return stablecoin balances."""
+        if not balances:
+            return {}
         stablecoin_balances = {
-            asset: balance
+            asset: round(float(balance))
             for asset, balance in balances.items()
-            if asset in self.STABLECOINS and balance >= 1
+            if asset in self.STABLECOINS and float(balance) >= 1
         }
         return stablecoin_balances
 
@@ -97,8 +101,8 @@ class ExchangeBase(ABC):
         return positions
 
     @abstractmethod
-    def get_account_balances(self) -> Dict[str, float]:
-        """Retrieve account balances from exchange."""
+    def get_cash_balance(self) -> Dict[str, float]:
+        """Retrieve spot account balances from exchange."""
         pass
 
     @abstractmethod

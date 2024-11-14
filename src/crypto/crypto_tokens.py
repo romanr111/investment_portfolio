@@ -68,7 +68,7 @@ class CryptoData:
         combined_cash: Dict[str, float] = {}
 
         for broker in brokers:
-            balances = broker.get_account_balances()
+            balances = broker.get_spot_account_balances()
             print(f"balances --> {balances}")
             stablecoin_balances = {
                 asset: balance

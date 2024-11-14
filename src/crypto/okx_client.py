@@ -27,7 +27,7 @@ class OKXClient(ExchangeBase):
             raise ValueError("API key, secret key, and passphrase must be provided.")
 
         super().__init__()
-        self.account_balances = self.get_account_balances()
+        self.account_balances = self.get_spot_account_balances()
         self.simple_earn_data = self.get_simple_earn_data()
 
     def _validate_connection(self) -> bool:
@@ -86,14 +86,15 @@ class OKXClient(ExchangeBase):
             print(f"ERROR: API request failed: {e}")
             raise
 
-    def get_account_balances(self) -> Dict[str, float]:
+    def get_spot_account_balances(self) -> Dict[str, float]:
         """Get all account balances."""
         endpoint = "/asset/balances"
         data = self._send_request("GET", endpoint)
         raw_balances = {
             detail.get("ccy"): float(detail.get("bal", 0)) for detail in data
         }
-        return self._filter_small_balances(raw_balances)
+        balances = self._filter_small_balances(raw_balances)
+        return balances
 
     def _get_simple_earn_market_rates(self) -> Dict[str, float]:
         """Get current market rates for Simple Earn products."""
@@ -240,26 +241,28 @@ class OKXFiltered(OKXClient):
         return crypto_balances
 
     def get_all_crypto_balances(self) -> Dict[str, float]:
+        # TODO: To check this method
         """Get aggregated crypto balances from spot and savings."""
         crypto_spot = self.get_crypto_balances()
         return crypto_spot
 
-    def get_stablecoin_balances(self) -> Dict[str, float]:
+    def get_cash_balance(self) -> int:
         """
-        Retrieves balances of stablecoins, filtering out balances less than 1.
+        Calculates total balance of stablecoins, filtering out balances less than 1.
 
         Returns:
-            Dict[str, float]: Filtered stablecoin balances.
+            int: Sum of rounded stablecoin balances, or 0 if no qualifying balances exist.
         """
         STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
-        stablecoin_balances = {
-            asset: balance
-            for asset, balance in self.account_balances.items()
-            if asset in STABLECOINS and balance >= 1
-        }
-        return stablecoin_balances
 
-    # TODO
+        stablecoin_balances = {
+            asset: round(float(balance))
+            for asset, balance in self.account_balances.items()
+            if asset in STABLECOINS and float(balance) >= 1
+        }
+
+        return sum(stablecoin_balances.values()) if stablecoin_balances else 0
+
     def get_simple_earn_positions(self) -> Dict[str, Tuple[int, float]]:
         """
         Processes simple earn lending products to extract principal and effective yield.
@@ -542,15 +545,12 @@ def main():
             print("\nNo significant crypto balances found.")
 
         # Display stablecoin balances
-        stablecoin_balances = okx_filtered.get_stablecoin_balances()
-        if stablecoin_balances:
-            print("\nStablecoin Balances:")
-            for asset, balance in stablecoin_balances.items():
-                print(f"{asset}: {balance:.2f}")
+        cash = okx_filtered.get_cash_balance()
+        if cash:
+            print(f"\n Cash Balances: {cash}")
         else:
             print("\nNo significant stablecoin balances found.")
 
-        # Get and display savings positions
         okx_filtered.get_savings_positions()
 
         # Display pending orders if any exist
