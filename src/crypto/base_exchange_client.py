@@ -61,7 +61,9 @@ class ExchangeBase(ABC):
         }
         return stablecoin_balances
 
-    def get_crypto_balances(self, balances: Dict[str, float]) -> Dict[str, float]:
+    def filter_out_crypto_balances(
+        self, balances: Dict[str, float]
+    ) -> Dict[str, float]:
         """Filter and return crypto balances, excluding stablecoins."""
         crypto_balances = {
             asset: balance

@@ -69,6 +69,7 @@ class CryptoData:
 
         for broker in brokers:
             balances = broker.get_account_balances()
+            print(f"balances --> {balances}")
             stablecoin_balances = {
                 asset: balance
                 for asset, balance in balances.items()

@@ -1,4 +1,3 @@
-# -------------------------------- DONE --------------------------------
 from binance import Client
 from data.api_keys import BINANCE_KEY, BINANCE_SECRET
 from typing import Dict, Tuple
@@ -86,10 +85,12 @@ class BinanceClient(ExchangeBase):
         if additional_yield > 0:
             weighted_yield += additional_yield
 
-        return weighted_yield
+        return round(
+            weighted_yield, 4
+        )  # Round to 4 decimal places for percentage accuracy
 
     def get_account_balances(self) -> Dict[str, float]:
-        """Get all account balances."""
+        """Get SPOT account balances."""
         return self.spot_balances
 
     def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
@@ -102,7 +103,7 @@ class BinanceClient(ExchangeBase):
             if asset not in self.STABLECOINS:
                 continue
 
-            principal = float(loan.get("totalAmount", 0))
+            principal = round(float(loan.get("totalAmount", 0)))  # Round to integer
             latest_apr = float(loan.get("latestAnnualPercentageRate", 0))
             tier_apr_dict = loan.get("tierAnnualPercentageRate", {})
             additional_yield = float(loan.get("yesterdayAirdropPercentageRate", 0))
@@ -113,7 +114,7 @@ class BinanceClient(ExchangeBase):
                         principal, tier_apr_dict, latest_apr, additional_yield
                     )
                 else:
-                    effective_yield = latest_apr + additional_yield
+                    effective_yield = round(latest_apr + additional_yield, 4)
 
                 savings_positions = self.aggregate_positions(
                     savings_positions, (asset, principal, effective_yield)
@@ -125,31 +126,65 @@ class BinanceClient(ExchangeBase):
             if asset not in self.STABLECOINS:
                 continue
 
-            principal = float(loan.get("amount", 0))
-            apy = float(loan.get("apy", 0))
+            principal = round(float(loan.get("amount", 0)))  # Round to integer
+            apy = round(float(loan.get("apy", 0)), 4)  # Round to 4 decimal places
 
             if principal > 0:
                 savings_positions = self.aggregate_positions(
                     savings_positions, (asset, principal, apy)
                 )
 
-        return savings_positions if savings_positions else {"None": (0.0, 0.0)}
+        return savings_positions if savings_positions else {"None": (0, 0.0)}
+
+    def _get_savings_crypto_balances(self) -> Dict[str, float]:
+        """Get crypto balances from flexible and fixed savings products."""
+        savings_balances = {}
+
+        # Process flexible savings
+        for position in self.flexible_savings.get("rows", []):
+            asset = position.get("asset", "Unknown")
+            if asset not in self.STABLECOINS and asset not in self.CRYPTO_EXCLUDE:
+                amount = float(position.get("totalAmount", 0))
+                if amount >= self.MIN_CRYPTO_BALANCE:
+                    savings_balances[asset] = savings_balances.get(asset, 0) + amount
+
+        # Process fixed savings
+        for position in self.fixed_savings.get("rows", []):
+            asset = position.get("asset", "Unknown")
+            if asset not in self.STABLECOINS and asset not in self.CRYPTO_EXCLUDE:
+                amount = float(position.get("amount", 0))
+                if amount >= self.MIN_CRYPTO_BALANCE:
+                    savings_balances[asset] = savings_balances.get(asset, 0) + amount
+
+        return savings_balances
+
+    def get_all_crypto_balances(self) -> Dict[str, float]:
+        """Get aggregated crypto balances from spot and savings."""
+        crypto_spot = self.filter_out_crypto_balances(self.spot_balances)
+
+        crypto_savings = self._get_savings_crypto_balances()
+
+        # Combine spot and savings balances
+        aggregated = {}
+
+        # Add spot balances
+        for asset, balance in crypto_spot.items():
+            if asset not in self.CRYPTO_EXCLUDE:
+                aggregated[asset] = balance
+
+        # Add savings balances
+        for asset, balance in crypto_savings.items():
+            if asset in aggregated:
+                aggregated[asset] += balance
+            else:
+                aggregated[asset] = balance
+
+        return {asset: balance for asset, balance in aggregated.items() if balance > 0}
 
     def get_spot_cash_balance(self) -> int:
         """Get total stablecoin balance in spot account."""
         stablecoin_balances = self.get_stablecoin_balances(self.spot_balances)
         return sum(round(float(balance)) for balance in stablecoin_balances.values())
-
-    def get_all_crypto_balances(self) -> Dict[str, float]:
-        """Get aggregated crypto balances from spot and savings."""
-        crypto_spot = self.get_crypto_balances(self.spot_balances)
-
-        aggregated = {}
-        for asset, balance in crypto_spot.items():
-            if asset not in self.CRYPTO_EXCLUDE:
-                aggregated[asset] = balance
-
-        return {asset: balance for asset, balance in aggregated.items() if balance > 0}
 
     def get_earn_total_cash_savings(self) -> int:
         """Get total stablecoin savings in Binance Earn."""
@@ -159,7 +194,7 @@ class BinanceClient(ExchangeBase):
             for asset, (principal, _) in savings_positions.items()
             if asset in self.STABLECOINS
         }
-        return sum(round(amount) for amount in stablecoin_positions.values())
+        return sum(stablecoin_positions.values())  # Values are already rounded
 
 
 def main():
