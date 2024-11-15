@@ -1,75 +1,75 @@
-# -------------------------------- TODO --------------------------------
-from data.api_keys import WHITEBIT_API_KEY, WHITEBIT_API_SECRET
+# -------------------------------- HARDCODED DONE --------------------------------
+
 import base64
 import hashlib
 import hmac
 import json
 import time
-from typing import Optional, Dict, Any
-
+from typing import Dict, Tuple, Any, Optional
 import requests
 
+from data.api_keys import WHITEBIT_API_KEY, WHITEBIT_API_SECRET
+from src.crypto.base_exchange_client import ExchangeBase
 
-class WhiteBitAPI:
+##########################################################
+# TODO:
+WHITEBIT_SAVINGS = [
+    ("USDT", 2077, 0.17),
+    ("USDC", 5909, 0.158),
+    ("USDT", 1787, 0.14),
+    ("USDC", 1495, 0.148),
+]
+##########################################################
+
+
+class WhiteBit(ExchangeBase):
+    """WhiteBit API client inheriting from ExchangeBase."""
+
     def __init__(
-        self, api_key: str, secret_key: str, base_url: str = "https://whitebit.com"
+        self,
+        api_key: str = WHITEBIT_API_KEY,
+        secret_key: str = WHITEBIT_API_SECRET,
+        base_url: str = "https://whitebit.com",
     ):
-        """
-        Initialize the WhiteBit API client.
-
-        Args:
-            api_key: Your WhiteBit API key
-            secret_key: Your WhiteBit secret key
-            base_url: API base URL (default: 'https://whitebit.com')
-        """
         self.api_key = api_key
         self.secret_key = secret_key
-        self.base_url = base_url.rstrip("/")  # Remove trailing slash if present
+        self.base_url = base_url.rstrip("/")
+
+        # Initialize parent class after setting up API credentials
+        super().__init__()
+
+    def _validate_connection(self) -> bool:
+        """Implement connection validation by attempting to fetch USDT balance."""
+        try:
+            self.get_trade_balance("USDT")
+            return True
+        except Exception as e:
+            return False
 
     def _generate_auth_headers(
         self, endpoint: str, data: Dict[str, Any]
-    ) -> Dict[str, str]:
-        """
-        Generate authentication headers for WhiteBit API requests.
-
-        Args:
-            endpoint: API endpoint path
-            data: Request data dictionary
-
-        Returns:
-            Dictionary containing the required headers
-        """
-        # Add required fields to data
+    ) -> Tuple[Dict[str, str], str]:
+        """Generate authentication headers for WhiteBit API requests."""
         data["request"] = endpoint
         data["nonce"] = time.time_ns() // 1_000_000
         data["nonceWindow"] = True
 
-        # Create payload
         data_json = json.dumps(data, separators=(",", ":"))
         payload = base64.b64encode(data_json.encode("ascii"))
-
-        # Generate signature
         signature = hmac.new(
             self.secret_key.encode("ascii"), payload, hashlib.sha512
         ).hexdigest()
 
-        return {
+        headers = {
             "Content-type": "application/json",
             "X-TXC-APIKEY": self.api_key,
             "X-TXC-PAYLOAD": payload,
             "X-TXC-SIGNATURE": signature,
-        }, data_json
+        }
+        return headers, data_json
 
     def get_trade_balance(self, ticker: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Get trading account balance.
-
-        Args:
-            ticker: Optional cryptocurrency ticker (e.g., 'BTC')
-
-        Returns:
-            Dictionary containing balance information
-        """
+        """Get trading account balance for specific ticker or all tickers."""
         endpoint = "/api/v4/trade-account/balance"
         data = {}
         if ticker:
@@ -82,104 +82,72 @@ class WhiteBitAPI:
         response.raise_for_status()
         return response.json()
 
-    def get_investments_history(
-        self,
-        investment_id: Optional[str] = None,
-        ticker: Optional[str] = None,
-        status: Optional[int] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    def get_cash_balance(self) -> int:
+        """Implement ExchangeBase method to get stablecoin balance in cents."""
+        total = 0
+        for stablecoin in self.STABLECOINS:
+            try:
+                balance = self.get_trade_balance(stablecoin)
+                available = float(balance.get("available", "0"))
+                total += available
+            except Exception:
+                continue
+        return int(total * 100)  # Convert to cents
+
+    def get_all_crypto_balances(self) -> Dict[str, float]:
+        """Implement ExchangeBase method to get all crypto balances."""
+        try:
+            all_balances = self.get_trade_balance()
+            balances = {}
+            for ticker, data in all_balances.items():
+                available = float(data.get("available", "0"))
+                if available >= self.MIN_CRYPTO_BALANCE:
+                    balances[ticker] = self._round_amount(available)
+            return balances
+        except Exception as e:
+            return {}
+
+    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
         """
-        Get investments history.
-
-        Args:
-            investment_id: Optional investment identifier
-            ticker: Optional invest plan source currency's ticker
-            status: Optional investment status (1 - active, 2 - closed)
-            limit: Number of records to return (Default: 100, Min: 1, Max: 100)
-            offset: Starting position (Default: 0, Min: 0, Max: 10000)
-
-        Returns:
-            Dictionary containing investment history records
+        Implement ExchangeBase method to get savings positions.
+        Uses aggregate_positions to combine multiple positions per asset.
         """
-        endpoint = "/api/v4/main-account/smart/investments"
-
-        # Create request body exactly as shown in the documentation
-        data = {
-            "request": endpoint,
-            "nonce": str(
-                time.time_ns() // 1_000_000
-            ),  # Convert nonce to string as shown in docs
-        }
-
-        # Add optional parameters only if they are provided
-        if investment_id:
-            data["id"] = investment_id
-        if ticker:
-            data["ticker"] = ticker
-        if status is not None:
-            data["status"] = status
-        if limit is not None:
-            data["limit"] = min(max(limit, 1), 100)
-        if offset is not None:
-            data["offset"] = min(max(offset, 0), 10000)
-
-        # Convert to JSON string
-        data_json = json.dumps(data, separators=(",", ":"))
-
-        # Create payload
-        payload = base64.b64encode(data_json.encode("ascii"))
-
-        # Generate signature
-        signature = hmac.new(
-            self.secret_key.encode("ascii"), payload, hashlib.sha512
-        ).hexdigest()
-
-        # Prepare headers
-        headers = {
-            "Content-type": "application/json",
-            "X-TXC-APIKEY": self.api_key,
-            "X-TXC-PAYLOAD": payload,
-            "X-TXC-SIGNATURE": signature,
-        }
-
-        # Make request
-        response = requests.post(
-            f"{self.base_url}{endpoint}", headers=headers, data=data_json
-        )
-
-        # Add debug information
-        if response.status_code != 200:
-            print(f"Request URL: {self.base_url}{endpoint}")
-            print(f"Request Headers: {headers}")
-            print(f"Request Data: {data}")
-            print(f"Response Status: {response.status_code}")
-            print(f"Response Text: {response.text}")
-
-        response.raise_for_status()
-        return response.json()
+        positions = {}
+        for position in WHITEBIT_SAVINGS:
+            positions = self.aggregate_positions(positions, position)
+        return positions
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Initialize the API client
-    api = WhiteBitAPI(api_key=WHITEBIT_API_KEY, secret_key=WHITEBIT_API_SECRET)
-
-    # Get balance for all currencies
-    # try:
-    # balances = api.get_trade_balance()
-    # print("Trade Balances:")
-    # print(json.dumps(balances, indent=2))
-    # except requests.exceptions.RequestException as e:
-    # print(f"Error fetching balances: {e}")
-
-    # Get investment history
+def main():
+    """Main function demonstrating WhiteBit client functionality."""
     try:
-        investments = api.get_investments_history(
-            ticker="USDT", status=1, limit=10  # Active investments
-        )
-        print("\nInvestment History:")
-        print(json.dumps(investments, indent=2))
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching investments: {e}")
+        whitebit = WhiteBit()
+
+        print("\n=== Account Overview ===")
+
+        print("\nCrypto Balances:")
+        crypto_balances = whitebit.get_all_crypto_balances()
+        crypto_balances = whitebit.filter_out_crypto_balances(crypto_balances)
+        for asset, balance in crypto_balances.items():
+            print(f"{asset}: {balance:.8f}")
+
+        print("\nStablecoin Balances:")
+        all_balances = whitebit.get_all_crypto_balances()
+        stablecoin_balances = whitebit.filter_out_stablecoin_balances(all_balances)
+        for asset, balance in stablecoin_balances.items():
+            print(f"{asset}: {balance:.2f}")
+
+        total_cash_usd = whitebit.get_cash_balance() / 100  # Convert cents to USD
+        print(f"\nTotal Cash: ${total_cash_usd:.2f}")
+
+        print("\nSavings:")
+        savings = whitebit.get_savings_positions()
+        for asset, (principal, apy) in savings.items():
+            print(f"{asset}: Principal = ${principal:.2f}, APY={apy * 100:.1f}%")
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()

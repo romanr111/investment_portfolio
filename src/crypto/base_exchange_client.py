@@ -61,7 +61,7 @@ class ExchangeBase(ABC):
         stablecoin_balances = {
             asset: round(float(balance))
             for asset, balance in balances.items()
-            if asset in self.STABLECOINS and float(balance) >= 1
+            if asset in self.STABLECOINS and float(balance) >= 0.5
         }
         return stablecoin_balances
 
