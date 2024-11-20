@@ -94,7 +94,7 @@ class BinanceClient(ExchangeBase):
         """Get SPOT account balances."""
         return self.spot_balances
 
-    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
+    def get_savings_positions(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """Get stablecoin savings positions with weighted yields."""
         savings_positions = {}
 
@@ -135,7 +135,11 @@ class BinanceClient(ExchangeBase):
                     savings_positions, (asset, principal, apy)
                 )
 
-        return savings_positions if savings_positions else {"None": (0, 0.0)}
+        return (
+            {"binance": savings_positions}
+            if savings_positions
+            else {"binance": {"None": (0, 0.0)}}
+        )
 
     def _get_savings_crypto_balances(self) -> Dict[str, float]:
         """Get crypto balances from flexible and fixed savings products."""

@@ -120,7 +120,6 @@ class OKXClient(ExchangeBase):
             ccy = position.get("ccy")
             decimal_rate = market_rates.get(ccy, 0)
             position["rate"] = decimal_rate
-            print(f"DEBUG: Updated rate for {ccy}: {decimal_rate*10000:.2f}%")
         return data
 
     # Rest of the DeFi-related methods remain unchanged as they're OKX-specific
@@ -464,7 +463,7 @@ class OKXFiltered(OKXClient):
         latest_pending_orders = sorted_orders[:limit]
         return latest_pending_orders
 
-    def get_savings_positions(self) -> Dict[str, Tuple[int, float]]:
+    def get_savings_positions(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """
         Combines all earning positions from Simple Earn and DeFi products with detailed logging.
 
@@ -525,7 +524,7 @@ class OKXFiltered(OKXClient):
             print(f"  Total Principal: {principal}")
             print(f"  Weighted Rate: {rate*100:.2f}%")
 
-        return final_positions
+        return {"okx": final_positions}
 
 
 def main():

@@ -107,15 +107,17 @@ class WhiteBit(ExchangeBase):
         except Exception as e:
             return {}
 
-    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
+    def get_savings_positions(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """
         Implement ExchangeBase method to get savings positions.
         Uses aggregate_positions to combine multiple positions per asset.
+        Returns positions wrapped in a dictionary with exchange name as key.
         """
         positions = {}
         for position in WHITEBIT_SAVINGS:
             positions = self.aggregate_positions(positions, position)
-        return positions
+
+        return {"whitebit": positions}
 
 
 def main():

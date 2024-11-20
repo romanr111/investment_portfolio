@@ -164,9 +164,9 @@ class Bybit(ExchangeBase):
             print(f"Error getting funding balances: {e}")
             return {}
 
-    def get_savings_positions(self) -> Dict[str, Tuple[float, float]]:
+    def get_savings_positions(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """Get savings positions. Currently returns empty as endpoint is not available."""
-        return BYBIT_SAVINGS
+        return {"bybit": BYBIT_SAVINGS}
 
 
 class BybitFiltered(Bybit):

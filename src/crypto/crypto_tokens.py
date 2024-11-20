@@ -3,7 +3,7 @@
 # Along with providing data to spreadsheet formatter; e.g. I could initialize it and provide data as arguments to /
 # other modules who needs crypto related data;
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from data.crypto_data import COLD_STORAGE
 from src.crypto.base_exchange_client import ExchangeBase
 from src.crypto.binance_client import BinanceClient
@@ -17,6 +17,28 @@ INITIAL_TOKENS: List[str] = ["BTC", "ETH", "BNB", "ADA"]
 
 class CryptoData:
     """Handles cryptocurrency data processing and aggregation."""
+
+    @staticmethod
+    def get_all_savings_positions(
+        brokers: List[ExchangeBase],
+    ) -> List[Dict[str, Tuple[float, float]]]:
+        """
+        Collects savings positions from all brokers into a list.
+
+        Args:
+            brokers: List of broker instances implementing ExchangeBase.
+
+        Returns:
+            List[Dict[str, Tuple[float, float]]]: List of savings positions from each broker
+        """
+        positions = []
+
+        for broker in brokers:
+            broker_positions = broker.get_savings_positions()
+            if broker_positions:
+                positions.append(broker_positions)
+
+        return positions
 
     @staticmethod
     def get_all_crypto_quantity(brokers: List[ExchangeBase]) -> Dict[str, float]:
@@ -61,30 +83,19 @@ class CryptoData:
         return sorted_crypto
 
     @staticmethod
-    def get_free_cash_balances(brokers: List[ExchangeBase]) -> Dict[str, float]:
+    def calculate_free_cash_balance(brokers: List[ExchangeBase]) -> int:
         """
-        Get total free cash (stablecoin) balances across all brokers.
-
-        Args:
-            brokers: List of broker instances implementing ExchangeBase.
-
-        Returns:
-            Dict[str, float]: Combined stablecoin balances.
+        Get total free cash balance across all brokers.
+        Sums up integer balances from get_cash_balance().
         """
-        combined_cash: Dict[str, float] = {}
+        total_balance = 0
 
         for broker in brokers:
-            balances = broker.get_spot_account_balances()
-            print(f"balances --> {balances}")
-            stablecoin_balances = {
-                asset: balance
-                for asset, balance in balances.items()
-                if asset in ExchangeBase.STABLECOINS and balance >= 1
-            }
-            for asset, balance in stablecoin_balances.items():
-                combined_cash[asset] = combined_cash.get(asset, 0) + balance
-
-        return {asset: round(bal, 2) for asset, bal in combined_cash.items()}
+            balance = broker.get_cash_balance()
+            if balance >= 1:
+                total_balance += balance
+        print(f"Total Crypto free cash --> {total_balance}")
+        return total_balance
 
     @staticmethod
     def get_market_value(
@@ -104,6 +115,8 @@ class CryptoData:
         crypto_values: Dict[str, int] = {}
 
         for crypto, quantity in quantities.items():
+            if crypto == "UAH":
+                continue
             try:
                 price = fetcher.get_market_price_for(crypto)
                 value = round(quantity * price)
@@ -128,59 +141,32 @@ class CryptoEndpoint:
             WhiteBit(),
         ]
         self.quantities = CryptoData.get_all_crypto_quantity(self.brokers)
-        tokens = self._combine_tokens(INITIAL_TOKENS, list(self.quantities.keys()))
-        print(f"Crypto quantities --> {self.quantities}")
-
-        self.cmc_fetcher = CoinMarketCapFetcher(tokens)
-        self.market_values = CryptoData.get_market_value(
+        self.cmc_fetcher = CoinMarketCapFetcher(self.quantities)
+        self.crypto_market_values = CryptoData.get_market_value(
             self.quantities, self.cmc_fetcher
         )
-        self.free_cash = CryptoData.get_free_cash_balances(self.brokers)
-
-    def get_tokens_market_values(self) -> Dict[str, int]:
-        return self.market_values
+        self.free_cash = CryptoData.calculate_free_cash_balance(self.brokers)
+        self.all_crypto_savings = CryptoData.get_all_savings_positions(self.brokers)
 
     def get_total_crypto_value(self) -> int:
-        return sum(self.market_values.values())
-
-    def get_total_cash(self) -> float:
-        return sum(self.free_cash.values())
-
-    @staticmethod
-    def _combine_tokens(initial: List[str], account: List[str]) -> List[str]:
-        """
-        Combine initial tokens with account tokens, preserving order and removing duplicates.
-
-        Args:
-            initial: Initial list of tokens.
-            account: Account's list of tokens.
-
-        Returns:
-            Combined list of tokens.
-        """
-        seen = set(initial)
-        combined = initial.copy()
-
-        for token in account:
-            if token not in seen:
-                combined.append(token)
-                seen.add(token)
-
-        return combined
+        return sum(self.crypto_market_values.values())
 
 
 def main():
     """Main function to demonstrate usage."""
     try:
-        endpoint = CryptoEndpoint()
-        market_values = endpoint.get_tokens_market_values()
+        crypto_endpoint = CryptoEndpoint()
+        print(f"\nCrypto quantities --> {crypto_endpoint.quantities}")
 
         print("\nCrypto Market Values:")
-        for token, value in market_values.items():
+        for token, value in crypto_endpoint.crypto_market_values.items():
             print(f"{token}: ${value:,}")
-        print(f"Total Crypto Value: ${endpoint.get_total_crypto_value():,}")
 
-        print(f"\nTotal Free Cash: ${endpoint.get_total_cash():,.2f}")
+        print(f"\nTotal Crypto Value: ${crypto_endpoint.get_total_crypto_value():,}")
+
+        print(f"\nTotal Free Cash: {crypto_endpoint.free_cash}")
+
+        print(f"\n All Crypto Savings: {crypto_endpoint.all_crypto_savings}")
 
     except Exception as e:
         print(f"ERROR: An error occurred: {str(e)}")
