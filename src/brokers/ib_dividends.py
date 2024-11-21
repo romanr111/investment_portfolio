@@ -1,3 +1,6 @@
+# TODO: Get bonds dividends
+# Get stocks divs separatelly
+
 from src.brokers.ib import InteractiveBrokers
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
 from src.helpers import perform_request
@@ -5,7 +8,9 @@ from functools import lru_cache
 
 
 class BaseDividends:
-    TAX_DISCOUNT = 0.8  # 15% USA tax, 5% Ukraine tax
+    TAX_DISCOUNT = (
+        0.8  # 15% USA tax, 5% Ukraine tax # TODO: Recalculate that for USA Bonds;
+    )
     API_URL = NASDAQ_API
     HEADERS = NASDAQ_HEADERS
 
@@ -20,6 +25,7 @@ class BaseDividends:
 
     @lru_cache(maxsize=None)  # This caches the results of _get_dividend_info
     def _get_dividend_info(self, stock):
+        # TODO: Get results from filters module
         etfs = ["MCHI", "VNQI", "SGOV", "TLT", "LQD", "HYG", "JNK", "EMB"]
         param = (
             f"{stock}/dividends?assetclass=etf"
@@ -59,6 +65,8 @@ class BaseDividends:
 
 class PublicDividends(BaseDividends):
     def __init__(self, broker):
+        # TODO: I don't need to use .get_stocks_quantity() - just init IB
+        # and get the whole portfolio info, then iterate over that dict;
         stocks_quantity = broker.get_stocks_quantity()
         super().__init__(stocks_quantity)
 

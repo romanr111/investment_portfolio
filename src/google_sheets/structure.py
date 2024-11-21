@@ -1,14 +1,11 @@
 import gspread
-
 from google.oauth2.service_account import Credentials
 
-from data_source import DataSource
 from data.endpoints import SCOPE
-
+from data_source import DataSource
 from src.brokers.ib_dividends import PublicDividends
-from src.google_sheets.formatting import SpreadsheetFormatter
 from src.fire import FinancialFreedom
-
+from src.google_sheets.formatting import SpreadsheetFormatter
 
 CREDENTIALS_PATH = "data/credentials.json"
 SPREADSHEET_NAME = "portfolio_automated"
@@ -186,18 +183,17 @@ class SpreadsheetConstructor:
 
 
 class SpreadsheetManager:
-    def __init__(self, worksheet_name: str, ib_endpoint, crypto_endpoint):
+    def __init__(self, worksheet_name: str, data_source_obj):
         self.google_sheet = GoogleSheet(
             CREDENTIALS_PATH,
             SPREADSHEET_NAME,
             worksheet_name,
         )
-        self.data_source_obj = DataSource(ib_endpoint, crypto_endpoint)
-        self.data_source = self.data_source_obj.fetch_data()
+        self.data = data_source_obj
 
     def update_data(self):
         """Updates the spreadsheet with data from various sources."""
-        manager = SpreadsheetConstructor(self.google_sheet.sheet, self.data_source)
+        manager = SpreadsheetConstructor(self.google_sheet.sheet, self.data)
         manager.update_spreadsheet()
         manager.update_individual_cells(
             self.data_source_obj.p_alloc, self.data_source_obj.ib

@@ -1,7 +1,5 @@
 import time
 
-from src.brokers.ib import InteractiveBrokers
-from src.crypto.crypto_tokens import CryptoEndpoint
 from src.google_sheets.structure import SpreadsheetManager
 
 #
@@ -11,9 +9,9 @@ from src.google_sheets.structure import SpreadsheetManager
 
 def main():
     worksheet_name = "Test 2024"
-    ib = InteractiveBrokers()
-    crypto = CryptoEndpoint()
-    portfolio_manager = SpreadsheetManager(worksheet_name, ib, crypto)
+    # ib = InteractiveBrokers()
+    # crypto = CryptoEndpoint()
+    portfolio_manager = SpreadsheetManager(worksheet_name)
     portfolio_manager.update_data()
     portfolio_manager.format_spreadsheet()
 

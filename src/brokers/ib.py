@@ -1,9 +1,11 @@
 import csv
+from datetime import datetime
+import time
 from abc import ABC, abstractmethod
-from src.helpers import perform_request, sort_dict, convert, calculate_total_mkt_value
-from data.endpoints import SUMMARY_API, POSITIONS_API
-import data.portfolio_filters as filters
 
+import data.portfolio_filters as filters
+from data.endpoints import POSITIONS_API, SUMMARY_API
+from src.helpers import calculate_total_mkt_value, convert, perform_request, sort_dict
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
@@ -42,9 +44,13 @@ class REITLoader:
 class StockCategorizer:
     @staticmethod
     def get_category(stock, mkt_value, public_reit_names):
+        # First check for bond IDs and Chinese ETFs/ADRs
+        if stock.startswith("IBCID"):
+            return "Bonds"
+
         category_conditions = {
             "Short": mkt_value < 0,
-            "China": stock in filters.CHINA or stock in filters.CHINA_ADR,
+            "China": (stock in filters.CHINA or stock in filters.CHINA_ADR),
             "Banks": stock in filters.BANKS,
             "REIT": stock in public_reit_names or stock in filters.REITS,
             "Gold": stock in filters.GOLD,
@@ -68,26 +74,33 @@ class StockCategorizer:
 class InteractiveBrokers(Broker):
     def __init__(self):
         self.data_loader = DataLoader()
+        # Cache API responses to avoid multiple calls
         self.summary = self.data_loader.perform_request(SUMMARY_API)
         self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
+        # Cache frequently used values
+        self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
+        self._portfolio_positions = None
+
+    def get_all_portfolio_info(self):
+        """Implementation of abstract method from Broker class"""
+        return self.all_portfolio_info
 
     @property
     def cash_balance(self):
-        return round(self.summary["totalcashvalue"]["amount"])
+        return self._cash_balance
 
     @property
     def net_cash_balance(self):
-        portfolio = self.get_portfolio_positions()
-        short_mkt_value = calculate_total_mkt_value(portfolio["Short"])
+        if self._portfolio_positions is None:
+            self._portfolio_positions = self.get_portfolio_positions()
+        short_mkt_value = calculate_total_mkt_value(self._portfolio_positions["Short"])
         return self.cash_balance + short_mkt_value
 
-    def get_all_portfolio_info(self):
-        return self.all_portfolio_info
-
     def get_portfolio_positions(self):
-        public_reit_names = REITLoader.load_reits_from_csv()
+        if self._portfolio_positions is not None:
+            return self._portfolio_positions
 
-        categorizer = StockCategorizer()
+        # Initialize portfolio structure
         portfolio = {
             "Bonds": {},
             "China": {},
@@ -99,52 +112,69 @@ class InteractiveBrokers(Broker):
             "Commodities": {},
         }
 
+        # Load REIT names once
+        public_reit_names = REITLoader.load_reits_from_csv()
+        categorizer = StockCategorizer()
+        total_stocks = 0
+
+        # Process all positions in a single pass
         for position in self.all_portfolio_info:
-            stock, mkt_value = position["contractDesc"], round(position["mktValue"])
+            stock = position["contractDesc"]
+            mkt_value = round(position["mktValue"])
+
             category = categorizer.get_category(stock, mkt_value, public_reit_names)
             value = categorizer.get_value_for_category(stock, mkt_value, category)
-            portfolio[category].update({stock: value})
+            portfolio[category][stock] = value
 
-        portfolio["REIT"].update({"LAND": 200})  # Update this once, not inside the loop
+            # Calculate total stocks value in the same loop
+            if category not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
+                total_stocks += value
 
-        for k, dict_ in portfolio.items():
-            portfolio[k] = sort_dict(dict_)
-
-        # Calculate total stocks market value in scope of this method
-        total_stocks = 0
-        for asset, value in portfolio.items():
-            if asset not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
-                print(value)
-                total_stocks += calculate_total_mkt_value(value)
-
+        # Sort all dictionaries at once
+        portfolio = {k: sort_dict(v) for k, v in portfolio.items()}
         portfolio["Total_Stocks_Value"] = round(total_stocks)
-        print(portfolio)
 
+        # Cache the result
+        self._portfolio_positions = portfolio
         return portfolio
 
     def get_stocks_quantity(self):
-        stocks = {
+        return {
             stock["contractDesc"]: round(stock["position"])
             for stock in self.all_portfolio_info
         }
-        return stocks
 
     def get_full_porfolio_data(self):
+        """Get complete portfolio data with minimal recalculation."""
         portfolio = self.get_portfolio_positions()
-        short_mkt_value = calculate_total_mkt_value(portfolio["Short"])
-        portfolio.update({"Net_cash": self.net_cash_balance})
-        print(f"\n")
-        print(f"--- IB ---")
-        print(f"Short total: {short_mkt_value}")
-        print(f"Cash total: {self.net_cash_balance}")
-        print(f"\n")
-        print(f"{portfolio}")
-        print(f"\n")
-        print(f"--- IB ---")
+        portfolio["Net_cash"] = self.net_cash_balance
 
-        return portfolio
+        # Wrap the portfolio data in a nested dictionary
+        wrapped_portfolio = {"interactive_brokers": portfolio}
+        # Single consolidated log output
+        print("\n=== IB Portfolio Summary ===")
+        print(wrapped_portfolio)
+        print("========================\n")
+
+        return wrapped_portfolio
+
+
+def main():
+    start_time = time.time()
+
+    try:
+        ib = InteractiveBrokers()
+        ib.get_full_porfolio_data()
+
+    except Exception as e:
+        print(f"ERROR: An error occurred: {str(e)}")
+
+    finally:
+        execution_time = time.time() - start_time
+        print("\n=== Performance Metrics ===")
+        print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Total Execution Time: {execution_time:.4f} seconds")
 
 
 if __name__ == "__main__":
-    ib = InteractiveBrokers()
-    x = ib.get_full_porfolio_data()
+    main()

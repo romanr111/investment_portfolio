@@ -2,7 +2,7 @@ import time
 import src.helpers as helpers
 
 from src.base_asset import Asset
-from src.crypto.binance_client import BinanceFiltered
+
 from data.assets_data import *
 
 
@@ -81,9 +81,10 @@ class CoinLoan(CryptoAssets):
 
 class Binance(CryptoAssets):
     def __init__(self, *data):
-        b = BinanceFiltered()
-        data = b.collect_savings_interest_data()
-        super().__init__(*data)
+        pass
+        #b = BinanceFiltered()
+        #data = b.collect_savings_interest_data()
+        #super().__init__(*data)
 
 
 class EstateGuru(EurAsset):
