@@ -12,74 +12,50 @@ from src.helpers import calculate_total_mkt_value, convert, perform_request, sor
 #
 
 
-class Broker(ABC):
-    @abstractmethod
-    def get_all_portfolio_info(self):
-        pass
+class InteractiveBrokers:
+    BOND_YIELD_ENDPOINT = "https://localhost:5000/v1/api/bond/yield/"
 
-
-class DataLoader:
-    @staticmethod
-    def perform_request(api_endpoint):
-        return perform_request(api_endpoint, verify=False)
-
-
-class REITLoader:
-    @staticmethod
-    def load_reits_from_csv(file_path="data/List_U.S._REITs.csv"):
-        reit_list = []
-
-        try:
-            with open(file_path, "r") as f:
-                csv_reader = csv.reader(f)
-                reit_list = [str(row[0]) for row in csv_reader]
-        except FileNotFoundError:
-            print(f"Error: File {file_path} not found.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
-        return reit_list
-
-
-class StockCategorizer:
-    @staticmethod
-    def get_category(stock, mkt_value, public_reit_names):
-        # First check for bond IDs and Chinese ETFs/ADRs
-        if stock.startswith("IBCID"):
-            return "Bonds"
-
-        category_conditions = {
-            "Short": mkt_value < 0,
-            "China": (stock in filters.CHINA or stock in filters.CHINA_ADR),
-            "Banks": stock in filters.BANKS,
-            "REIT": stock in public_reit_names or stock in filters.REITS,
-            "Gold": stock in filters.GOLD,
-            "Bonds": stock in filters.BONDS,
-            "Commodities": stock in filters.COMM,
-        }
-
-        for category, condition in category_conditions.items():
-            if condition:
-                return category
-
-        return "USA_Stocks"
-
-    @staticmethod
-    def get_value_for_category(stock, mkt_value, category):
-        if category == "China" and stock in filters.CHINA:
-            return round(convert("HKD", "USD", mkt_value))
-        return mkt_value
-
-
-class InteractiveBrokers(Broker):
     def __init__(self):
         self.data_loader = DataLoader()
-        # Cache API responses to avoid multiple calls
         self.summary = self.data_loader.perform_request(SUMMARY_API)
         self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
-        # Cache frequently used values
         self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
         self._portfolio_positions = None
+        self._bond_yields = {}
+        self.yields = self.get_all_bond_yields()
+
+    def get_full_porfolio_data(self):
+        """Get complete portfolio data with minimal recalculation."""
+        portfolio = self.get_portfolio_positions()
+        portfolio["Net_cash"] = self.net_cash_balance
+
+        # Wrap the portfolio data in a nested dictionary
+        wrapped_portfolio = {"interactive_brokers": portfolio}
+        # Single consolidated log output
+        print("\n=== IB Portfolio Summary ===")
+        print(wrapped_portfolio)
+        print("========================\n")
+
+        return wrapped_portfolio
+
+    def _fetch_bond_yields_from_positions(self):
+        """Extract bond yields directly from portfolio info."""
+        bond_yields = {}
+        for position in self.all_portfolio_info:
+            if position["contractDesc"].startswith("IBCID"):
+                # Assuming yield is stored in position data as a percentage
+                bond_yields[position["contractDesc"]] = (
+                    position.get("yield", position.get("marketPrice", 0)) / 100
+                )  # Convert to decimal
+        return bond_yields
+
+    def get_bond_yield(self, bond_id):
+        """Get yield for a specific bond from cached data."""
+        return {"yield": self._bond_yields.get(bond_id, 0)}
+
+    def get_all_bond_yields(self):
+        """Return all cached bond yields."""
+        return self._bond_yields
 
     def get_all_portfolio_info(self):
         """Implementation of abstract method from Broker class"""
@@ -144,19 +120,58 @@ class InteractiveBrokers(Broker):
             for stock in self.all_portfolio_info
         }
 
-    def get_full_porfolio_data(self):
-        """Get complete portfolio data with minimal recalculation."""
-        portfolio = self.get_portfolio_positions()
-        portfolio["Net_cash"] = self.net_cash_balance
 
-        # Wrap the portfolio data in a nested dictionary
-        wrapped_portfolio = {"interactive_brokers": portfolio}
-        # Single consolidated log output
-        print("\n=== IB Portfolio Summary ===")
-        print(wrapped_portfolio)
-        print("========================\n")
+class DataLoader:
+    @staticmethod
+    def perform_request(api_endpoint):
+        return perform_request(api_endpoint, verify=False)
 
-        return wrapped_portfolio
+
+class REITLoader:
+    @staticmethod
+    def load_reits_from_csv(file_path="data/List_U.S._REITs.csv"):
+        reit_list = []
+
+        try:
+            with open(file_path, "r") as f:
+                csv_reader = csv.reader(f)
+                reit_list = [str(row[0]) for row in csv_reader]
+        except FileNotFoundError:
+            print(f"Error: File {file_path} not found.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        return reit_list
+
+
+class StockCategorizer:
+    @staticmethod
+    def get_category(stock, mkt_value, public_reit_names):
+        # First check for bond IDs and Chinese ETFs/ADRs
+        if stock.startswith("IBCID"):
+            return "Bonds"
+
+        category_conditions = {
+            "Short": mkt_value < 0,
+            "China": (stock in filters.CHINA or stock in filters.CHINA_ADR),
+            "Banks": stock in filters.BANKS,
+            "REIT": stock in public_reit_names or stock in filters.REITS,
+            "Gold": stock in filters.GOLD,
+            "Bonds": stock in filters.BONDS,
+            "Commodities": stock in filters.COMM,
+        }
+
+        for category, condition in category_conditions.items():
+            if condition:
+                return category
+
+        return "USA_Stocks"
+
+    @staticmethod
+    def get_value_for_category(stock, mkt_value, category):
+        if category == "China" and stock in filters.CHINA:
+            return round(convert("HKD", "USD", mkt_value))
+        return mkt_value
 
 
 def main():

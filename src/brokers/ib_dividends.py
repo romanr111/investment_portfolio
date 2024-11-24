@@ -7,7 +7,7 @@ from src.helpers import perform_request
 from functools import lru_cache
 
 
-class BaseDividends:
+class IBDividends:
     TAX_DISCOUNT = (
         0.8  # 15% USA tax, 5% Ukraine tax # TODO: Recalculate that for USA Bonds;
     )
@@ -63,16 +63,12 @@ class BaseDividends:
         return round(yearly / 12), round(yearly)
 
 
-class PublicDividends(BaseDividends):
-    def __init__(self, broker):
-        # TODO: I don't need to use .get_stocks_quantity() - just init IB
-        # and get the whole portfolio info, then iterate over that dict;
-        stocks_quantity = broker.get_stocks_quantity()
-        super().__init__(stocks_quantity)
-
-
 if __name__ == "__main__":
     broker = InteractiveBrokers()
-    pd = PublicDividends(broker)
-    print(pd.get_my_total_monthly_and_yearly_divs())
-    print(pd.get_my_yearly_dividends_per_stock())
+    info = broker.get_portfolio_positions()
+    bond_divs = broker.yields
+    print(info)
+    print(bond_divs)
+    # pd = IBDividends(info)
+    # print(pd.get_my_total_monthly_and_yearly_divs())
+    # print(pd.get_my_yearly_dividends_per_stock())
