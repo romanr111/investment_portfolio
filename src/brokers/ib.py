@@ -1,7 +1,6 @@
 import csv
 from datetime import datetime
 import time
-from abc import ABC, abstractmethod
 
 import data.portfolio_filters as filters
 from data.endpoints import POSITIONS_API, SUMMARY_API
@@ -13,16 +12,12 @@ from src.helpers import calculate_total_mkt_value, convert, perform_request, sor
 
 
 class InteractiveBrokers:
-    BOND_YIELD_ENDPOINT = "https://localhost:5000/v1/api/bond/yield/"
-
     def __init__(self):
+        self._portfolio_positions = None
         self.data_loader = DataLoader()
         self.summary = self.data_loader.perform_request(SUMMARY_API)
         self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
         self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
-        self._portfolio_positions = None
-        self._bond_yields = {}
-        self.yields = self.get_all_bond_yields()
 
     def get_full_porfolio_data(self):
         """Get complete portfolio data with minimal recalculation."""
@@ -37,25 +32,6 @@ class InteractiveBrokers:
         print("========================\n")
 
         return wrapped_portfolio
-
-    def _fetch_bond_yields_from_positions(self):
-        """Extract bond yields directly from portfolio info."""
-        bond_yields = {}
-        for position in self.all_portfolio_info:
-            if position["contractDesc"].startswith("IBCID"):
-                # Assuming yield is stored in position data as a percentage
-                bond_yields[position["contractDesc"]] = (
-                    position.get("yield", position.get("marketPrice", 0)) / 100
-                )  # Convert to decimal
-        return bond_yields
-
-    def get_bond_yield(self, bond_id):
-        """Get yield for a specific bond from cached data."""
-        return {"yield": self._bond_yields.get(bond_id, 0)}
-
-    def get_all_bond_yields(self):
-        """Return all cached bond yields."""
-        return self._bond_yields
 
     def get_all_portfolio_info(self):
         """Implementation of abstract method from Broker class"""

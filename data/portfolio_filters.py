@@ -92,6 +92,24 @@ CHINA_ADR = [
     "RAYC",  # Rayliant Quantamental China Equity ETF
 ]
 
+HK_TO_ADR_MAP = {
+    "9988": "BABA",  # Alibaba
+    "700": "TCEHY",  # Tencent
+    "9618": "JD",  # JD.com
+    "9888": "BIDU",  # Baidu
+    "9999": "NTES",  # NetEase
+    "2015": "LI",  # Li Auto
+    "3690": "MPNGY",  # Meituan
+    "1024": "KUASF",  # Kuaishou
+    "1810": "XIACY",  # Xiaomi
+    "2318": "PNGAY",  # Ping An Insurance
+    "941": "CHL",  # China Mobile
+    "939": "CICHY",  # China Construction Bank
+    "1398": "IDCBY",  # ICBC
+    "3968": "CIHKY",  # China Merchants Bank
+    "2388": "BHKLY",  # BOC Hong Kong
+}
+
 # Banks
 BANKS = [
     # US Banks
