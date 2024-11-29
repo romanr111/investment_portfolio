@@ -148,7 +148,7 @@ class StockCategorizer:
     @staticmethod
     def get_category(stock, mkt_value, public_reit_names):
         # First check for bond IDs and Chinese ETFs/ADRs
-        if stock.startswith("IBCID"):
+        if stock.startswith("IBCID") and mkt_value > 0:
             return "Bonds"
 
         category_conditions = {
