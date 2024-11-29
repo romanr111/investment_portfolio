@@ -2,7 +2,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 from ib_insync import *
@@ -252,27 +252,18 @@ class BondsClientIB:
     def calculate_bond_yield(
         self,
         purchase_date: date,
-        initial_investment: float,
+        position: float,
+        average_cost: float,
         unrealized_pnl: float,
         current_date: Optional[date] = None,
     ) -> Dict[str, float]:
-        """
-        Calculate daily and annual yield for a bond position.
-
-        Args:
-            purchase_date (date): Date of bond purchase
-            initial_investment (float): Initial investment amount
-            unrealized_pnl (float): Unrealized profit/loss
-            current_date (date, optional): Current date for calculation
-
-        Returns:
-            dict: Dictionary containing daily and annual yields as percentages
-        """
+        """Calculate daily and annual yield for a bond position."""
         if current_date is None:
             current_date = date.today()
 
-        # Calculate days held
+        initial_investment = position * average_cost
         days_held = (current_date - purchase_date).days
+
         if days_held <= 0:
             return {
                 "daily_yield_percentage": 0.0,
@@ -280,10 +271,7 @@ class BondsClientIB:
                 "days_held": 0,
             }
 
-        # Calculate daily yield
         daily_yield = (unrealized_pnl / initial_investment) / days_held
-
-        # Calculate annual yield (assuming 365 days)
         annual_yield = daily_yield * 365
 
         return {
@@ -373,7 +361,8 @@ class BondsClientIB:
                     yields = (
                         self.calculate_bond_yield(
                             purchase_date=purchase_date,
-                            initial_investment=initial_investment,
+                            position=position_size,
+                            average_cost=avg_cost,
                             unrealized_pnl=unrealized_pnl,
                         )
                         if purchase_date
@@ -457,10 +446,31 @@ class BondsClientIB:
 
         return "\n".join(formatted_output)
 
+    def format_bond_holdings(
+        self, bond_data: List[Dict[str, Any]]
+    ) -> Dict[str, Tuple[float, float]]:
+        holdings = {}
+
+        for bond in bond_data:
+            ibcid = bond.get("IBCID")
+            market_value = bond.get("Market Value", 0)
+            annual_yield = (
+                bond.get("Annual Yield", 0) / 100
+            )  # Convert percentage to decimal
+
+            if ibcid:
+                holdings[ibcid] = (market_value, annual_yield)
+
+        return holdings
+
+    def get_bond_main_info(self, bond_ids):
+        data = self.get_bond_data(bond_ids)
+        return self.format_bond_holdings(data)
+
 
 # In your main execution code:
 if __name__ == "__main__":
     bond_ids = ["IBCID707867273"]
     bonds_client = BondsClientIB()
-    bond_data_list = bonds_client.get_bond_data(bond_ids)
-    print(f"\nraw bond data - {bond_data_list}\n")
+    bond_data = bonds_client.get_bond_main_info(bond_ids)
+    print(f"\nraw bond data - {bond_data}\n")
