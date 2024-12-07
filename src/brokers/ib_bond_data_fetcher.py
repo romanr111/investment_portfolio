@@ -1,10 +1,20 @@
+# IB Gateway dependant
+from datetime import datetime
+import math
 import logging
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Generator
 
 from ib_insync import IB, BarData, Bond, Contract
+
+# Constants for connection management
+BASE_CLIENT_ID = 1000
+MAX_RETRIES = 3
+RETRY_DELAY = 3
+AUTH_TIMEOUT = 30
 
 
 @dataclass
@@ -20,30 +30,63 @@ class TradeRecord:
     isin: Optional[str] = None
 
 
-class IBConnectionManager:
-    """Manages Interactive Brokers connection with singleton pattern"""
+class IBConnectionPool:
+    """Manages a pool of IB connections"""
 
     _instance = None
-    _connection = None
+    _connections: Dict[int, IB] = {}
+    _last_client_id = BASE_CLIENT_ID
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(IBConnectionManager, cls).__new__(cls)
+            cls._instance = super(IBConnectionPool, cls).__new__(cls)
         return cls._instance
 
     @classmethod
-    def get_connection(cls) -> Optional[IB]:
-        """Returns existing IB connection or creates new one"""
-        if cls._connection is None or not cls._connection.isConnected():
-            cls._connection = IB()
-        return cls._connection
+    def get_next_client_id(cls) -> int:
+        """Returns the next available client ID"""
+        cls._last_client_id += 1
+        return cls._last_client_id
 
     @classmethod
-    def disconnect(cls):
-        """Safely disconnects from IB"""
-        if cls._connection and cls._connection.isConnected():
-            cls._connection.disconnect()
-            cls._connection = None
+    def get_connection(cls, host: str, port: int) -> Tuple[int, IB]:
+        """Gets an available connection or creates a new one"""
+        # Clean up disconnected sessions
+        cls._cleanup_disconnected()
+
+        # Try to find an existing available connection
+        for client_id, ib in cls._connections.items():
+            if not ib.isConnected():
+                try:
+                    ib.connect(host, port, clientId=client_id, readonly=True)
+                    return client_id, ib
+                except Exception:
+                    continue
+
+        # Create new connection if none available
+        client_id = cls.get_next_client_id()
+        ib = IB()
+        cls._connections[client_id] = ib
+        return client_id, ib
+
+    @classmethod
+    def _cleanup_disconnected(cls):
+        """Removes disconnected sessions from the pool"""
+        disconnected = [
+            client_id
+            for client_id, ib in cls._connections.items()
+            if not ib.isConnected()
+        ]
+        for client_id in disconnected:
+            del cls._connections[client_id]
+
+    @classmethod
+    def disconnect_all(cls):
+        """Disconnects all connections in the pool"""
+        for ib in cls._connections.values():
+            if ib.isConnected():
+                ib.disconnect()
+        cls._connections.clear()
 
 
 class LoggerConfig:
@@ -71,57 +114,126 @@ class LoggerConfig:
 
 
 class MarketDataFetcher:
-    """Handles all market data retrieval operations"""
+    """Handles all market data retrieval operations with improved connection management"""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 4001):
         self.host = host
         self.port = port
-        self.ib = IBConnectionManager.get_connection()
         self.logger = LoggerConfig.setup_logger("MarketDataFetcher")
+        self._connection_pool = IBConnectionPool()
+        self.ib = None
+        self.client_id = None
 
-    def connect(self, client_id: int) -> bool:
-        """Establishes connection to IB with retry logic"""
+    @contextmanager
+    def connection(self) -> Generator[IB, None, None]:
+        """Context manager for handling IB connections"""
         try:
-            if self.ib.isConnected():
+            self.client_id, self.ib = self._connection_pool.get_connection(
+                self.host, self.port
+            )
+            if not self.ib.isConnected():
+                self._connect_with_retry()
+            yield self.ib
+        finally:
+            if self.ib and self.ib.isConnected():
+                self.ib.disconnect()
+
+    def _connect_with_retry(self) -> bool:
+        """Establishes connection to IB with retry logic"""
+        for attempt in range(MAX_RETRIES):
+            try:
+                self.ib.connect(
+                    self.host,
+                    self.port,
+                    clientId=self.client_id,
+                    readonly=True,
+                    timeout=AUTH_TIMEOUT,
+                )
+                # Wait for connection to fully establish
+                self.ib.sleep(1)
+
+                if not self.ib.isConnected():
+                    raise ConnectionError("Connection failed to establish")
+
+                self.logger.info(
+                    f"Successfully connected to IB with client ID {self.client_id}"
+                )
+
+                # Wait for data to be ready
+                for _ in range(5):  # Wait up to 5 seconds
+                    if len(self.ib.positions()) > 0 or len(self.ib.portfolio()) > 0:
+                        return True
+                    self.ib.sleep(1)
+
+                # If we got here, we're connected but no data yet
+                self.logger.warning("Connected but no position/portfolio data received")
                 return True
 
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    self.ib.connect(
-                        self.host, self.port, clientId=client_id, readonly=True
-                    )
-                    self.logger.info("Successfully connected to IB")
-                    return True
-                except Exception as e:
-                    if "already in use" in str(e):
-                        client_id += 1
-                        continue
-                    if attempt < max_retries - 1:
-                        time.sleep(2**attempt)
-                        continue
-                    raise
-        except Exception as e:
-            self.logger.error(f"Failed to connect to IB: {str(e)}")
-            return False
+            except Exception as e:
+                self.logger.warning(
+                    f"Connection attempt {attempt + 1} failed: {str(e)}"
+                )
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = RETRY_DELAY * (2**attempt)  # Exponential backoff
+                    self.logger.info(f"Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                    continue
+                raise ConnectionError(
+                    f"Failed to connect after {MAX_RETRIES} attempts: {str(e)}"
+                )
+        return False
 
     def get_contract_details(self, conid: int) -> Optional[Contract]:
-        """Retrieves contract details with retry logic"""
-        contract = Bond(conId=conid)
-        max_retries = 3
+        """Retrieves and qualifies a T-Bill contract using data dynamically fetched from IB."""
+        contract = Contract()
+        contract.conId = conid
+        contract.secType = "BILL"
+        contract.exchange = "SMART"
+        contract.currency = "USD"
 
+        max_retries = 3
         for attempt in range(max_retries):
             try:
+                # First, request contract details to discover maturity and other fields
+                details = self.ib.reqContractDetails(contract)
+                if not details:
+                    self.logger.error(
+                        f"Could not find contract details for conId: {conid}"
+                    )
+                    return None
+
+                # Extract additional info from the returned contract details
+                fetched_contract = details[0].contract
+
+                # Update the contract object dynamically without hardcoding values
+                if fetched_contract.lastTradeDateOrContractMonth:
+                    contract.lastTradeDateOrContractMonth = (
+                        fetched_contract.lastTradeDateOrContractMonth
+                    )
+                if fetched_contract.symbol:
+                    contract.symbol = fetched_contract.symbol
+                if fetched_contract.localSymbol:
+                    contract.localSymbol = fetched_contract.localSymbol
+                if fetched_contract.tradingClass:
+                    contract.tradingClass = fetched_contract.tradingClass
+
+                # Now that the contract is fully specified, qualify it
                 qualified_contracts = self.ib.qualifyContracts(contract)
                 if not qualified_contracts:
-                    self.logger.error(f"Could not qualify contract with conId: {conid}")
+                    self.logger.error(
+                        f"Could not fully qualify contract for conId: {conid}"
+                    )
                     return None
+
                 return qualified_contracts[0]
+
             except Exception as e:
                 if "read-only" in str(e).lower() and attempt < max_retries - 1:
                     time.sleep(2**attempt)
                     continue
-                self.logger.error(f"Error getting contract details: {str(e)}")
+                self.logger.error(
+                    f"Error getting contract details for conId {conid}: {str(e)}"
+                )
                 return None
 
     def get_historical_bars(self, contract: Contract) -> Optional[List[BarData]]:
@@ -289,52 +401,78 @@ class BondDataFormatter:
 
 
 class IBBondsClient:
-    """Main client class for managing bond operations"""
-
     def __init__(self):
         self.market_data = MarketDataFetcher()
-        self.logger = LoggerConfig.setup_logger("BondsClient")
+        self.logger = LoggerConfig.setup_logger(
+            "BondsClient", level=logging.INFO
+        )  # Changed to INFO level
+        self.ib = None
 
     def get_bond_data(self, bond_ids: List[str]) -> List[Optional[Dict[str, Any]]]:
-        """Retrieves comprehensive bond data"""
+        """Retrieves comprehensive bond data using managed connection"""
         try:
-            client_id = int(time.time() % 9999)
-            if not self.market_data.connect(client_id):
-                return [None] * len(bond_ids)
+            with self.market_data.connection() as ib:
+                self.ib = ib  # Store IB connection for other methods to use
+                self.logger.info(f"Processing {len(bond_ids)} bonds...")
 
-            results = []
-            for bond_id in bond_ids:
-                bond_data = self._process_single_bond(bond_id)
-                results.append(bond_data)
+                results = []
+                for bond_id in bond_ids:
+                    try:
+                        bond_data = self._process_single_bond(bond_id, ib)
+                        results.append(bond_data)
+                        if bond_data:
+                            self.logger.info(f"Successfully processed bond {bond_id}")
+                        else:
+                            self.logger.warning(f"No data retrieved for bond {bond_id}")
+                    except Exception as e:
+                        self.logger.error(f"Error processing bond {bond_id}: {e}")
+                        results.append(None)
+                        continue
 
-            if results:
-                self.logger.info("\nFormatted Bond Data:")
-                self.logger.info(BondDataFormatter.format_data(results))
+                if results:
+                    self.logger.info("\nFormatted Bond Data:")
+                    self.logger.info(BondDataFormatter.format_data(results))
 
-            return results
+                return results
 
         except Exception as e:
             self.logger.error(f"Error processing bonds: {e}")
             return [None] * len(bond_ids)
         finally:
-            IBConnectionManager.disconnect()
+            self.ib = None
 
-    def _process_single_bond(self, bond_id: str) -> Optional[Dict[str, Any]]:
-        """Processes data for a single bond"""
+    def _process_single_bond(self, bond_id: str, ib: IB) -> Optional[Dict[str, Any]]:
+        """Processes data for a single T-Bill bond using provided IB connection with no hardcoded maturity date."""
         try:
             if not bond_id.startswith("IBCID"):
                 raise ValueError(f"Invalid bond identifier format: {bond_id}")
 
             conid = int(bond_id.replace("IBCID", ""))
-            contract = self.market_data.get_contract_details(conid)
-            if not contract:
+
+            self.logger.info(f"Qualifying contract for {bond_id}")
+            # Dynamically get the fully qualified contract details
+            qualified_contract = self.market_data.get_contract_details(conid)
+            if not qualified_contract:
+                self.logger.error(f"Could not qualify contract with conId: {conid}")
                 return None
 
-            return self._collect_bond_data(bond_id, contract, conid)
+            self.logger.info(
+                f"Contract details: "
+                f"conId={qualified_contract.conId}, "
+                f"symbol={qualified_contract.symbol}, "
+                f"exchange={qualified_contract.exchange}, "
+                f"lastTradeDateOrContractMonth={qualified_contract.lastTradeDateOrContractMonth}"
+            )
+
+            return self._collect_bond_data(bond_id, qualified_contract, conid, ib)
 
         except Exception as e:
             self.logger.error(f"Error processing bond {bond_id}: {e}")
             return None
+
+    def cleanup(self):
+        """Cleanup method to be called when done with the client"""
+        IBConnectionPool.disconnect_all()
 
     def _print_bond_data(self, data: Dict[str, Any]) -> None:
         """Print bond data with clearer cost presentation"""
@@ -347,10 +485,10 @@ class IBBondsClient:
         )
 
     def _collect_bond_data(
-        self, bond_id: str, contract: Contract, conid: int
+        self, bond_id: str, contract: Contract, conid: int, ib: IB
     ) -> Dict[str, Any]:
-        """Collects and assembles all data for a bond"""
-        contract_details = self.market_data.ib.reqContractDetails(contract)[0]
+        # We still request contractDetails to get CUSIP/ISIN
+        contract_details = ib.reqContractDetails(contract)[0]
 
         # Extract security IDs
         cusip = next(
@@ -359,22 +497,21 @@ class IBBondsClient:
         isin = next(
             (tv.value for tv in contract_details.secIdList if tv.tag == "ISIN"), None
         )
-        ticker = self.market_data.ib.reqMktData(contract, "", False, False)
-        self.market_data.ib.sleep(2)
 
-        # Get position and portfolio data
+        # Request market data (if available)
+        ticker = ib.reqMktData(contract, "", False, False)
+        ib.sleep(2)
+
+        # Get position and portfolio data (which now includes Maturity Date)
         position_data = self._get_position_data(conid)
 
+        # Calculate yields using BondAnalytics if market data is available
         if position_data:
             yields = BondAnalytics.calculate_yield(
-                purchase_date=position_data[
-                    "Purchase Date"
-                ],  # Changed from purchase_date
-                position=position_data["Position"],  # Changed from position
-                average_cost=position_data["Average Cost"],  # Changed from avg_cost
-                unrealized_pnl=position_data[
-                    "Unrealized PNL"
-                ],  # Changed from unrealized_pnl
+                purchase_date=position_data["Purchase Date"],
+                position=position_data["Position"],
+                average_cost=position_data["Average Cost"],
+                unrealized_pnl=position_data["Unrealized PNL"],
             )
         else:
             yields = {
@@ -397,23 +534,61 @@ class IBBondsClient:
             "Daily Yield": yields["daily_yield_percentage"],
             "Annual Yield": yields["annual_yield_percentage"],
             "Days Held": yields["days_held"],
+            "Maturity Date": position_data[
+                "Maturity Date"
+            ],  # Include maturity date in output
         }
+
+        # If no market price is available, compute yield-to-maturity from Maturity Date if present
+        if (
+            math.isnan(bond_data["Market Price (per unit)"])
+            and bond_data["Maturity Date"]
+        ):
+            maturity_date = bond_data["Maturity Date"]
+            purchase_date = bond_data["Purchase Date"]
+            days_to_maturity = (maturity_date - purchase_date).days
+
+            # We have just computed annual_yield (in percentage)
+            annual_yield = bond_data["Annual Yield"]
+            annual_yield_dec = annual_yield / 100.0
+
+            # Daily yield in percentage is simply annual yield divided by 365
+            daily_yield = annual_yield / 365.0
+
+            face_value = 1000.0
+            if days_to_maturity > 0 and annual_yield_dec > 0:
+                # Compute theoretical current price using the rearranged formula:
+                # current_price = face_value / (1 + annual_yield_dec * (days_to_maturity/365))
+                current_price = face_value / (
+                    1 + annual_yield_dec * (days_to_maturity / 365.0)
+                )
+            else:
+                # If we have no future maturity or zero yield, we fallback to purchase price
+                current_price = bond_data["Average Cost"]
+
+            # Update bond_data with the computed market price, value, and daily yield
+            bond_data["Market Price (per unit)"] = current_price
+            bond_data["Market Value"] = current_price * bond_data["Position"]
+            bond_data["Daily Yield"] = daily_yield
+
         self._print_bond_data(bond_data)
         return bond_data
 
     def _get_position_data(self, conid: int) -> Dict[str, Any]:
-        """Retrieves position-specific data for a bond"""
-        positions = self.market_data.ib.positions()
-        portfolio = self.market_data.ib.portfolio()
+        if not self.ib or not self.ib.isConnected():
+            raise ConnectionError("No active IB connection")
 
-        position = next(
-            (pos.position for pos in positions if pos.contract.conId == conid), 0
-        )
-        portfolio_item = next(
-            (item for item in portfolio if item.contract.conId == conid), None
+        self.logger.info(f"Requesting positions for conid: {conid}")
+        positions = self.ib.reqPositions()
+        self.logger.info(f"Got {len(positions)} positions")
+
+        # Find our specific position
+        position_data = next(
+            (pos for pos in positions if pos.contract.conId == conid), None
         )
 
-        if not portfolio_item:
+        if not position_data:
+            self.logger.warning(f"No position found for conid: {conid}")
             return {
                 "Position": 0,
                 "Average Cost": 0,
@@ -421,23 +596,77 @@ class IBBondsClient:
                 "Market Price (per unit)": 0,
                 "Unrealized PNL": 0,
                 "Purchase Date": date.today(),
+                "Maturity Date": None,
             }
+
+        pos_contract = position_data.contract
+
+        # Store the original maturity date from positions before qualify
+        original_maturity = pos_contract.lastTradeDateOrContractMonth
+
+        # Ensure necessary fields
+        if not pos_contract.exchange:
+            pos_contract.exchange = "SMART"
+        if not pos_contract.symbol:
+            pos_contract.symbol = "US-T"
+
+        qualified_pos_contracts = self.ib.qualifyContracts(pos_contract)
+        if not qualified_pos_contracts:
+            self.logger.error(
+                "Could not qualify position contract. Missing required fields?"
+            )
+            return {
+                "Position": position_data.position,
+                "Average Cost": position_data.avgCost,
+                "Market Value": 0,
+                "Market Price (per unit)": 0,
+                "Unrealized PNL": 0,
+                "Purchase Date": date.today(),
+                "Maturity Date": None,
+            }
+
+        pos_contract = qualified_pos_contracts[0]
+
+        # If qualifyContracts didn't return a maturity date, use the original one from positions
+        if not pos_contract.lastTradeDateOrContractMonth and original_maturity:
+            pos_contract.lastTradeDateOrContractMonth = original_maturity
+
+        ticker = self.ib.reqMktData(pos_contract)
+        for _ in range(5):  # Try for 5 seconds
+            self.ib.sleep(1)
+            if ticker.marketPrice():
+                break
+
+        market_value = (
+            ticker.marketPrice() * position_data.position if ticker.marketPrice() else 0
+        )
+        unrealized_pnl = market_value - (position_data.avgCost * position_data.position)
 
         # Get bond ID for purchase date lookup
         bond_id = f"IBCID{conid}"
         purchase_date = self.market_data.find_purchase_date(
-            bond_id, portfolio_item.averageCost
+            bond_id, position_data.avgCost
         )
 
+        maturity_date = None
+        if (
+            pos_contract.lastTradeDateOrContractMonth
+            and len(pos_contract.lastTradeDateOrContractMonth) == 8
+        ):
+            maturity_date = datetime.strptime(
+                pos_contract.lastTradeDateOrContractMonth, "%Y%m%d"
+            ).date()
+
         return {
-            "Position": position,
-            "Average Cost": portfolio_item.averageCost,
-            "Market Value": portfolio_item.marketValue,
+            "Position": position_data.position,
+            "Average Cost": position_data.avgCost,
+            "Market Value": market_value,
             "Market Price (per unit)": (
-                portfolio_item.marketValue / position if position else 0
+                ticker.marketPrice() if ticker.marketPrice() else 0
             ),
-            "Unrealized PNL": portfolio_item.unrealizedPNL,
-            "Purchase Date": purchase_date,
+            "Unrealized PNL": unrealized_pnl,
+            "Purchase Date": purchase_date if purchase_date else date.today(),
+            "Maturity Date": maturity_date,
         }
 
     def get_bond_main_info(self, bond_ids: List[str]) -> Dict[str, Tuple[float, float]]:
@@ -447,7 +676,10 @@ class IBBondsClient:
 
 
 if __name__ == "__main__":
-    bond_ids = ["IBCID707867273"]
+    bond_ids = ["IBCID722427489"]
     client = IBBondsClient()
-    bond_data = client.get_bond_main_info(bond_ids)
-    print(f"\nBond portfolio data: {bond_data}\n")
+    try:
+        bond_data = client.get_bond_main_info(bond_ids)
+        print(f"\nBond portfolio data: {bond_data}\n")
+    finally:
+        client.cleanup()
