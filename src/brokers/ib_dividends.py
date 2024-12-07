@@ -7,7 +7,7 @@ import logging
 from ib_bond_data_fetcher import IBBondsClient
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -27,13 +27,11 @@ class IBDividends:
 
     def _process_portfolio_data(self):
         """Extract individual stocks market values and identify bonds"""
-        logger.debug("Processing portfolio data to extract market values")
         self.market_values = {}
         self.bond_ids = []
 
         for category, stocks in self.portfolio_data.items():
             if category in self.RELEVANT_CATEGORIES and isinstance(stocks, dict):
-                logger.debug(f"Processing category: {category}")
                 for symbol, value in stocks.items():
                     if isinstance(value, (int, float)) and symbol not in [
                         "Total_Stocks_Value"
@@ -44,9 +42,6 @@ class IBDividends:
                     elif isinstance(value, dict) and "position" in value:
                         self.market_values[symbol] = value["position"]
 
-        logger.debug(f"Extracted market values: {self.market_values}")
-        logger.debug(f"Identified bond IDs: {self.bond_ids}")
-
     def _fetch_bond_data(self):
         """Fetch bond yield data using IBBondsClient"""
         self.bond_yields = {}
@@ -54,24 +49,17 @@ class IBDividends:
             try:
                 client = IBBondsClient()
                 self.bond_yields = client.get_bond_main_info(self.bond_ids)
-                logger.debug(f"Retrieved bond yields: {self.bond_yields}")
             except Exception as e:
                 logger.error(f"Error fetching bond data: {e}")
 
     def _get_api_symbol(self, symbol):
         """Convert HK symbol to ADR symbol if applicable"""
-        adr_symbol = HK_TO_ADR_MAP.get(symbol, symbol)
-        if adr_symbol != symbol:
-            logger.debug(f"Mapped {symbol} to ADR symbol {adr_symbol}")
-        return adr_symbol
+        return HK_TO_ADR_MAP.get(symbol, symbol)
 
     @lru_cache(maxsize=None)
     def _get_dividend_info(self, symbol):
         """Fetch dividend information for a single stock"""
         api_symbol = self._get_api_symbol(symbol)
-        logger.debug(
-            f"Fetching dividend info for symbol: {api_symbol} (original: {symbol})"
-        )
         param = (
             f"{api_symbol}/dividends?assetclass=etf"
             if api_symbol in self.ETF_SYMBOLS
@@ -97,7 +85,6 @@ class IBDividends:
 
     def get_yields_and_dividend_amounts(self):
         """Calculate expected dividend amounts based on yield and market value"""
-        logger.info("Calculating dividend yields and amounts")
         results = {}
 
         for symbol, market_value in self.market_values.items():
@@ -114,16 +101,13 @@ class IBDividends:
                             "adr_symbol": None,
                             "type": "bond",
                         }
-                        logger.debug(
-                            f"Bond {symbol}: Amount=${amount}, "
-                            f"Yield={yield_rate:.2%}, "
-                            f"Yearly Interest=${yearly_dividend:.2f}"
-                        )
                 else:
                     # Handle stocks
                     div_info = self._get_dividend_info(symbol)
                     yield_rate = self._get_yield_from_div_info(div_info)
-                    yearly_dividend = market_value * yield_rate
+                    yearly_dividend = (
+                        market_value * yield_rate * self.TAX_DISCOUNT
+                    )  # Apply tax discount here
                     api_symbol = self._get_api_symbol(symbol)
 
                     results[symbol] = {
@@ -133,11 +117,6 @@ class IBDividends:
                         "adr_symbol": api_symbol if api_symbol != symbol else None,
                         "type": "stock",
                     }
-                    logger.debug(
-                        f"{symbol} ({api_symbol}): Market Value=${market_value}, "
-                        f"Yield={yield_rate:.2%}, "
-                        f"Yearly Dividend=${yearly_dividend:.2f}"
-                    )
 
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
@@ -153,18 +132,30 @@ class IBDividends:
 
     def get_my_total_monthly_and_yearly_divs(self):
         """Calculate total monthly and yearly dividends"""
-        logger.info("Calculating total monthly and yearly dividends")
-
         results = self.get_yields_and_dividend_amounts()
-        yearly = sum(data["yearly_dividend"] for data in results.values())
-        yearly_after_tax = yearly * self.TAX_DISCOUNT
-        monthly_after_tax = yearly_after_tax / 12
 
-        logger.info(f"Total yearly dividends before tax: ${yearly:.2f}")
-        logger.info(f"Total yearly dividends after tax: ${yearly_after_tax:.2f}")
-        logger.info(f"Monthly dividends after tax: ${monthly_after_tax:.2f}")
+        # Calculate totals (amounts are already after tax for stocks)
+        bond_yearly = sum(
+            data["yearly_dividend"]
+            for symbol, data in results.items()
+            if symbol.startswith("IBCID")
+        )
 
-        return round(monthly_after_tax, 2), round(yearly_after_tax, 2), results
+        stock_yearly = sum(
+            data["yearly_dividend"]
+            for symbol, data in results.items()
+            if not symbol.startswith("IBCID")
+        )
+
+        total_yearly = bond_yearly + stock_yearly
+        monthly_total = total_yearly / 12
+
+        logger.info(f"Total yearly bond income (no tax): ${bond_yearly:.2f}")
+        logger.info(f"Total yearly stock dividends after tax: ${stock_yearly:.2f}")
+        logger.info(f"Total combined yearly income: ${total_yearly:.2f}")
+        logger.info(f"Monthly total: ${monthly_total:.2f}")
+
+        return round(monthly_total, 2), round(total_yearly, 2), results
 
 
 if __name__ == "__main__":
@@ -176,19 +167,14 @@ if __name__ == "__main__":
     monthly, yearly, details = pd.get_my_total_monthly_and_yearly_divs()
 
     print("\nDividend Summary:")
-    print(f"Monthly dividends (after tax): ${monthly}")
-    print(f"Yearly dividends (after tax): ${yearly}")
-    print("\nDetailed Dividend Analysis:")
 
-    # Sort by type and then by symbol for organized output
     sorted_details = dict(sorted(details.items(), key=lambda x: (x[1]["type"], x[0])))
 
     for symbol, data in sorted_details.items():
         print(f"\n{symbol} ({data['type']}):")
         print(f"  Market Value: ${data['market_value']:,.2f}")
         print(f"  Yield Rate: {data['yield_rate']:.2%}")
-        print(
-            f"  Expected Yearly {data['type'].title()} Income: ${data['yearly_dividend']:,.2f}"
-        )
+        income_type = "Interest" if data["type"] == "bond" else "Dividend"
+        print(f"  Expected Yearly {income_type}: ${data['yearly_dividend']:,.2f}")
         if data["adr_symbol"]:
             print(f"  ADR Symbol Used: {data['adr_symbol']}")

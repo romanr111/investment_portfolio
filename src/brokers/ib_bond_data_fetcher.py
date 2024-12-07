@@ -428,11 +428,6 @@ class IBBondsClient:
                         self.logger.error(f"Error processing bond {bond_id}: {e}")
                         results.append(None)
                         continue
-
-                if results:
-                    self.logger.info("\nFormatted Bond Data:")
-                    self.logger.info(BondDataFormatter.format_data(results))
-
                 return results
 
         except Exception as e:
@@ -546,30 +541,52 @@ class IBBondsClient:
         ):
             maturity_date = bond_data["Maturity Date"]
             purchase_date = bond_data["Purchase Date"]
-            days_to_maturity = (maturity_date - purchase_date).days
-
-            # We have just computed annual_yield (in percentage)
-            annual_yield = bond_data["Annual Yield"]
-            annual_yield_dec = annual_yield / 100.0
-
-            # Daily yield in percentage is simply annual yield divided by 365
-            daily_yield = annual_yield / 365.0
-
+            days_held = bond_data["Days Held"]
+            days_total = (maturity_date - purchase_date).days
+            purchase_price = bond_data["Average Cost"]
             face_value = 1000.0
-            if days_to_maturity > 0 and annual_yield_dec > 0:
-                # Compute theoretical current price using the rearranged formula:
-                # current_price = face_value / (1 + annual_yield_dec * (days_to_maturity/365))
-                current_price = face_value / (
-                    1 + annual_yield_dec * (days_to_maturity / 365.0)
+
+            if days_total > 0:
+                # Compute yield-to-maturity based on purchase price and face value
+                annual_yield = (
+                    ((face_value - purchase_price) / purchase_price)
+                    * (365.0 / days_total)
+                    * 100.0
                 )
             else:
-                # If we have no future maturity or zero yield, we fallback to purchase price
-                current_price = bond_data["Average Cost"]
+                # If no future maturity, no yield
+                annual_yield = 0.0
 
-            # Update bond_data with the computed market price, value, and daily yield
+            daily_yield = annual_yield / 365.0
+            annual_yield_dec = annual_yield / 100.0
+
+            # Compute current theoretical price after days_held
+            # Closer to maturity = higher price than at purchase if yield > 0
+            if days_total > days_held and annual_yield_dec > 0:
+                current_price = face_value / (
+                    1.0 + annual_yield_dec * ((days_total - days_held) / 365.0)
+                )
+            else:
+                # If no future days or zero yield, fallback to purchase price
+                current_price = purchase_price
+
+            # Compute market value and unrealized PNL
+            market_value = int(round(current_price * bond_data["Position"]))
+            unrealized_pnl = market_value - int(
+                round(purchase_price * bond_data["Position"])
+            )
+
+            # Update bond data
             bond_data["Market Price (per unit)"] = current_price
-            bond_data["Market Value"] = current_price * bond_data["Position"]
+            bond_data["Market Value"] = market_value
+            bond_data["Annual Yield"] = annual_yield
             bond_data["Daily Yield"] = daily_yield
+            bond_data["Unrealized PNL"] = unrealized_pnl
+
+            # Since Unrealized PNL depends on actual market data, we can approximate:
+            # Unrealized PNL = Market Value - (Purchase Price * Position)
+            unrealized_pnl = market_value - (purchase_price * bond_data["Position"])
+            bond_data["Unrealized PNL"] = unrealized_pnl
 
         self._print_bond_data(bond_data)
         return bond_data
