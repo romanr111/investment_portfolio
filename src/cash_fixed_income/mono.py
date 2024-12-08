@@ -35,16 +35,10 @@ class Mono:
 
         total_balance = round(usd + uah_to_usd + eur_to_usd)
 
-        print("\n")
         print("--- Mono ---")
-        print("\n")
         print(f"UAH - {uah}")
-        print("\n")
         print(f"USD - {usd}")
-        print("\n")
         print(f"EUR - {eur}")
-        print("\n")
         print(f"Total - {total_balance}")
-        print("\n")
 
         return total_balance

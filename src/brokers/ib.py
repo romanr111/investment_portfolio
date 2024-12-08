@@ -23,15 +23,10 @@ class InteractiveBrokers:
         """Get complete portfolio data with minimal recalculation."""
         portfolio = self.get_portfolio_positions()
         portfolio["Net_cash"] = self.net_cash_balance
-
-        # Wrap the portfolio data in a nested dictionary
-        wrapped_portfolio = {"interactive_brokers": portfolio}
-        # Single consolidated log output
         print("\n=== IB Portfolio Summary ===")
-        print(wrapped_portfolio)
+        print(portfolio)
         print("========================\n")
-
-        return wrapped_portfolio
+        return portfolio
 
     def get_all_portfolio_info(self):
         """Implementation of abstract method from Broker class"""

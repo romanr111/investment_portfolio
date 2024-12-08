@@ -1,40 +1,56 @@
-from src.cash_fixed_income import mono, wise
-from src.crypto.crypto_tokens import CryptoEndpoint
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import Dict
 
+from src.cash_fixed_income import mono, wise
 from data.assets_data import CASH, LENDED, DEBT, PRIVAT
 
 
-class Cash:
+@dataclass
+class CashPortfolio:
     """
-    Class representing cash from various sources.
+    Represents all cash holdings across different sources.
     """
 
-    def __init__(self, ib_cash, crypto_obj):
-        self.cash = CASH
-        self.lended_amount = LENDED
-        self.own_debt = DEBT
-        self.private_funds = PRIVAT
-        self.mono = mono.Mono()
-        self.wise = wise.Wise()
-        self.ib_cash = ib_cash
-        self.crypto = crypto_obj
+    # Values passed during initialization (required parameters first)
+    ib_cash: float
+    crypto_cash: float
 
-    def as_dict(self):
-        instance_vars = vars(self).copy()
-        # Replacing object representations with their actual values
-        instance_vars["mono"] = self.mono.get_total_balance_in_usd()
-        instance_vars["wise"] = self.wise.get_total_balance_in_usd()
-        instance_vars["crypto"] = self.crypto.get_total_cash()
-        print(f"cash dict -> {instance_vars}")
-        return instance_vars
+    # Static values (with defaults)
+    cash: Decimal = Decimal(str(CASH))
+    lended: Decimal = Decimal(str(LENDED))
+    debt: Decimal = Decimal(str(DEBT))
+    private: Decimal = Decimal(str(PRIVAT))
+
+    def __post_init__(self):
+        """Initialize dynamic sources (Mono and Wise) and convert inputs to Decimal"""
+        # Convert input values to Decimal
+        self.ib_cash = Decimal(str(self.ib_cash))
+        self.crypto_cash = Decimal(str(self.crypto_cash))
+
+        # Get dynamic balances
+        self.mono = Decimal(str(mono.Mono().get_total_balance_in_usd()))
+        self.wise = Decimal(str(wise.Wise().get_total_balance_in_usd()))
+
+    def as_dict(self) -> Dict[str, Decimal]:
+        """Return all balances as a dictionary"""
+        return {
+            "cash": self.cash,
+            "lended": self.lended,
+            "debt": self.debt,
+            "private": self.private,
+            "ib_cash": self.ib_cash,
+            "crypto_cash": self.crypto_cash,
+            "mono": self.mono,
+            "wise": self.wise,
+        }
 
     @property
-    def total_cash(self):
-        return sum(val for val in self.as_dict().values())
+    def total_cash(self) -> Decimal:
+        """Calculate total cash across all sources"""
+        return sum(self.as_dict().values())
 
 
 if __name__ == "__main__":
-    ib_cash = 100
-    crypto = CryptoEndpoint()
-    cash = Cash(ib_cash, crypto)
-    print(f"TOTAL FREE CASH = {cash.total_cash}")
+    portfolio = CashPortfolio(ib_cash=Decimal(100), crypto_cash=Decimal(1))
+    print(f"TOTAL FREE CASH = {portfolio.total_cash}")

@@ -16,7 +16,7 @@ WHITE_BIT = (
     (1273, 0.1739),
 )
 
-INVESTMENT_EQUIPMENT = 340 + 6000
+
 GLD_GRAMS_AVAILABLE = 0
 
 PLATFORM_GROUPING = {
@@ -24,6 +24,10 @@ PLATFORM_GROUPING = {
     "PeerBerry": "p2p_lending",
     "WhiteBit": "crypto_lending",
     "Binance": "crypto_lending",
+    "binance": "crypto_lending",
+    "okx": "crypto_lending",
+    "bybit": "crypto_lending",
+    "whitebit": "crypto_lending",
     "CoinLoan": "crypto_lending",
     "YouHodler": "crypto_lending",
 }

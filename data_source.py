@@ -1,7 +1,8 @@
 from src.brokers.ib import InteractiveBrokers
-from src.cash_fixed_income.cash_summary import Cash
+from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
+from src.brokers.ib_dividends import AssetInfo, IBDividends
 from src.dasha.dasha import DashaPortfolio
 from src.google_sheets.allocation import PortfolioAllocations
 from src.helpers import calculate_total_mkt_value
@@ -9,87 +10,76 @@ from src.helpers import calculate_total_mkt_value
 
 class DataSource:
     def __init__(self):
+        # Initialize data sources
+        """
         self.ib = InteractiveBrokers()
         self.crypto = CryptoEndpoint()
-        # self.dasha = DashaPortfolio(self.ib)
-        # self.p2p = FixedIncomePortfolio() to pass crypto ojbect; also ib object to get bonds info;
-        # self.cash = Cash() To pass ib and crypto objects;
-        self.data = self.collect_all_portfolio_data()
-        # TODO why here?
-        # self.p_alloc = PortfolioAllocations(self.ib, self.crypto, self.cash)
-
-    def collect_all_portfolio_data(self):
-        data = self.ib.get_full_porfolio_data()
-
-        # Add crypto-related data
-        data.update(
-            {
-                "Crypto Quantities": self.crypto.quantities,
-                "Crypto Market Values": self.crypto.crypto_market_values,
-                "Total Crypto Value": self.crypto.get_total_crypto_value(),
-                "Crypto Free Cash": self.crypto.free_cash,
-                "Crypto Savings": self.crypto.all_crypto_savings,
-            }
+        self.crypto_savings = self.crypto.all_crypto_savings
+        self.ib_data = self.ib.get_full_porfolio_data()
+        self.ib_bonds = self.ib_data.get("Bonds", {})
+        self.ib_div = IBDividends(self.ib_data)
+        monthly_total, yearly_total, asset_details = (
+            self.ib_div.get_my_total_monthly_and_yearly_divs()
         )
-        return data
+        self.monthly_dividends = monthly_total
+        self.yearly_dividends = yearly_total
+        self.dividend_details = asset_details
+        """
 
-    #################################
-
-    def calculate_net_worth(self):
-        total_values = [
-            self.total_stocks_mkt_val,
-            self.bonds_mkt_value,
-            self.total_reits_mkt_val,
-            self.ib_gold_mkt_value,
-            self.comm_mkt_value,
-            self.crypto_mkt_value,
-            self.p2p,
-            self.cash_balance,
+        self.ib_bonds = {"IBCID722427489": 22819, "SGOV": 3715, "TLT": 2263}
+        self.crypto_savings = [
+            {"binance": {"USDC": (501, 0.1597), "USDT": (6583, 0.0978)}},
+            {"okx": {"USDT": (3048, 0.1303), "USDC": (2069, 0.1468)}},
+            {"bybit": {"USDC": (503, 0.138), "USDT": (543, 0.107)}},
+            {"whitebit": {"USDT": (3864, 0.1561), "USDC": (7404, 0.156)}},
         ]
-        return sum(total_values) - self.dasha_net_worth
+        print(f"self.dividend_details --> {self.dividend_details}")
+        print(f"self.ib_bond --> {self.ib_bonds}")
+        print(f"self.crypto_savings --> {self.crypto_savings}")
+        self.fixed_income = FixedIncomePortfolio(
+            self.ib_bonds, self.dividend_details, self.crypto_savings
+        )
+        print("\n Summary Output:")
+        print(self.fixed_income.summary)
+        # self.cash = CashPortfolio(
+        #    self.ib_data["Net_cash"],
+        #    self.crypto.free_cash,
+        # )
+        # self.dasha = DashaPortfolio(self.ib)
 
-    @property
-    def bonds_mkt_value(self):
-        return calculate_total_mkt_value(self.data["Bonds"])
+    def get_combined_data(self):
+        """
+        Returns a combined dictionary with all portfolio data.
+        """
+        combined_data = {
+            "IB_Portfolio": self.ib_data,
+            "Crypto_Holdings": {
+                "Total_Value": self.crypto.get_total_crypto_value(),
+                "Market_Values": self.crypto.crypto_market_values,
+                "Token_Quantities": self.crypto.quantities,
+                "Savings": self.crypto.all_crypto_savings,
+            },
+            "IB Dividends Data": self.dividend_details,
+            # Cash and liquid assets
+            "Total_Cash": self.cash.total_cash,
+            "Cash_Breakdown": self.cash.as_dict(),
+        }
+        """
+        # Calculate total portfolio value across all sources
+        combined_data["Total_Portfolio_Value"] = sum(
+            [
+                combined_data["Total_Cash"],
+                combined_data["IB_Portfolio"][
+                    "Total_Stocks_Value"
+                ],  # Use the correct path
+                combined_data["Crypto_Holdings"]["Total_Value"],
+            ]
+        )"""
 
-    @property
-    def total_stocks_mkt_val(self):
-        return calculate_total_mkt_value(self.data["Total_Stocks_Value"])
-
-    @property
-    def total_reits_mkt_val(self):
-        return calculate_total_mkt_value(self.data["REIT"])
-
-    @property
-    def ib_gold_mkt_value(self):
-        return calculate_total_mkt_value(self.data["Gold"])
-
-    @property
-    def comm_mkt_value(self):
-        return calculate_total_mkt_value(self.data["Commodities"])
-
-    @property
-    def crypto_mkt_value(self):
-        return self.crypto.get_total_crypto_value()
-
-    @property
-    def cash_balance(self):
-        return self.cash.total_cash
-
-
-def main():
-    """Main function demonstrating the Bybit client functionality."""
-    try:
-        print("\n=== Initializing Data ===")
-        data_source = DataSource()
-        print(data_source.collect_all_portfolio_data())
-
-    except Exception as e:
-        print(f"Error in main: {e}")
-        print(f"\nAn error occurred: {e}")
-    finally:
-        print("\n=== Program Completed ===")
+        return combined_data
 
 
 if __name__ == "__main__":
-    main()
+    data_source = DataSource()
+    # portfolio_data = data_source.get_combined_data()
+    # print(f"portfolio_data: {portfolio_data}")

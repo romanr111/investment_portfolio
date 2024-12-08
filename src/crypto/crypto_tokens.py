@@ -94,7 +94,6 @@ class CryptoData:
             balance = broker.get_cash_balance()
             if balance >= 1:
                 total_balance += balance
-        print(f"Total Crypto free cash --> {total_balance}")
         return total_balance
 
     @staticmethod

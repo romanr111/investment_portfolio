@@ -1,7 +1,7 @@
 import logging
 from functools import lru_cache
 
-from ib_bond_data_fetcher import IBBondsClient
+from .ib_bond_data_fetcher import IBBondsClient
 
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
 from data.portfolio_filters import HK_TO_ADR_MAP
@@ -206,7 +206,17 @@ class IBDividends:
         stock_data_fetcher = StockDataFetcher(
             NASDAQ_API,
             NASDAQ_HEADERS,
-            ["MCHI", "VNQI", "SGOV", "TLT", "LQD", "HYG", "JNK", "EMB", "KWEB"],
+            [
+                "MCHI",
+                "VNQI",
+                "SGOV",
+                "TLT",
+                "LQD",
+                "HYG",
+                "JNK",
+                "EMB",
+                "KWEB",
+            ],  # TODO: Remove hardcoded;
             HK_TO_ADR_MAP,
         )
 
@@ -221,7 +231,12 @@ class IBDividends:
         market_values = {}
         bond_ids = []
 
-        relevant_categories = {"Bonds", "China", "Banks", "USA_Stocks"}
+        relevant_categories = {
+            "Bonds",
+            "China",
+            "Banks",
+            "USA_Stocks",
+        }  # TODO: Remove hardcoded; Define global constant;
 
         for category, stocks in self.portfolio_data.items():
             if category in relevant_categories and isinstance(stocks, dict):
@@ -248,6 +263,7 @@ class IBDividends:
 if __name__ == "__main__":
     broker = InteractiveBrokers()
     info = broker.get_portfolio_positions()
+    print(f"info ---> {info}")
     logger.info("Portfolio positions retrieved from broker")
 
     pd = IBDividends(info)
