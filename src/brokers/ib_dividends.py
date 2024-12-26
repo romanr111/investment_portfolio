@@ -1,11 +1,17 @@
 import logging
 from functools import lru_cache
 
-from .ib_bond_data_fetcher import IBBondsClient
-
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
-from data.portfolio_filters import HK_TO_ADR_MAP
+from data.portfolio_filters import (
+    BONDS_KEY,
+    CHINA_STOCKS_KEY,
+    HK_TO_ADR_MAP,
+    STOCKS_KEY,
+)
 from src.brokers.ib import InteractiveBrokers
+
+# Change from relative to absolute import
+from src.brokers.ib_bond_data_fetcher import IBBondsClient
 from src.helpers import perform_request
 
 logging.basicConfig(
@@ -13,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import logging
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import lru_cache
@@ -72,6 +78,7 @@ class BondProcessor(AssetProcessor):
         return symbol.startswith("IBCID")
 
     def calculate_yearly_income(self, symbol: str, market_value: float) -> AssetInfo:
+        # If there is no bond_data, fall back to the portfolio's market_value
         if symbol not in self.bond_data:
             return AssetInfo(
                 market_value=market_value,
@@ -81,11 +88,13 @@ class BondProcessor(AssetProcessor):
                 asset_type="bond",
             )
 
-        amount, yield_rate = self.bond_data[symbol]
-        yearly_income = amount * yield_rate
+        # self.bond_data might still have a coupon or yield
+        # but do NOT overwrite the market_value
+        _, yield_rate = self.bond_data[symbol]
+        yearly_income = market_value * yield_rate
 
         return AssetInfo(
-            market_value=amount,
+            market_value=market_value,  # keep the original portfolio market_value
             yield_rate=yield_rate,
             yearly_income=round(yearly_income, 2),
             adr_symbol=None,
@@ -149,6 +158,14 @@ class StockProcessor(AssetProcessor):
         )
 
 
+@dataclass
+class PortfolioSummary:
+    monthly_total: float
+    yearly_total: float
+    stock_yearly: float  # Added stock_yearly field
+    asset_details: Dict[str, AssetInfo]
+
+
 class PortfolioAnalyzer:
     def __init__(self, processors: List[AssetProcessor]):
         self.processors = processors
@@ -185,14 +202,18 @@ class PortfolioAnalyzer:
         total_yearly = bond_yearly + stock_yearly
         monthly_total = total_yearly / 12
 
+        print()
+        print("[IB]")
         logger.info(f"Total yearly bond income (no tax): ${bond_yearly:.2f}")
         logger.info(f"Total yearly stock dividends after tax: ${stock_yearly:.2f}")
         logger.info(f"Total combined yearly income: ${total_yearly:.2f}")
         logger.info(f"Monthly total: ${monthly_total:.2f}")
+        print("[IB]")
 
         return PortfolioSummary(
             monthly_total=round(monthly_total, 2),
             yearly_total=round(total_yearly, 2),
+            stock_yearly=round(stock_yearly, 2),  # Added stock_yearly to return
             asset_details=results,
         )
 
@@ -232,11 +253,10 @@ class IBDividends:
         bond_ids = []
 
         relevant_categories = {
-            "Bonds",
-            "China",
-            "Banks",
-            "USA_Stocks",
-        }  # TODO: Remove hardcoded; Define global constant;
+            BONDS_KEY,
+            CHINA_STOCKS_KEY,
+            STOCKS_KEY,
+        }
 
         for category, stocks in self.portfolio_data.items():
             if category in relevant_categories and isinstance(stocks, dict):
@@ -255,9 +275,29 @@ class IBDividends:
 
     def get_my_total_monthly_and_yearly_divs(
         self,
-    ) -> Tuple[float, float, Dict[str, AssetInfo]]:
+    ) -> Tuple[float, float, float, Dict[str, AssetInfo]]:
         summary = self.analyzer.analyze_portfolio(self.market_values)
-        return summary.monthly_total, summary.yearly_total, summary.asset_details
+
+        print("\nIB Dividend Summary:")
+        sorted_details = dict(
+            sorted(summary.asset_details.items(), key=lambda x: (x[1].asset_type, x[0]))
+        )
+
+        for symbol, data in sorted_details.items():
+            print(f"\n{symbol} ({data.asset_type}):")
+            print(f"  Market Value: ${data.market_value:,.2f}")
+            print(f"  Yield Rate: {data.yield_rate:.2%}")
+            income_type = "Interest" if data.asset_type == "bond" else "Dividend"
+            print(f"  Expected Yearly {income_type}: ${data.yearly_income:,.2f}")
+            if data.adr_symbol:
+                print(f"  ADR Symbol Used: {data.adr_symbol}")
+
+        return (
+            summary.monthly_total,
+            summary.yearly_total,
+            summary.stock_yearly,
+            summary.asset_details,
+        )
 
 
 if __name__ == "__main__":
@@ -267,18 +307,4 @@ if __name__ == "__main__":
     logger.info("Portfolio positions retrieved from broker")
 
     pd = IBDividends(info)
-    monthly, yearly, details = pd.get_my_total_monthly_and_yearly_divs()
-
-    print("\nDividend Summary:")
-    sorted_details = dict(
-        sorted(details.items(), key=lambda x: (x[1].asset_type, x[0]))
-    )
-
-    for symbol, data in sorted_details.items():
-        print(f"\n{symbol} ({data.asset_type}):")
-        print(f"  Market Value: ${data.market_value:,.2f}")
-        print(f"  Yield Rate: {data.yield_rate:.2%}")
-        income_type = "Interest" if data.asset_type == "bond" else "Dividend"
-        print(f"  Expected Yearly {income_type}: ${data.yearly_income:,.2f}")
-        if data.adr_symbol:
-            print(f"  ADR Symbol Used: {data.adr_symbol}")
+    monthly, yearly, stock_yearly, details = pd.get_my_total_monthly_and_yearly_divs()

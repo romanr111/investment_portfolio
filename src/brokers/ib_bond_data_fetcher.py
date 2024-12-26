@@ -359,45 +359,74 @@ class BondDataFormatter:
     """Handles formatting of bond data for display and analysis"""
 
     @staticmethod
+    def format_holdings(
+        bond_data: List[Dict[str, Any]]
+    ) -> Dict[str, Tuple[float, float]]:
+        """Formats bond holdings data for portfolio analysis with improved error handling"""
+        holdings = {}
+
+        # Handle case where entire list is None
+        if not bond_data:
+            return holdings
+
+        for bond in bond_data:
+            # Skip None entries or invalid data
+            if not bond or not isinstance(bond, dict):
+                continue
+
+            # Get IBCID, default to None if missing
+            bond_id = bond.get("IBCID")
+            if not bond_id:
+                continue
+
+            # Get market value and yield with safe defaults
+            market_value = bond.get("Market Value", 0.0)
+            annual_yield = bond.get("Annual Yield", 0.0)
+
+            # Ensure we have numeric values
+            try:
+                market_value = float(market_value)
+                annual_yield = (
+                    float(annual_yield) / 100.0
+                )  # Convert percentage to decimal
+            except (TypeError, ValueError):
+                continue
+
+            holdings[bond_id] = (market_value, annual_yield)
+
+        return holdings
+
+    @staticmethod
     def format_data(data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> str:
-        """Formats bond data with proper value handling"""
+        """Formats bond data with proper value handling and error checking"""
         if not data:
             return "No data available"
 
         if isinstance(data, list):
-            return "\n\n".join(
-                BondDataFormatter.format_data(bond) for bond in data if bond is not None
-            )
+            formatted = []
+            for item in data:
+                if item is not None:
+                    formatted.append(BondDataFormatter.format_data(item))
+            return "\n\n".join(formatted) if formatted else "No data available"
 
         formatted_lines = []
         for key, value in data.items():
             if value is None:
                 formatted_lines.append(f"{key}: N/A")
             elif isinstance(value, float):
-                if "Yield" in key:
+                if any(
+                    yield_term in key.lower()
+                    for yield_term in ["yield", "rate", "percentage"]
+                ):
                     formatted_lines.append(f"{key}: {value:.4f}%")
                 else:
                     formatted_lines.append(f"{key}: {value:.2f}")
-            elif isinstance(value, date):
+            elif isinstance(value, (date, datetime)):
                 formatted_lines.append(f"{key}: {value.strftime('%Y-%m-%d')}")
             else:
                 formatted_lines.append(f"{key}: {value}")
 
         return "\n".join(formatted_lines)
-
-    @staticmethod
-    def format_holdings(
-        bond_data: List[Dict[str, Any]]
-    ) -> Dict[str, Tuple[float, float]]:
-        """Formats bond holdings data for portfolio analysis"""
-        return {
-            bond["IBCID"]: (
-                bond.get("Market Value", 0),
-                bond.get("Annual Yield", 0) / 100,
-            )
-            for bond in bond_data
-            if bond and "IBCID" in bond
-        }
 
 
 class IBBondsClient:
@@ -409,43 +438,46 @@ class IBBondsClient:
         self.ib = None
 
     def get_bond_data(self, bond_ids: List[str]) -> List[Optional[Dict[str, Any]]]:
-        """Retrieves comprehensive bond data using managed connection"""
+        """Retrieves comprehensive bond data using managed connection with improved error handling"""
         try:
             with self.market_data.connection() as ib:
-                self.ib = ib  # Store IB connection for other methods to use
+                self.ib = ib
                 self.logger.info(f"Processing {len(bond_ids)} bonds...")
 
                 results = []
                 for bond_id in bond_ids:
                     try:
                         bond_data = self._process_single_bond(bond_id, ib)
-                        results.append(bond_data)
                         if bond_data:
-                            self.logger.info(f"Successfully processed bond {bond_id}")
+                            results.append(bond_data)
                         else:
                             self.logger.warning(f"No data retrieved for bond {bond_id}")
+                            results.append(None)
                     except Exception as e:
-                        self.logger.error(f"Error processing bond {bond_id}: {e}")
+                        self.logger.error(f"Error processing bond {bond_id}: {str(e)}")
                         results.append(None)
                         continue
+                        # Log overall results summary
+                valid_results = len([r for r in results if r is not None])
+                self.logger.info(
+                    f"Processed {valid_results} out of {len(bond_ids)} bonds successfully"
+                )
                 return results
 
         except Exception as e:
-            self.logger.error(f"Error processing bonds: {e}")
+            self.logger.error(f"Error processing bonds: {str(e)}")
             return [None] * len(bond_ids)
         finally:
             self.ib = None
 
     def _process_single_bond(self, bond_id: str, ib: IB) -> Optional[Dict[str, Any]]:
-        """Processes data for a single T-Bill bond using provided IB connection with no hardcoded maturity date."""
+        """Processes data for a single bond with improved error handling"""
         try:
             if not bond_id.startswith("IBCID"):
                 raise ValueError(f"Invalid bond identifier format: {bond_id}")
 
             conid = int(bond_id.replace("IBCID", ""))
 
-            self.logger.info(f"Qualifying contract for {bond_id}")
-            # Dynamically get the fully qualified contract details
             qualified_contract = self.market_data.get_contract_details(conid)
             if not qualified_contract:
                 self.logger.error(f"Could not qualify contract with conId: {conid}")
@@ -459,10 +491,83 @@ class IBBondsClient:
                 f"lastTradeDateOrContractMonth={qualified_contract.lastTradeDateOrContractMonth}"
             )
 
-            return self._collect_bond_data(bond_id, qualified_contract, conid, ib)
+            contract_details = ib.reqContractDetails(qualified_contract)
+            if not contract_details:
+                self.logger.error(f"No contract details found for {bond_id}")
+                return None
+
+            # Get position data first
+            position_data = self._get_position_data(conid)
+            if not position_data:
+                self.logger.error(f"No position data found for {bond_id}")
+                return None
+
+            # Extract security IDs from contract details
+            cusip = None
+            isin = None
+            if contract_details and contract_details[0].secIdList:
+                for sec_id in contract_details[0].secIdList:
+                    if sec_id.tag == "CUSIP":
+                        cusip = sec_id.value
+                    elif sec_id.tag == "ISIN":
+                        isin = sec_id.value
+
+            # Get all required dates
+            purchase_date = position_data.get("Purchase Date", date.today())
+            maturity_date = position_data.get("Maturity Date")
+            current_date = date.today()
+            days_held = (current_date - purchase_date).days
+
+            # Calculate yield
+            face_value = 1000.0
+            purchase_price = position_data.get("Average Cost", 0.0)
+            position_qty = position_data.get("Position", 0.0)
+            market_value = position_data.get("Market Value", 0.0)
+            unrealized_pnl = position_data.get("Unrealized PNL", 0.0)
+
+            # Calculate yield based on available data
+            if maturity_date and purchase_price > 0:
+                days_to_maturity = (maturity_date - purchase_date).days
+                if days_to_maturity > 0:
+                    annual_yield = (
+                        ((face_value - purchase_price) / purchase_price)
+                        * (365.0 / days_to_maturity)
+                        * 100.0
+                    )
+                else:
+                    annual_yield = 0.0
+            else:
+                yields = BondAnalytics.calculate_yield(
+                    purchase_date=purchase_date,
+                    position=position_qty,
+                    average_cost=purchase_price,
+                    unrealized_pnl=unrealized_pnl,
+                )
+                annual_yield = yields.get("annual_yield_percentage", 0.0)
+
+            # Clamp negative yields
+            annual_yield = max(annual_yield, 0.0)
+
+            # Combine all data with safe defaults
+            bond_data = {
+                "IBCID": bond_id,
+                "CUSIP": cusip,
+                "ISIN": isin,
+                "Position": position_qty,
+                "Average Cost": purchase_price,
+                "Market Value": market_value,
+                "Unrealized PNL": unrealized_pnl,
+                "Purchase Date": purchase_date,
+                "Days Held": days_held,
+                "Annual Yield": annual_yield,
+                "Maturity Date": maturity_date,
+            }
+
+            self._print_bond_data(bond_data)
+            return bond_data
 
         except Exception as e:
-            self.logger.error(f"Error processing bond {bond_id}: {e}")
+            self.logger.error(f"Error processing bond {bond_id}: {str(e)}")
             return None
 
     def cleanup(self):
@@ -470,14 +575,18 @@ class IBBondsClient:
         IBConnectionPool.disconnect_all()
 
     def _print_bond_data(self, data: Dict[str, Any]) -> None:
-        """Print bond data with clearer cost presentation"""
-        print(
-            f"""
-    Bond: {data['IBCID']} | CUSIP: {data['CUSIP']} | ISIN: {data['ISIN']}
-    Position: {data['Position']:,.2f} units | Cost: ${data['Average Cost']:,.2f} | Market Value: ${data['Market Value']:,.2f} | P&L: ${data['Unrealized PNL']:,.2f}
-    Purchase Date: {data['Purchase Date']} ({data['Days Held']} days) | Annual Yield: {data['Annual Yield']:.2f}%
-    """
-        )
+        """Print bond data with clearer cost presentation and error handling"""
+        try:
+            print(
+                f"""
+        Bond: {data.get('IBCID', 'N/A')} | CUSIP: {data.get('CUSIP', 'N/A')} | ISIN: {data.get('ISIN', 'N/A')}
+        Position: {data.get('Position', 0):,.2f} units | Cost: ${data.get('Average Cost', 0):,.2f} | Market Value: ${data.get('Market Value', 0):,.2f} | P&L: ${data.get('Unrealized PNL', 0):,.2f}
+        Purchase Date: {data.get('Purchase Date', 'N/A')} ({data.get('Days Held', 0)} days) | Maturity Date: {data.get('Maturity Date', 'N/A')} | Annual Yield: {data.get('Annual Yield', 0):.2f}%
+        """
+            )
+        except Exception as e:
+            self.logger.error(f"Error printing bond data: {str(e)}")
+            print("Error printing bond data. See logs for details.")
 
     def _collect_bond_data(
         self, bond_id: str, contract: Contract, conid: int, ib: IB
@@ -499,39 +608,49 @@ class IBBondsClient:
 
         # Get position and portfolio data (which now includes Maturity Date)
         position_data = self._get_position_data(conid)
+        purchase_date = position_data["Purchase Date"]
+        maturity_date = position_data["Maturity Date"]
+        purchase_price = position_data["Average Cost"]
+        position_qty = position_data["Position"]
 
-        # Calculate yields using BondAnalytics if market data is available
-        if position_data:
+        # If T-Bill or zero-coupon
+        face_value = 1000.0
+        if maturity_date and purchase_price > 0:
+            days_to_maturity = (maturity_date - purchase_date).days
+            if days_to_maturity > 0:
+                annual_yield = (
+                    ((face_value - purchase_price) / purchase_price)
+                    * (365.0 / days_to_maturity)
+                    * 100.0
+                )
+            else:
+                annual_yield = 0.0
+        else:
+            # fallback to IB analytics or coupon logic
             yields = BondAnalytics.calculate_yield(
-                purchase_date=position_data["Purchase Date"],
-                position=position_data["Position"],
-                average_cost=position_data["Average Cost"],
+                purchase_date=purchase_date,
+                position=position_qty,
+                average_cost=purchase_price,
                 unrealized_pnl=position_data["Unrealized PNL"],
             )
-        else:
-            yields = {
-                "daily_yield_percentage": 0.0,
-                "annual_yield_percentage": 0.0,
-                "days_held": 0,
-            }
+            annual_yield = yields["annual_yield_percentage"]
+
+        # clamp negative yields if you prefer
+        annual_yield = max(annual_yield, 0.0)
+
+        # compute the 'market value' as if it were near face value or use IB's data
+        market_value = position_data["Market Value"]  # but you might re-scale if needed
 
         bond_data = {
-            "Bond Type": "T-Bill",
             "IBCID": bond_id,
-            "CUSIP": cusip,
-            "ISIN": isin,
-            "Position": position_data["Position"],
-            "Average Cost": position_data["Average Cost"],
-            "Market Value": position_data["Market Value"],
-            "Market Price (per unit)": position_data["Market Price (per unit)"],
+            "Position": position_qty,
+            "Average Cost": purchase_price,
+            "Market Value": market_value,
             "Unrealized PNL": position_data["Unrealized PNL"],
-            "Purchase Date": position_data["Purchase Date"],
-            "Daily Yield": yields["daily_yield_percentage"],
-            "Annual Yield": yields["annual_yield_percentage"],
-            "Days Held": yields["days_held"],
-            "Maturity Date": position_data[
-                "Maturity Date"
-            ],  # Include maturity date in output
+            "Purchase Date": purchase_date,
+            "Days Held": (date.today() - purchase_date).days,
+            "Annual Yield": annual_yield,
+            "Maturity Date": maturity_date,
         }
 
         # If no market price is available, compute yield-to-maturity from Maturity Date if present
@@ -592,14 +711,12 @@ class IBBondsClient:
         return bond_data
 
     def _get_position_data(self, conid: int) -> Dict[str, Any]:
+        """Get position data for a specific contract ID with corrected market value calculation"""
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("No active IB connection")
 
-        self.logger.info(f"Requesting positions for conid: {conid}")
         positions = self.ib.reqPositions()
-        self.logger.info(f"Got {len(positions)} positions")
 
-        # Find our specific position
         position_data = next(
             (pos for pos in positions if pos.contract.conId == conid), None
         )
@@ -610,7 +727,6 @@ class IBBondsClient:
                 "Position": 0,
                 "Average Cost": 0,
                 "Market Value": 0,
-                "Market Price (per unit)": 0,
                 "Unrealized PNL": 0,
                 "Purchase Date": date.today(),
                 "Maturity Date": None,
@@ -618,25 +734,25 @@ class IBBondsClient:
 
         pos_contract = position_data.contract
 
-        # Store the original maturity date from positions before qualify
+        # Store maturity date before qualification
         original_maturity = pos_contract.lastTradeDateOrContractMonth
 
-        # Ensure necessary fields
+        # Ensure necessary fields for contract qualification
         if not pos_contract.exchange:
             pos_contract.exchange = "SMART"
         if not pos_contract.symbol:
             pos_contract.symbol = "US-T"
+        if not pos_contract.secType:
+            pos_contract.secType = "BILL"
 
+        # Qualify the contract
         qualified_pos_contracts = self.ib.qualifyContracts(pos_contract)
         if not qualified_pos_contracts:
-            self.logger.error(
-                "Could not qualify position contract. Missing required fields?"
-            )
+            self.logger.error(f"Could not qualify position contract for conid: {conid}")
             return {
                 "Position": position_data.position,
                 "Average Cost": position_data.avgCost,
                 "Market Value": 0,
-                "Market Price (per unit)": 0,
                 "Unrealized PNL": 0,
                 "Purchase Date": date.today(),
                 "Maturity Date": None,
@@ -644,52 +760,91 @@ class IBBondsClient:
 
         pos_contract = qualified_pos_contracts[0]
 
-        # If qualifyContracts didn't return a maturity date, use the original one from positions
+        # Restore original maturity date if lost during qualification
         if not pos_contract.lastTradeDateOrContractMonth and original_maturity:
             pos_contract.lastTradeDateOrContractMonth = original_maturity
 
-        ticker = self.ib.reqMktData(pos_contract)
-        for _ in range(5):  # Try for 5 seconds
+        # Get market data
+        ticker = self.ib.reqMktData(
+            pos_contract,
+            genericTickList="100,101,104,106,165,221,225,232,236",
+            snapshot=False,
+        )
+
+        # Wait for market data
+        timeout = 10
+        while timeout > 0 and math.isnan(ticker.marketPrice()):
             self.ib.sleep(1)
-            if ticker.marketPrice():
-                break
+            timeout -= 1
+            if timeout % 2 == 0:
+                self.logger.info(
+                    f"Waiting for market data... {timeout} seconds remaining"
+                )
 
-        market_value = (
-            ticker.marketPrice() * position_data.position if ticker.marketPrice() else 0
-        )
-        unrealized_pnl = market_value - (position_data.avgCost * position_data.position)
+        # Calculate market value using FACE VALUE of $1000
+        FACE_VALUE = 1000.0
+        position_size = position_data.position
+        avg_cost = position_data.avgCost
 
-        # Get bond ID for purchase date lookup
+        # Get the market price - it comes as a percentage of face value
+        market_price_pct = ticker.marketPrice()
+        if math.isnan(market_price_pct) or market_price_pct == 0:
+            self.logger.warning(
+                f"Could not get market price for {conid}, using average cost"
+            )
+            # Convert average cost to percentage of face value
+            market_price_pct = (avg_cost / FACE_VALUE) * 100
+
+        # Calculate the actual price per bond
+        price_per_bond = (market_price_pct / 100) * FACE_VALUE
+
+        # Calculate total market value
+        market_value = price_per_bond * position_size
+
+        # Calculate cost basis and unrealized PNL
+        cost_basis = avg_cost * position_size
+        unrealized_pnl = market_value - cost_basis
+
+        # Get purchase date
         bond_id = f"IBCID{conid}"
-        purchase_date = self.market_data.find_purchase_date(
-            bond_id, position_data.avgCost
-        )
+        purchase_date = self.market_data.find_purchase_date(bond_id, avg_cost)
+        if not purchase_date:
+            purchase_date = date.today()
 
+        # Parse maturity date if available
         maturity_date = None
         if (
             pos_contract.lastTradeDateOrContractMonth
             and len(pos_contract.lastTradeDateOrContractMonth) == 8
         ):
-            maturity_date = datetime.strptime(
-                pos_contract.lastTradeDateOrContractMonth, "%Y%m%d"
-            ).date()
+            try:
+                maturity_date = datetime.strptime(
+                    pos_contract.lastTradeDateOrContractMonth, "%Y%m%d"
+                ).date()
+            except ValueError:
+                self.logger.warning(
+                    f"Invalid maturity date format: {pos_contract.lastTradeDateOrContractMonth}"
+                )
 
         return {
-            "Position": position_data.position,
-            "Average Cost": position_data.avgCost,
+            "Position": position_size,
+            "Average Cost": avg_cost,
             "Market Value": market_value,
-            "Market Price (per unit)": (
-                ticker.marketPrice() if ticker.marketPrice() else 0
-            ),
             "Unrealized PNL": unrealized_pnl,
-            "Purchase Date": purchase_date if purchase_date else date.today(),
+            "Purchase Date": purchase_date,
             "Maturity Date": maturity_date,
         }
 
     def get_bond_main_info(self, bond_ids: List[str]) -> Dict[str, Tuple[float, float]]:
-        """Retrieves main bond information for portfolio analysis"""
-        data = self.get_bond_data(bond_ids)
-        return BondDataFormatter.format_holdings(data)
+        """Retrieves main bond information for portfolio analysis with improved error handling"""
+        try:
+            data = self.get_bond_data(bond_ids)
+            holdings = BondDataFormatter.format_holdings(data)
+
+            return holdings
+        except Exception as e:
+            self.logger.error(f"Error in get_bond_main_info: {e}")
+            return {}
 
 
 if __name__ == "__main__":

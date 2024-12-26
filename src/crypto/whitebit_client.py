@@ -144,8 +144,9 @@ def main():
 
         print("\nSavings:")
         savings = whitebit.get_savings_positions()
-        for asset, (principal, apy) in savings.items():
-            print(f"{asset}: Principal = ${principal:.2f}, APY={apy * 100:.1f}%")
+        for exchange, positions in savings.items():
+            for asset, (principal, apy) in positions.items():
+                print(f"{asset}: Principal = ${principal:.2f}, APY={apy * 100:.1f}%")
 
     except Exception as e:
         print(f"Error: {e}")

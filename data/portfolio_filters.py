@@ -1,6 +1,7 @@
 # Bond ETFs and Fixed Income
 
-BONDS = [
+
+BONDS_VALUES = [
     # US Treasury
     "SGOV",  # iShares 0-3 Month Treasury Bond ETF
     "TLT",  # iShares 20+ Year Treasury Bond ETF
@@ -30,8 +31,9 @@ BONDS = [
     "PCY",  # Invesco Emerging Markets Sovereign Debt ETF
 ]
 
+
 # Hong Kong Listed Chinese Stocks
-CHINA = [
+CHINA_TICKERS = [
     # Tech Giants
     "9988",  # Alibaba
     "700",  # Tencent
@@ -194,3 +196,25 @@ GOLD = [
     "GDXJ",  # VanEck Junior Gold Miners ETF
     "RING",  # iShares MSCI Global Gold Miners ETF
 ]
+
+
+BONDS_KEY = "Bonds"
+STOCKS_KEY = "Stocks"
+CRYPTO_LENDING_KEY = "Crypto Landing"
+P2P_LENDING_KEY = "p2p_lending"
+OTHER_KEY = "other"
+
+CHINA_STOCKS_KEY = "China Stocks"
+REIT_KEY = "REIT"
+GOLD_KEY = "Gold"
+IB_STOCKS_KEY = "Stocks"
+IB_BONDS_KEY = "Bonds"
+COMMODITIES_KEY = "Commodities"
+SHORT_SELLING_KEY = "Short Selling"
+IB_STOCKS_VALUE = "Total Stocks Value"
+
+PLATFORM_GROUPING = {
+    BONDS_KEY: BONDS_VALUES,
+    CRYPTO_LENDING_KEY: ["binance", "okx", "bybit", "whitebit"],
+    P2P_LENDING_KEY: ["EstateGuru", "PeerBerry"],
+}

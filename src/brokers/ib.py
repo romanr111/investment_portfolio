@@ -2,7 +2,9 @@ import csv
 from datetime import datetime
 import time
 
-import data.portfolio_filters as filters
+from data.portfolio_filters import *
+
+
 from data.endpoints import POSITIONS_API, SUMMARY_API
 from src.helpers import calculate_total_mkt_value, convert, perform_request, sort_dict
 
@@ -40,7 +42,9 @@ class InteractiveBrokers:
     def net_cash_balance(self):
         if self._portfolio_positions is None:
             self._portfolio_positions = self.get_portfolio_positions()
-        short_mkt_value = calculate_total_mkt_value(self._portfolio_positions["Short"])
+        short_mkt_value = calculate_total_mkt_value(
+            self._portfolio_positions[SHORT_SELLING_KEY]
+        )
         return self.cash_balance + short_mkt_value
 
     def get_portfolio_positions(self):
@@ -49,14 +53,13 @@ class InteractiveBrokers:
 
         # Initialize portfolio structure
         portfolio = {
-            "Bonds": {},
-            "China": {},
-            "Banks": {},
-            "USA_Stocks": {},
-            "Short": {},
-            "REIT": {},
-            "Gold": {},
-            "Commodities": {},
+            IB_BONDS_KEY: {},
+            CHINA_STOCKS_KEY: {},
+            IB_STOCKS_KEY: {},
+            SHORT_SELLING_KEY: {},
+            REIT_KEY: {},
+            GOLD_KEY: {},
+            COMMODITIES_KEY: {},
         }
 
         # Load REIT names once
@@ -79,7 +82,7 @@ class InteractiveBrokers:
 
         # Sort all dictionaries at once
         portfolio = {k: sort_dict(v) for k, v in portfolio.items()}
-        portfolio["Total_Stocks_Value"] = round(total_stocks)
+        portfolio[IB_STOCKS_VALUE] = round(total_stocks)
 
         # Cache the result
         self._portfolio_positions = portfolio
@@ -120,27 +123,26 @@ class StockCategorizer:
     def get_category(stock, mkt_value, public_reit_names):
         # First check for bond IDs and Chinese ETFs/ADRs
         if stock.startswith("IBCID") and mkt_value > 0:
-            return "Bonds"
+            return IB_BONDS_KEY
 
         category_conditions = {
-            "Short": mkt_value < 0,
-            "China": (stock in filters.CHINA or stock in filters.CHINA_ADR),
-            "Banks": stock in filters.BANKS,
-            "REIT": stock in public_reit_names or stock in filters.REITS,
-            "Gold": stock in filters.GOLD,
-            "Bonds": stock in filters.BONDS,
-            "Commodities": stock in filters.COMM,
+            CHINA_STOCKS_KEY: (stock in CHINA_TICKERS or stock in CHINA_ADR),
+            REIT_KEY: stock in public_reit_names or stock in REITS,
+            GOLD_KEY: stock in GOLD,
+            IB_BONDS_KEY: stock in BONDS_VALUES,
+            COMMODITIES_KEY: stock in COMM,
+            SHORT_SELLING_KEY: mkt_value < 0,
         }
 
         for category, condition in category_conditions.items():
             if condition:
                 return category
 
-        return "USA_Stocks"
+        return IB_STOCKS_KEY
 
     @staticmethod
     def get_value_for_category(stock, mkt_value, category):
-        if category == "China" and stock in filters.CHINA:
+        if category == CHINA_STOCKS_KEY and stock in CHINA_TICKERS:
             return round(convert("HKD", "USD", mkt_value))
         return mkt_value
 
