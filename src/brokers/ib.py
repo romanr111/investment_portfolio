@@ -2,7 +2,7 @@ import csv
 from datetime import datetime
 import time
 
-from data.portfolio_filters import *
+from data.filters_constants import *
 
 
 from data.endpoints import POSITIONS_API, SUMMARY_API
@@ -24,7 +24,6 @@ class InteractiveBrokers:
     def get_full_porfolio_data(self):
         """Get complete portfolio data with minimal recalculation."""
         portfolio = self.get_portfolio_positions()
-        portfolio["Net_cash"] = self.net_cash_balance
         print("\n=== IB Portfolio Summary ===")
         print(portfolio)
         print("========================\n")
@@ -66,6 +65,7 @@ class InteractiveBrokers:
         public_reit_names = REITLoader.load_reits_from_csv()
         categorizer = StockCategorizer()
         total_stocks = 0
+        total_portfolio_value = 0
 
         # Process all positions in a single pass
         for position in self.all_portfolio_info:
@@ -75,14 +75,23 @@ class InteractiveBrokers:
             category = categorizer.get_category(stock, mkt_value, public_reit_names)
             value = categorizer.get_value_for_category(stock, mkt_value, category)
             portfolio[category][stock] = value
+            total_portfolio_value += value
 
-            # Calculate total stocks value in the same loop
             if category not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
                 total_stocks += value
 
         # Sort all dictionaries at once
         portfolio = {k: sort_dict(v) for k, v in portfolio.items()}
         portfolio[IB_STOCKS_VALUE] = round(total_stocks)
+
+        # Calculate net cash balance
+        short_mkt_value = calculate_total_mkt_value(portfolio[SHORT_SELLING_KEY])
+        portfolio["Net_cash"] = self.cash_balance + short_mkt_value
+
+        # Add total portfolio value including net cash
+        portfolio["IB_Portfolio_Value"] = round(
+            total_portfolio_value + portfolio["Net_cash"]
+        )
 
         # Cache the result
         self._portfolio_positions = portfolio

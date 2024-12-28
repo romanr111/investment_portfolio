@@ -2,7 +2,7 @@ import logging
 from functools import lru_cache
 
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
-from data.portfolio_filters import (
+from data.filters_constants import (
     BONDS_KEY,
     CHINA_STOCKS_KEY,
     HK_TO_ADR_MAP,

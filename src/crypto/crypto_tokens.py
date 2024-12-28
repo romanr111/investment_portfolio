@@ -1,10 +1,5 @@
-# TODO: To review cold storage data to be up to date;
-# TODO: Probably make it one endpoint to initiate when providing data to cash and fixed income module /
-# Along with providing data to spreadsheet formatter; e.g. I could initialize it and provide data as arguments to /
-# other modules who needs crypto related data;
-
 from typing import Dict, List, Tuple
-from data.crypto_data import COLD_STORAGE
+from data.assets_data import COLD_STORAGE
 from src.crypto.base_exchange_client import ExchangeBase
 from src.crypto.binance_client import BinanceClient
 from src.crypto.okx_client import OKXFiltered

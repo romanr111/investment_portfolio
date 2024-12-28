@@ -1,18 +1,15 @@
 # -------------------------------- HARDCODED DONE --------------------------------
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from typing import Dict, Tuple
+
 import requests
 
 from data.api_keys import BYBIT_API_KEY, BYBIT_API_SECRET
+from data.assets_data import BYBIT_SAVINGS
 from src.crypto.base_exchange_client import ExchangeBase
-
-##########################################################
-# TODO:
-BYBIT_SAVINGS = {"USDC": (503, 0.138), "USDT": (543, 0.107)}
-##########################################################
 
 
 class Bybit(ExchangeBase):

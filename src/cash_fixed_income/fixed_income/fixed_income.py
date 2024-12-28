@@ -6,7 +6,7 @@ import src.helpers as helpers
 from data.assets_data import *
 from src.base_asset import Asset
 
-from data.portfolio_filters import (
+from data.filters_constants import (
     BONDS_KEY,
     CRYPTO_LENDING_KEY,
     P2P_LENDING_KEY,
@@ -207,15 +207,15 @@ class FixedIncomePortfolio:
 
     def get_combined_fixed_income_data(self):
         return {
-            "FIXED_INCOME_STRUCTURED_DATA": self._portfolio.assets,
             "group_weighted_interest": self.group_weighted_interest,
             "calculated_income": self.calculated_income,
-            "total_principal_and_interest": {
-                "total_principal": self.total_principal_and_interest[0],
-                "weighted_interest": self.total_principal_and_interest[1],
+            "fixed_inc_principal_and_interest": {
+                "principal": self.total_principal_and_interest[0],
+                "interest": self.total_principal_and_interest[1],
             },
             "monthly_earnings_fixed_income": self.yearly_earnings_fixed_income / 12,
             "yearly_earnings_fixed_income": self.yearly_earnings_fixed_income,
+            "fixed_income_full_data": self._portfolio.assets,
         }
 
 
