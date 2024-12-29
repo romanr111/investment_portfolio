@@ -24,14 +24,12 @@ def create_tab_at_left(spreadsheet, sheet_title):
     """
     Create (or replace) a worksheet named sheet_title at index=1 (second from left).
     """
-    # Remove if exists
     try:
         existing = spreadsheet.worksheet(sheet_title)
         spreadsheet.del_worksheet(existing)
     except gspread.exceptions.WorksheetNotFound:
         pass
 
-    # Create new sheet
     worksheet = spreadsheet.add_worksheet(title=sheet_title, rows=200, cols=30)
     spreadsheet.batch_update(
         {
@@ -58,90 +56,51 @@ def row_left(d_val="", e_val=""):
 
 def parse_ib_data(ib_data):
     """
-    Turn IB_DATA into a list of rows for columns D/E.
-    Subcategories: e.g. 'Bonds', 'China Stocks', 'Stocks', 'REIT', etc.
+    Turn IB_DATA into a list of rows for columns D/E, but do NOT print
+    the 'IB_DATA' label itself. We only skip subcategories if they are empty.
     """
     rows = []
+    # (We skip printing "IB_DATA" as a label.)
+
     for subcat, contents in ib_data.items():
+        if isinstance(contents, dict) and not contents:
+            # Skip if subcategory is an empty dict
+            continue
+
         if isinstance(contents, dict):
-            # Insert subcat label
+            # Subcategory header
             rows.append(row_left(subcat))
-            # Then each symbol => value
             for sym, val in contents.items():
                 rows.append(row_left(sym, str(val)))
-            # Blank row
-            rows.append(row_left())
+            rows.append(row_left())  # blank row
         else:
-            # Single-value keys like 'Total Stocks Value', 'Net_cash', etc.
+            # Single-value (e.g. "Total Stocks Value")
             rows.append(row_left(subcat, str(contents)))
-            rows.append(row_left())
+            rows.append(row_left())  # blank row
+
     return rows
 
 
 def parse_crypto_data(crypto_data):
     """
-    Represent CRYPTO_DATA in a short summary for columns D/E:
+    Represent CRYPTO_DATA in columns D/E:
       - Show total
-      - Show top 5 or so from 'Crypto_Market_Values'
-      - Omit detailed token quantities, or show them if you like
+      - Show market values
     """
     rows = []
     rows.append(row_left("CRYPTO_DATA"))  # Section label
-    # 1) total
+
     total_crypto = crypto_data.get("Total_Crypto_Value", 0)
     rows.append(row_left("Total Crypto Value", str(total_crypto)))
     rows.append(row_left())
 
-    # 2) Market Values
     market_vals = crypto_data.get("Crypto_Market_Values", {})
     if market_vals:
         rows.append(row_left("Market Values"))
-        # For readability, let's just show them all or top few
         for sym, val in market_vals.items():
             rows.append(row_left(sym, str(val)))
         rows.append(row_left())
 
-    # 3) If you want to show token quantities
-    #    (we skip or you can partially show them)
-    # rows.append(row_left("--Token Quantities--"))
-    # for sym, qty in crypto_data.get("Token_Quantities", {}).items():
-    #     rows.append(row_left(sym, str(qty)))
-    # rows.append(row_left())
-
-    return rows
-
-
-def parse_fixed_income_data(fid_data):
-    """
-    Summarize the most relevant parts of FIXED_INCOME_DATA in columns D/E:
-      - group_weighted_interest
-      - monthly_earnings_fixed_income
-      - yearly_earnings_fixed_income
-      - etc.
-    Skip the deeply nested 'fixed_income_full_data' or show briefly.
-    """
-    rows = []
-    rows.append(row_left("FIXED_INCOME_DATA"))
-
-    # group_weighted_interest
-    gwi = fid_data.get("group_weighted_interest", {})
-    if gwi:
-        rows.append(row_left("Group Weighted Interest:"))
-        for k, (principal, rate) in gwi.items():
-            note = f"{principal} @ {rate}"
-            rows.append(row_left(k, note))
-        rows.append(row_left())
-
-    # monthly/yearly
-    monthly = fid_data.get("monthly_earnings_fixed_income", 0)
-    yearly = fid_data.get("yearly_earnings_fixed_income", 0)
-    rows.append(row_left("Monthly Income", str(monthly)))
-    rows.append(row_left("Yearly Income", str(yearly)))
-    rows.append(row_left())
-
-    # Could also show e.g. 'stocks_principal_and_interest'
-    # or 'calculated_income', depending on your preference
-    # For brevity, let's show just the overall monthly/yearly.
     return rows
 
 
@@ -160,29 +119,21 @@ def parse_cash_data(cash_data):
 
 def build_left_columns(data):
     """
-    Build a list of rows that collectively represent
-    IB_DATA, CRYPTO_DATA, FIXED_INCOME_DATA, and a single line for CASH_DATA.
+    Build a list of rows that collectively represent:
+      - IB_DATA (Bonds, Stocks, etc., skipping only if subcat is empty)
+      - CRYPTO_DATA
+      - single line for CASH_DATA
     """
     rows = []
 
-    # 1) IB_DATA
     ib_data = data.get("IB_DATA", {})
     if ib_data:
-        rows.append(row_left("IB_DATA"))  # section label
-        # parse subcategories
         rows.extend(parse_ib_data(ib_data))
 
-    # 2) CRYPTO_DATA
     crypto_data = data.get("CRYPTO_DATA", {})
     if crypto_data:
         rows.extend(parse_crypto_data(crypto_data))
 
-    # 3) FIXED_INCOME_DATA
-    fid_data = data.get("FIXED_INCOME_DATA", {})
-    if fid_data:
-        rows.extend(parse_fixed_income_data(fid_data))
-
-    # 4) CASH_DATA
     cash_data = data.get("CASH_DATA", {})
     if cash_data:
         rows.extend(parse_cash_data(cash_data))
@@ -192,14 +143,17 @@ def build_left_columns(data):
 
 def build_right_columns(data, left_table):
     """
-    We want to place data in columns G/H/I for:
-      - row 0 => Financial Freedom => FIN_FREEDOM_GOAL_PROGRESS
-      - row 1 => Net worth => TOTAL_ASSETS
-      - row 2.. => each allocation category => value => pct
-      - final => Monthly Dividend (if any from FIXED_INCOME_DATA or other)
-    We'll place these in the first few rows, ignoring how big the left_table is.
+    Place data in columns G/H/I for:
+      - row 0 => "Financial Freedom" => FIN_FREEDOM_GOAL_PROGRESS
+      - row 1 => blank row
+      - row 2 => "Net worth" => TOTAL_ASSETS  (col I => '%' label)
+      - row 3.. => each allocation => value => pct
 
-    We'll define a helper to set a cell in final_table.
+    Then in columns K (10) / L (11) we show FIXED_INCOME_DATA:
+      - Single row for "Total" with e.g. "86483 @ 6.4%" from fixed_inc_principal_and_interest
+      - group_weighted_interest lines (Bonds, Crypto Landing, p2p_lending),
+        each e.g. "57720 @ 4.4%"
+      - after p2p_lending, one blank row, then monthly/yearly dividends.
     """
     final_table = left_table[:]
 
@@ -211,41 +165,87 @@ def build_right_columns(data, left_table):
             final_table[r].append("")
         final_table[r][c] = val
 
-    # Row 0 => colG=6 => "Financial Freedom", colH=7 => progress
+    #
+    # ============ Columns G/H/I (Net Worth & Allocations) ============
+    #
+    # Row 0 => "Financial Freedom"
     freedom = data.get("FIN_FREEDOM_GOAL_PROGRESS", "")
     set_cell(0, 6, "Financial Freedom")
     set_cell(0, 7, freedom)
 
-    # Row 1 => colG=6 => "Net worth", colH=7 => total
-    total_assets = data.get("TOTAL_ASSETS", 0)
-    set_cell(1, 6, "Net worth")
-    set_cell(1, 7, str(total_assets))
-    # Row 1 => colI=8 => "%" (label)
-    set_cell(1, 8, "%")
+    # Row 1 => blank
+    set_cell(1, 6, "")
+    set_cell(1, 7, "")
 
-    # ALLOCATIONS
-    # If present, show each category
+    # Row 2 => Net worth
+    total_assets = data.get("TOTAL_ASSETS", 0)
+    set_cell(2, 6, "Net worth")
+    set_cell(2, 7, str(total_assets))
+    set_cell(2, 8, "%")  # column I => label
+
+    # Allocations (row 3..)
     alloc_data = data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
-    # We'll convert each category => (value, pct).
-    # value = total_assets * (pct / 100)
-    row_idx = 2
+    row_idx = 3
     for cat, pct in alloc_data.items():
         val = round(total_assets * (pct / 100))
         set_cell(row_idx, 6, cat)
         set_cell(row_idx, 7, str(val))
-        set_cell(row_idx, 8, str(pct))
+        set_cell(row_idx, 8, f"{pct}")  # show raw % or formatted
         row_idx += 1
 
-    # Finally, monthly dividend (or monthly income)
-    # from e.g. "FIXED_INCOME_DATA['monthly_earnings_fixed_income']"
-    monthly_div = 0
-    if "FIXED_INCOME_DATA" in data:
-        monthly_div = data["FIXED_INCOME_DATA"].get("monthly_earnings_fixed_income", 0)
-        # Round if needed
-        monthly_div = round(monthly_div, 2)
+    #
+    # ============ Columns K/L (FIXED_INCOME_DATA) ============
+    #
+    fid = data.get("FIXED_INCOME_DATA", {})
+    gwi = fid.get("group_weighted_interest", {})
+    fipi = fid.get("fixed_inc_principal_and_interest", {})
 
-    set_cell(row_idx, 6, "Monthly Dividend")
-    set_cell(row_idx, 7, str(monthly_div))
+    # We'll place everything starting near row=2 => col=K=10
+    # Label "FIXED_INCOME_DATA"
+    set_cell(2, 10, "FIXED_INCOME_DATA")
+    row_gwi = 3
+
+    #
+    # 1) Combine principal & interest into a single row labeled "Total"
+    #    e.g. "86483 @ 6.4%"
+    #
+    if fipi:
+        principal = fipi.get("principal", 0)
+        interest_raw = fipi.get("interest", 0)  # e.g. 0.064 => "6.4%"
+        interest_str = f"{interest_raw * 100:.1f}%"
+        combined_val = f"{principal} @ {interest_str}"
+        # Single row
+        set_cell(row_gwi, 10, "Total")
+        set_cell(row_gwi, 11, combined_val)
+        row_gwi += 1
+
+    #
+    # 2) group_weighted_interest lines
+    #
+    if gwi:
+        for label, (principal, rate) in gwi.items():
+            rate_pct = f"{rate * 100:.1f}%"
+            text_val = f"{principal} @ {rate_pct}"
+            set_cell(row_gwi, 10, label)  # e.g. "Bonds"
+            set_cell(row_gwi, 11, text_val)  # e.g. "57720 @ 4.4%"
+            row_gwi += 1
+
+            # If label == "p2p_lending", we do the blank row + monthly/yearly
+            if label == "p2p_lending":
+                # one blank row
+                row_gwi += 1
+
+                # Monthly / Yearly Dividend
+                monthly_div = fid.get("total_monthly", 0)
+                yearly_div = fid.get("total_yearly", 0)
+
+                set_cell(row_gwi, 10, "Monthly Dividend")
+                set_cell(row_gwi, 11, str(monthly_div))
+                row_gwi += 1
+
+                set_cell(row_gwi, 10, "Yearly Dividend")
+                set_cell(row_gwi, 11, str(yearly_div))
+                row_gwi += 1
 
     return final_table
 
@@ -253,22 +253,64 @@ def build_right_columns(data, left_table):
 def single_tab_update(spreadsheet, data):
     """
     Create a new tab named today's date, place it at index=1.
-    Build a 'left_table' for columns D/E that includes IB_DATA, CRYPTO_DATA,
-    FIXED_INCOME_DATA, and a line for total cash.
-    Then overlay the 'right side' with net worth, allocations, etc.
+    Build a 'left_table' for columns D/E (IB_DATA, CRYPTO_DATA, CASH_DATA).
+    Then in columns G/H/I, show Net worth & Allocations.
+
+    In columns K/L, show:
+      - single row for "Total" => e.g. "86483 @ 6.4%"
+      - group_weighted_interest lines => e.g. "57720 @ 4.4%"
+      - after 'p2p_lending', one blank row => monthly/yearly dividends
     """
     date_title = datetime.now().strftime("%d %b %Y")
     worksheet = create_tab_at_left(spreadsheet, date_title)
 
-    # 1) Build the left side
+    # 1) Build the left side (D/E)
     left_table = build_left_columns(data)
 
-    # 2) Add the right side info
+    # 2) Add right side (G/H/I) + FIXED_INCOME lines in columns K/L
     final_table = build_right_columns(data, left_table)
 
-    # Upload
     worksheet.clear()
     worksheet.update("A1", final_table)
+
+
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
+
+
+def update_net_worth_timeline(spreadsheet, total_assets):
+    """
+    Appends a new row at the bottom of the 'net_worth_timeline' worksheet.
+    The new row will contain:
+    - total_assets (e.g., 140271) in column A
+    - current date in column B (e.g., "29 Dec 2024")
+    """
+
+    # 1) Open or create the 'net_worth_timeline' worksheet
+    try:
+        worksheet = spreadsheet.worksheet("net_worth_timeline")
+    except gspread.exceptions.WorksheetNotFound:
+        # If not found, create it (2 columns: "Net Worth" and "Date")
+        worksheet = spreadsheet.add_worksheet(
+            title="net_worth_timeline", rows=200, cols=2
+        )
+        # Optionally, you could insert headers in row 1:
+        # worksheet.update("A1", [["Net Worth", "Date"]])
+
+    # 2) Determine the next empty row
+    #    We can read all values and see how many rows we have
+    existing_values = worksheet.get_all_values()
+    last_row = len(existing_values)  # e.g. if we have 18 rows, last_row=18
+    next_row = last_row + 1  # the row index we want to update
+
+    # 3) Format the date, e.g., "29 Dec 2024"
+    date_str = datetime.now().strftime("%d %b %Y")
+
+    # 4) Write the new entry
+    #    Column A => total_assets, Column B => date_str
+    worksheet.update_cell(next_row, 1, str(total_assets))
+    worksheet.update_cell(next_row, 2, date_str)
 
 
 def main(data):
@@ -279,13 +321,12 @@ def main(data):
     spreadsheet = client.open(SPREADSHEET_NAME)
 
     single_tab_update(spreadsheet, data)
+    total_assets = data.get("TOTAL_ASSETS", 0)
+    update_net_worth_timeline(spreadsheet, total_assets)
 
 
 if __name__ == "__main__":
-    # Example data structure (the one you provided).
-    # In reality, you'll pass your actual data.
-    from decimal import Decimal
-
+    # Example usage
     data_structure = {
         "IB_DATA": {
             "Bonds": {
@@ -320,15 +361,15 @@ if __name__ == "__main__":
             "IB_Portfolio_Value": 104022,
         },
         "CRYPTO_DATA": {
-            "Total_Crypto_Value": 6280,
+            "Total_Crypto_Value": 6245,
             "Crypto_Market_Values": {
-                "BTC": 3773,
-                "ETH": 2062,
-                "TON": 103,
-                "ADA": 92,
-                "BNB": 84,
+                "BTC": 3748,
+                "ETH": 2057,
+                "TON": 102,
+                "ADA": 90,
+                "BNB": 83,
                 "EOS": 71,
-                "NEO": 71,
+                "NEO": 70,
                 "SC": 24,
             },
             "Token_Quantities": {
@@ -368,7 +409,7 @@ if __name__ == "__main__":
                 "p2p_lending": 277,
             },
             "fixed_inc_principal_and_interest": {"principal": 86483, "interest": 0.064},
-            "monthly_earnings_fixed_income": 462.0833333333333,
+            "monthly_earnings_fixed_income": 462,
             "yearly_earnings_fixed_income": 5545,
             "fixed_income_full_data": {
                 "Bonds": {
@@ -411,20 +452,21 @@ if __name__ == "__main__":
                 "wise": Decimal("0"),
             },
         },
-        "TOTAL_ASSETS": 140306,
-        "FIN_FREEDOM_GOAL_PROGRESS": "28.06%",
+        "TOTAL_ASSETS": 140271,
+        "FIN_FREEDOM_GOAL_PROGRESS": "28.05%",
         "ALLOCATIONS": {
             "allocation_breakdown": {
-                "Bonds": 41.24,
-                "Stocks": 30.68,
+                "Bonds": 41.26,
+                "Stocks": 30.69,
                 "Crypto Lending": 18.0,
-                "Crypto Coins": 4.48,
+                "Crypto Coins": 4.45,
                 "P2P Lending": 2.5,
-                "Commodities": 2.22,
+                "Commodities": 1.83,
                 "Cash": 0.88,
+                "Gold": 0.39,
                 "REIT": 0.0,
             },
-            "total_fixed_income_pct": 61.64,
+            "total_fixed_income_pct": 61.65,
         },
     }
 
