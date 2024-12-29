@@ -213,7 +213,9 @@ class FixedIncomePortfolio:
                 "principal": self.total_principal_and_interest[0],
                 "interest": self.total_principal_and_interest[1],
             },
-            "monthly_earnings_fixed_income": self.yearly_earnings_fixed_income / 12,
+            "monthly_earnings_fixed_income": int(
+                self.yearly_earnings_fixed_income / 12
+            ),
             "yearly_earnings_fixed_income": self.yearly_earnings_fixed_income,
             "fixed_income_full_data": self._portfolio.assets,
         }

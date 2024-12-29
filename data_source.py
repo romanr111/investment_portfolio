@@ -6,7 +6,10 @@ from src.brokers.ib_dividends import IBDividends
 from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
+from src.allocation_calculator import get_sorted_sector_allocations
 from src.dasha.dasha import DashaPortfolio
+
+FINANCIAL_FREEDOM_GOAL = 500000
 
 
 class DataSource:
@@ -16,6 +19,8 @@ class DataSource:
         self._calculate_stock_dividends()
         self._setup_fixed_income()
         self._setup_cash_and_dasha()
+        self.total_assets = self.calculate_total_assets()
+        self.ff_progress = self.calculate_ff_goal_progress()
 
     def _initialize_data_sources(self) -> None:
         """Initialize primary data source connections."""
@@ -101,6 +106,11 @@ class DataSource:
         ]
         return int(sum(asset_values))
 
+    def calculate_ff_goal_progress(self):
+        current = self.total_assets
+        goal_progress = round((current / FINANCIAL_FREEDOM_GOAL) * 100, 2)
+        return str(goal_progress) + "%"
+
     def get_combined_data(self) -> Dict:
         """Get combined portfolio data including all assets and calculations."""
         return {
@@ -115,13 +125,20 @@ class DataSource:
                 "Total": self.cash.total_cash,
                 "Breakdown": self.cash.as_dict(),
             },
-            "TOTAL_ASSETS": self.calculate_total_assets(),
+            "TOTAL_ASSETS": self.total_assets,
+            "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
         }
+
+    def get_data(self) -> Dict:
+        data = self.get_combined_data()
+        allocations = get_sorted_sector_allocations(data)
+        data["ALLOCATIONS"] = allocations
+        return data
 
 
 if __name__ == "__main__":
     data_source = DataSource()
-    portfolio_data = data_source.get_combined_data()
+    portfolio_data = data_source.get_data()
     print()
     print(portfolio_data)
     print()
