@@ -1,19 +1,21 @@
 import time
-
-from src.google_sheets.structure import SpreadsheetManager
+from src.google_sheets.spreadsheet_structure import PortfolioUpdater
+from data_source import DataSource
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
 #
 
+CREDENTIALS_PATH = "data/credentials.json"
+SPREADSHEET_NAME = "portfolio_automated"
+
 
 def main():
-    worksheet_name = "Test 2024"
-    # ib = InteractiveBrokers()
-    # crypto = CryptoEndpoint()
-    portfolio_manager = SpreadsheetManager(worksheet_name)
-    portfolio_manager.update_data()
-    portfolio_manager.format_spreadsheet()
+
+    data_source = DataSource()
+    data = data_source.get_data()
+    updater = PortfolioUpdater(CREDENTIALS_PATH, SPREADSHEET_NAME)
+    updater.update_portfolio(data)
 
 
 if __name__ == "__main__":

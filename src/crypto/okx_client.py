@@ -321,20 +321,6 @@ class OKXFiltered(OKXClient):
             print("\nNo active DeFi lending positions found.")
         else:
             print("\n=== Active DeFi Lending Positions ===")
-            for key, data in defi_lending_positions.items():
-                print("\n" + "=" * 40)
-                print(f"Asset-Protocol: {key}")
-                print("-" * 40)
-                print(f"Protocol: {data['protocol']}")
-                print(f"State: {data['state']}")
-                print(f"Invested Amount: {round(data['invested_amount']):.0f}")
-                print(f"APY: {data['apy']*100:.2f}%")
-                print(f"Earnings: {data['earnings']:.6f}")
-
-                if data["protocol_details"]:
-                    print("\nProtocol Details:")
-                    for k, v in data["protocol_details"].items():
-                        print(f"  {k}: {v}")
 
         return defi_lending_positions
 
@@ -475,6 +461,7 @@ class OKXFiltered(OKXClient):
 
         # Process Simple Earn positions
         print("Processing Simple Earn positions...")
+        print()
         simple_earn_positions = self.get_simple_earn_positions()
 
         for asset, (principal, yield_rate) in simple_earn_positions.items():
@@ -499,8 +486,8 @@ class OKXFiltered(OKXClient):
             principal = int(position_data["invested_amount"])
             yield_rate = float(position_data["apy"])
 
+            print()
             print(f"DeFi Position - {asset}:")
-            print(f"  Protocol: {position_data['protocol']}")
             print(f"  Principal: {principal}")
             print(f"  Rate: {yield_rate*100:.2f}%")
 
@@ -508,17 +495,14 @@ class OKXFiltered(OKXClient):
                 combined_positions = self.aggregate_positions(
                     combined_positions, (asset, principal, yield_rate)
                 )
-                print(
-                    f"  Updated combined position for {asset}: {combined_positions[asset]}\n"
-                )
 
-        # Final combined positions
-        print("\nFinal Combined Positions:")
+        print("\n" + "=" * 40)
+        print("Final OKX Lending Combined Positions:")
+        print("" + "=" * 40)
         final_positions = {
             asset: (int(principal), yield_rate)
             for asset, (principal, yield_rate) in combined_positions.items()
         }
-        print(final_positions)
         for asset, (principal, rate) in final_positions.items():
             print(f"{asset}:")
             print(f"  Total Principal: {principal}")

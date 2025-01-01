@@ -1,6 +1,3 @@
-# Bond ETFs and Fixed Income
-
-
 BONDS_VALUES = [
     # US Treasury
     "SGOV",  # iShares 0-3 Month Treasury Bond ETF
@@ -24,11 +21,75 @@ BONDS_VALUES = [
     "HYGV",  # FlexShares High Yield Value-Scored Bond Index Fund
     "HYDB",  # iShares High Yield Bond Factor ETF
     "GHYG",  # iShares Global High Yield Corporate Bond ETF
-    "SPHY",
+    "SPHY",  # SPDR Portfolio High Yield Bond ETF
     # International/Emerging Markets Bonds
     "EMB",  # iShares J.P. Morgan USD Emerging Markets Bond ETF
     "EMLC",  # VanEck J.P. Morgan EM Local Currency Bond ETF
     "PCY",  # Invesco Emerging Markets Sovereign Debt ETF
+    # Broad Market/Aggregate Bonds
+    "AGG",  # iShares Core U.S. Aggregate Bond ETF
+    "BND",  # Vanguard Total Bond Market ETF
+    # Municipal Bonds
+    "MUB",  # iShares National Muni Bond ETF
+    # Inflation-Protected
+    "VTIP",  # Vanguard Short-Term Inflation-Protected Securities ETF
+]
+
+POPULAR_ETFS = [
+    # Broad Market US
+    "SPY",  # SPDR S&P 500 ETF Trust - tracks S&P 500
+    "VOO",  # Vanguard S&P 500 ETF
+    "IVV",  # iShares Core S&P 500 ETF
+    "QQQ",  # Invesco QQQ Trust - tracks NASDAQ-100
+    "VTI",  # Vanguard Total Stock Market ETF
+    # International & Emerging Markets
+    "EFA",  # iShares MSCI EAFE ETF - developed markets
+    "VEA",  # Vanguard FTSE Developed Markets ETF
+    "EEM",  # iShares MSCI Emerging Markets ETF
+    "VWO",  # Vanguard FTSE Emerging Markets ETF
+    "IEFA",  # iShares Core MSCI EAFE ETF
+    "KWEB",  # KraneShares CSI China Internet ETF
+    "FXI",  # iShares China Large-Cap ETF
+    "MCHI",  # iShares MSCI China ETF
+    "EWJ",  # iShares MSCI Japan ETF
+    "EWY",  # iShares MSCI South Korea ETF
+    "INDA",  # iShares MSCI India ETF
+    "ARGT",  # Global X MSCI Argentina ETF
+    # Fixed Income
+    *BONDS_VALUES,
+    # Sectors
+    "XLF",  # Financial Select Sector SPDR Fund
+    "XLK",  # Technology Select Sector SPDR Fund
+    "XLE",  # Energy Select Sector SPDR Fund
+    "XLV",  # Health Care Select Sector SPDR Fund
+    "XLI",  # Industrial Select Sector SPDR Fund
+    "XLC",  # Communication Services Select Sector SPDR Fund
+    "XLU",  # Utilities Select Sector SPDR Fund
+    "XLP",  # Consumer Staples Select Sector SPDR Fund
+    "XLY",  # Consumer Discretionary Select Sector SPDR Fund
+    # Factors & Styles
+    "IWM",  # iShares Russell 2000 ETF - small cap
+    "IWF",  # iShares Russell 1000 Growth ETF
+    "IWD",  # iShares Russell 1000 Value ETF
+    "VIG",  # Vanguard Dividend Appreciation ETF
+    "USMV",  # iShares MSCI USA Min Vol Factor ETF
+    "MTUM",  # iShares MSCI USA Momentum Factor ETF
+    "QUAL",  # iShares MSCI USA Quality Factor ETF
+    "SIZE",  # iShares MSCI USA Size Factor ETF
+    # Commodities & Real Estate
+    "GLD",  # SPDR Gold Shares
+    "IAU",  # iShares Gold Trust
+    "SLV",  # iShares Silver Trust
+    "VNQ",  # Vanguard Real Estate ETF
+    "USO",  # United States Oil Fund
+    "DBC",  # Invesco DB Commodity Index Tracking Fund
+    "PDBC",  # Invesco Optimum Yield Diversified Commodity Strategy
+    # Technology & Innovation
+    "ARKK",  # ARK Innovation ETF
+    "ARKG",  # ARK Genomic Revolution ETF
+    "ICLN",  # iShares Global Clean Energy ETF
+    "SMH",  # VanEck Semiconductor ETF
+    "SOXX",  # iShares Semiconductor ETF
 ]
 
 

@@ -1,5 +1,8 @@
 import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import Dict, List, Optional, Tuple, Any
 
 from data.endpoints import NASDAQ_API, NASDAQ_HEADERS
 from data.filters_constants import (
@@ -7,67 +10,106 @@ from data.filters_constants import (
     CHINA_STOCKS_KEY,
     HK_TO_ADR_MAP,
     STOCKS_KEY,
+    POPULAR_ETFS,
+    BONDS_VALUES,
 )
 from src.brokers.ib import InteractiveBrokers
-
-# Change from relative to absolute import
 from src.brokers.ib_bond_data_fetcher import IBBondsClient
 from src.helpers import perform_request
 
+# Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from functools import lru_cache
-from typing import Dict, List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
-
-
 # Data Models
 @dataclass
 class AssetInfo:
+    """Represents detailed information about a financial asset."""
+
     market_value: float
     yield_rate: float
     yearly_income: float
     adr_symbol: Optional[str]
-    asset_type: str
+    asset_type: str  # "bond" or "stock"
 
 
 @dataclass
 class PortfolioSummary:
+    """Represents a summary of portfolio performance metrics."""
+
     monthly_total: float
     yearly_total: float
+    stock_yearly: float
     asset_details: Dict[str, AssetInfo]
 
 
 # Abstract Base Classes
 class AssetProcessor(ABC):
+    """Abstract base class for processing different types of assets."""
+
     @abstractmethod
     def can_process(self, symbol: str) -> bool:
+        """Determines if this processor can handle the given symbol."""
         pass
 
     @abstractmethod
     def calculate_yearly_income(self, symbol: str, market_value: float) -> AssetInfo:
+        """Calculates yearly income for the given symbol."""
         pass
 
 
 class DataFetcher(ABC):
+    """Abstract base class for fetching asset data."""
+
     @abstractmethod
-    def fetch_data(self, symbol: str) -> Dict:
+    def fetch_data(self, symbol: str) -> Dict[str, Any]:
+        """Fetches data for the given symbol."""
         pass
 
 
-class BondProcessor(AssetProcessor):
-    def __init__(self, bond_data_client):
-        self.bond_client = bond_data_client
-        self.bond_data = {}
+# Concrete Implementation Classes
+class StockAndETFDataFetcher(DataFetcher):
+    """Handles fetching data for stocks and ETFs."""
 
-    def fetch_bond_data(self, bond_ids: List[str]):
+    def __init__(
+        self,
+        api_url: str,
+        headers: Dict[str, str],
+        etf_symbols: List[str],
+        adr_map: Dict[str, str],
+        bond_etfs: List[str],
+    ):
+        self.api_url = api_url
+        self.headers = headers
+        self.etf_symbols = etf_symbols
+        self.adr_map = adr_map
+        self.bond_etfs = bond_etfs
+
+    def _get_api_symbol(self, symbol: str) -> str:
+        """Maps a symbol to its API equivalent."""
+        return self.adr_map.get(symbol, symbol)
+
+    @lru_cache(maxsize=None)
+    def fetch_data(self, symbol: str) -> Dict[str, Any]:
+        """Fetches dividend data for the given symbol."""
+        api_symbol = self._get_api_symbol(symbol)
+        asset_class = "etf" if api_symbol in self.etf_symbols else "stocks"
+        param = f"{api_symbol}/dividends?assetclass={asset_class}"
+        return perform_request(self.api_url, param, self.headers)
+
+
+class BondProcessor(AssetProcessor):
+    """Processes bond-specific assets."""
+
+    def __init__(self, bond_data_client: IBBondsClient):
+        self.bond_client = bond_data_client
+        self.bond_data: Dict[str, Tuple[Any, float]] = {}
+
+    def fetch_bond_data(self, bond_ids: List[str]) -> None:
+        """Fetches data for a list of bond IDs."""
         try:
             self.bond_data = self.bond_client.get_bond_main_info(bond_ids)
         except Exception as e:
@@ -75,10 +117,11 @@ class BondProcessor(AssetProcessor):
             self.bond_data = {}
 
     def can_process(self, symbol: str) -> bool:
+        """Determines if symbol is a bond (starts with 'IBCID')."""
         return symbol.startswith("IBCID")
 
     def calculate_yearly_income(self, symbol: str, market_value: float) -> AssetInfo:
-        # If there is no bond_data, fall back to the portfolio's market_value
+        """Calculates yearly income for bonds."""
         if symbol not in self.bond_data:
             return AssetInfo(
                 market_value=market_value,
@@ -88,13 +131,11 @@ class BondProcessor(AssetProcessor):
                 asset_type="bond",
             )
 
-        # self.bond_data might still have a coupon or yield
-        # but do NOT overwrite the market_value
         _, yield_rate = self.bond_data[symbol]
         yearly_income = market_value * yield_rate
 
         return AssetInfo(
-            market_value=market_value,  # keep the original portfolio market_value
+            market_value=market_value,
             yield_rate=yield_rate,
             yearly_income=round(yearly_income, 2),
             adr_symbol=None,
@@ -102,34 +143,20 @@ class BondProcessor(AssetProcessor):
         )
 
 
-class StockDataFetcher(DataFetcher):
-    def __init__(self, api_url, headers, etf_symbols, adr_map):
-        self.api_url = api_url
-        self.headers = headers
-        self.etf_symbols = etf_symbols
-        self.adr_map = adr_map
-
-    def _get_api_symbol(self, symbol: str) -> str:
-        return self.adr_map.get(symbol, symbol)
-
-    @lru_cache(maxsize=None)
-    def fetch_data(self, symbol: str) -> Dict:
-        api_symbol = self._get_api_symbol(symbol)
-        asset_class = "etf" if api_symbol in self.etf_symbols else "stocks"
-        param = f"{api_symbol}/dividends?assetclass={asset_class}"
-        return perform_request(self.api_url, param, self.headers)
-
-
 class StockProcessor(AssetProcessor):
+    """Processes stock and ETF assets."""
+
     TAX_DISCOUNT = 0.85  # 15% USA tax
 
     def __init__(self, data_fetcher: DataFetcher):
         self.data_fetcher = data_fetcher
 
     def can_process(self, symbol: str) -> bool:
+        """Processes anything that's not a bond."""
         return not symbol.startswith("IBCID")
 
-    def _get_yield_from_div_info(self, div_info: Dict) -> float:
+    def _get_yield_from_div_info(self, div_info: Dict[str, Any]) -> float:
+        """Extracts yield rate from dividend information."""
         try:
             if (
                 div_info["status"]["rCode"] == 200
@@ -144,39 +171,38 @@ class StockProcessor(AssetProcessor):
             return 0.0
 
     def calculate_yearly_income(self, symbol: str, market_value: float) -> AssetInfo:
+        """Calculates yearly income for stocks and ETFs."""
         div_info = self.data_fetcher.fetch_data(symbol)
         yield_rate = self._get_yield_from_div_info(div_info)
         yearly_income = market_value * yield_rate * self.TAX_DISCOUNT
         api_symbol = self.data_fetcher._get_api_symbol(symbol)
+
+        asset_type = "bond" if symbol in self.data_fetcher.bond_etfs else "stock"
 
         return AssetInfo(
             market_value=market_value,
             yield_rate=yield_rate,
             yearly_income=round(yearly_income, 2),
             adr_symbol=api_symbol if api_symbol != symbol else None,
-            asset_type="stock",
+            asset_type=asset_type,
         )
 
 
-@dataclass
-class PortfolioSummary:
-    monthly_total: float
-    yearly_total: float
-    stock_yearly: float  # Added stock_yearly field
-    asset_details: Dict[str, AssetInfo]
-
-
 class PortfolioAnalyzer:
+    """Analyzes portfolio data using appropriate processors."""
+
     def __init__(self, processors: List[AssetProcessor]):
         self.processors = processors
 
     def _get_processor(self, symbol: str) -> AssetProcessor:
+        """Returns appropriate processor for given symbol."""
         for processor in self.processors:
             if processor.can_process(symbol):
                 return processor
         raise ValueError(f"No processor found for symbol: {symbol}")
 
     def analyze_portfolio(self, market_values: Dict[str, float]) -> PortfolioSummary:
+        """Analyzes portfolio and returns summary."""
         results: Dict[str, AssetInfo] = {}
 
         for symbol, market_value in market_values.items():
@@ -192,7 +218,6 @@ class PortfolioAnalyzer:
         bond_yearly = sum(
             data.yearly_income for data in results.values() if data.asset_type == "bond"
         )
-
         stock_yearly = sum(
             data.yearly_income
             for data in results.values()
@@ -202,8 +227,8 @@ class PortfolioAnalyzer:
         total_yearly = bond_yearly + stock_yearly
         monthly_total = total_yearly / 12
 
-        print()
-        print("[IB]")
+        # Log summary information
+        print("\n[IB]")
         logger.info(f"Total yearly bond income (no tax): ${bond_yearly:.2f}")
         logger.info(f"Total yearly stock dividends after tax: ${stock_yearly:.2f}")
         logger.info(f"Total combined yearly income: ${total_yearly:.2f}")
@@ -213,32 +238,21 @@ class PortfolioAnalyzer:
         return PortfolioSummary(
             monthly_total=round(monthly_total, 2),
             yearly_total=round(total_yearly, 2),
-            stock_yearly=round(stock_yearly, 2),  # Added stock_yearly to return
+            stock_yearly=round(stock_yearly, 2),
             asset_details=results,
         )
 
 
 class IBDividends:
-    def __init__(self, portfolio_data: Dict):
+    """Main class for handling Interactive Brokers dividend calculations."""
+
+    def __init__(self, portfolio_data: Dict[str, Any]):
         self.portfolio_data = portfolio_data
         self.market_values, self.bond_ids = self._extract_portfolio_data()
 
         # Initialize components
-        stock_data_fetcher = StockDataFetcher(
-            NASDAQ_API,
-            NASDAQ_HEADERS,
-            [
-                "MCHI",
-                "VNQI",
-                "SGOV",
-                "TLT",
-                "LQD",
-                "HYG",
-                "JNK",
-                "EMB",
-                "KWEB",
-            ],  # TODO: Remove hardcoded;
-            HK_TO_ADR_MAP,
+        stock_data_fetcher = StockAndETFDataFetcher(
+            NASDAQ_API, NASDAQ_HEADERS, POPULAR_ETFS, HK_TO_ADR_MAP, BONDS_VALUES
         )
 
         bond_processor = BondProcessor(IBBondsClient())
@@ -249,14 +263,11 @@ class IBDividends:
         self.analyzer = PortfolioAnalyzer([bond_processor, stock_processor])
 
     def _extract_portfolio_data(self) -> Tuple[Dict[str, float], List[str]]:
-        market_values = {}
-        bond_ids = []
+        """Extracts market values and bond IDs from portfolio data."""
+        market_values: Dict[str, float] = {}
+        bond_ids: List[str] = []
 
-        relevant_categories = {
-            BONDS_KEY,
-            CHINA_STOCKS_KEY,
-            STOCKS_KEY,
-        }
+        relevant_categories = {BONDS_KEY, CHINA_STOCKS_KEY, STOCKS_KEY}
 
         for category, stocks in self.portfolio_data.items():
             if category in relevant_categories and isinstance(stocks, dict):
@@ -276,6 +287,7 @@ class IBDividends:
     def get_my_total_monthly_and_yearly_divs(
         self,
     ) -> Tuple[float, float, float, Dict[str, AssetInfo]]:
+        """Calculates and returns dividend summary information."""
         summary = self.analyzer.analyze_portfolio(self.market_values)
 
         print("\nIB Dividend Summary:")
@@ -300,7 +312,8 @@ class IBDividends:
         )
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the script."""
     broker = InteractiveBrokers()
     info = broker.get_portfolio_positions()
     print(f"info ---> {info}")
@@ -308,3 +321,7 @@ if __name__ == "__main__":
 
     pd = IBDividends(info)
     monthly, yearly, stock_yearly, details = pd.get_my_total_monthly_and_yearly_divs()
+
+
+if __name__ == "__main__":
+    main()

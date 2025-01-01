@@ -9,17 +9,8 @@ from typing import Dict, Tuple, Any, Optional
 import requests
 
 from data.api_keys import WHITEBIT_API_KEY, WHITEBIT_API_SECRET
+from data.assets_data import WHITEBIT_SAVINGS
 from src.crypto.base_exchange_client import ExchangeBase
-
-##########################################################
-# TODO:
-WHITEBIT_SAVINGS = [
-    ("USDT", 2077, 0.17),
-    ("USDC", 5909, 0.158),
-    ("USDT", 1787, 0.14),
-    ("USDC", 1495, 0.148),
-]
-##########################################################
 
 
 class WhiteBit(ExchangeBase):

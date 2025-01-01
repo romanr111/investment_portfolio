@@ -11,6 +11,10 @@ from src.dasha.dasha import DashaPortfolio
 
 FINANCIAL_FREEDOM_GOAL = 500000
 
+#
+# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
+#
+
 
 class DataSource:
     def __init__(self):
@@ -133,6 +137,7 @@ class DataSource:
         data = self.get_combined_data()
         allocations = get_sorted_sector_allocations(data)
         data["ALLOCATIONS"] = allocations
+        print(data)
         return data
 
 

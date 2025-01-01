@@ -100,11 +100,11 @@ class BinanceClient(ExchangeBase):
 
         # Process flexible savings
         for loan in self.flexible_savings.get("rows", []):
-            asset = loan.get("asset", "Unknown")
+            asset = str(loan.get("asset", "Unknown"))
             if asset not in self.STABLECOINS:
                 continue
 
-            principal = round(float(loan.get("totalAmount", 0)))  # Round to integer
+            principal = round(float(loan.get("totalAmount", 0)))
             latest_apr = float(loan.get("latestAnnualPercentageRate", 0))
             tier_apr_dict = loan.get("tierAnnualPercentageRate", {})
             additional_yield = float(loan.get("yesterdayAirdropPercentageRate", 0))
@@ -123,12 +123,12 @@ class BinanceClient(ExchangeBase):
 
         # Process fixed savings
         for loan in self.fixed_savings.get("rows", []):
-            asset = loan.get("asset", "Unknown")
+            asset = str(loan.get("asset", "Unknown"))
             if asset not in self.STABLECOINS:
                 continue
 
-            principal = round(float(loan.get("amount", 0)))  # Round to integer
-            apy = round(float(loan.get("apy", 0)), 4)  # Round to 4 decimal places
+            principal = round(float(loan.get("amount", 0)))
+            apy = round(float(loan.get("apy", 0)), 4)
 
             if principal > 0:
                 savings_positions = self.aggregate_positions(
@@ -188,15 +188,46 @@ class BinanceClient(ExchangeBase):
 
         return {asset: balance for asset, balance in aggregated.items() if balance > 0}
 
+    def get_funding_wallet_balance(self) -> Dict[str, float]:
+        """Get balances from Funding wallet."""
+        try:
+            params = {
+                "timestamp": int(
+                    time.time() * 1000
+                ),  # Current timestamp in milliseconds
+                "needBtcValuation": "false",  # We don't need BTC valuation
+            }
+            funding_wallet = self.client._request_margin_api(
+                "post", "asset/get-funding-asset", signed=True, data=params
+            )
+
+            if not funding_wallet:
+                return {}
+
+            balances = {}
+            for asset in funding_wallet:
+                try:
+                    free_balance = float(asset.get("free", "0"))
+                    if free_balance > 0:
+                        balances[asset["asset"]] = free_balance
+                except (ValueError, TypeError, KeyError) as e:
+                    print(f"WARNING: Error processing funding wallet asset: {e}")
+                    continue
+
+            return self._filter_small_balances(balances)
+        except Exception as e:
+            print(f"WARNING: Unable to fetch funding wallet balance: {e}")
+            return {}
+
     def get_cash_balance(self) -> int:
-        """Get total stablecoin balance in spot account."""
-        stablecoin_balances = self.filter_out_stablecoin_balances(
-            dict(self.spot_balances)
+        """Get total stablecoin balance in spot and funding accounts."""
+        funding_balances = self.get_funding_wallet_balance()
+        funding_stablecoins = self.filter_out_stablecoin_balances(funding_balances)
+        spot_stablecoins = self.filter_out_stablecoin_balances(dict(self.spot_balances))
+        total_stablecoins = sum(spot_stablecoins.values()) + sum(
+            funding_stablecoins.values()
         )
-        if not stablecoin_balances:
-            return 0
-        else:
-            return sum(stablecoin_balances.values())
+        return int(total_stablecoins)
 
     def get_earn_total_cash_savings(self) -> int:
         """Get total stablecoin savings in Binance Earn."""
@@ -211,30 +242,30 @@ class BinanceClient(ExchangeBase):
 
 def main():
     """Main function demonstrating usage of the refactored classes."""
-    try:
-        # Binance
-        binance_client = BinanceClient()
-        print("\n=== Binance ===")
-        print("\nAggregated Crypto Balances:")
-        crypto = binance_client.get_all_crypto_balances()
-        for asset, balance in crypto.items():
-            print(f"{asset}: {balance:.6f}")
+    binance_client = BinanceClient()
+    print("\n=== Binance ===")
+    print("\nAggregated Crypto Balances:")
+    crypto = binance_client.get_all_crypto_balances()
+    for asset, balance in crypto.items():
+        print(f"{asset}: {balance:.6f}")
 
-        cash = binance_client.get_cash_balance()
-        print(f"\nStablecoin Balances: {cash}")
+    print("\nStablecoin Balances:")
+    cash = binance_client.get_cash_balance()
+    print(f"Total: {cash}")
 
-        print("\nSavings Positions:")
-        binance_savings = binance_client.get_savings_positions()
-        for asset, (principal, yield_rate) in binance_savings.items():
-            print(f"{asset}: Principal={principal}, APY={yield_rate*100:.2f}%")
-
-    except Exception as e:
-        print(f"ERROR inside main(): {e}")
+    print("\nSavings Positions:")
+    binance_savings = binance_client.get_savings_positions()
+    for _, positions in binance_savings.items():
+        for asset, (principal, yield_rate) in positions.items():
+            if asset != "None":
+                print(f"{asset}: Principal={principal}, APY={yield_rate*100:.2f}%")
+            else:
+                print("No active savings positions")
 
 
 if __name__ == "__main__":
-    start_time = time.time()  # Start time
+    start_time = time.time()
     main()
-    end_time = time.time()  # End time
+    end_time = time.time()
     execution_time = end_time - start_time
     print(f"\nExecution time of main(): {execution_time:.2f} seconds")

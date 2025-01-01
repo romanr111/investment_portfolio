@@ -772,7 +772,7 @@ class IBBondsClient:
         )
 
         # Wait for market data
-        timeout = 10
+        timeout = 5
         while timeout > 0 and math.isnan(ticker.marketPrice()):
             self.ib.sleep(1)
             timeout -= 1

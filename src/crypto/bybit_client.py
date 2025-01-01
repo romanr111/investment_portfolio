@@ -163,6 +163,7 @@ class Bybit(ExchangeBase):
 
     def get_savings_positions(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """Get savings positions. Currently returns empty as endpoint is not available."""
+        # TODO:
         return {"bybit": BYBIT_SAVINGS}
 
 
@@ -199,21 +200,20 @@ def main():
 
         print("\nSavings:")
         savings = bybit.get_savings_positions()
-        for asset, (principal, apy) in savings.items():
-            print(f"{asset}: Principal = ${principal:.2f}, APY={apy * 100:.1f}%")
+        for exchange, positions in savings.items():
+            print(f"\n{exchange.capitalize()}:")
+            for asset, (principal, apy) in positions.items():
+                print(f"{asset}: Principal = {principal}, APY={apy:.1%}")
 
         print("\nFunding Balances:")
         funding_balances = bybit.get_funding_balances()
         for asset, balance in funding_balances.items():
             print(f"{asset}: {balance:.6f}")
 
-        print(f"\n Total Cash - {bybit.get_cash_balance()}")
+        print(f"\nByBit Free Cash - {bybit.get_cash_balance()}")
 
     except Exception as e:
         print(f"Error in main: {e}")
-        print(f"\nAn error occurred: {e}")
-    finally:
-        print("\n=== Program Completed ===")
 
 
 if __name__ == "__main__":
