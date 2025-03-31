@@ -3,6 +3,8 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Union, Tuple
+import logging
+from .formatting import DataFormatter, PortfolioFormatter, TimelineFormatter
 
 
 class GoogleSheetsClient:
@@ -56,21 +58,6 @@ class PortfolioSpreadsheet:
             }
         )
         return worksheet
-
-
-class DataFormatter:
-    """Handles data formatting for spreadsheet cells."""
-
-    @staticmethod
-    def row_left(d_val: str = "", e_val: str = "") -> List[str]:
-        """Create a row reaching columns D & E."""
-        return ["", "", "", d_val, e_val]
-
-    @staticmethod
-    def format_fixed_income(principal: Union[int, float], interest: float) -> str:
-        """Format fixed income data."""
-        interest_str = f"{interest * 100:.1f}%"
-        return f"{principal} @ {interest_str}"
 
 
 class PortfolioDataParser:
@@ -130,23 +117,149 @@ class PortfolioTableBuilder:
 
     def __init__(self, data: Dict[str, Any]):
         self.data = data
+        self.category_header_rows = []  # Track rows with category headers
 
     def build_left_columns(self) -> List[List[str]]:
-        """Build columns D/E data."""
+        """Build columns D/E data with enhanced stock percentage display."""
         rows = []
+        self.category_header_rows = []  # Reset the tracker
 
         ib_data = self.data.get("IB_DATA", {})
         if ib_data:
-            rows.extend(PortfolioDataParser.parse_ib_data(ib_data))
+            # Calculate stock values and percentages
+            china_stocks = ib_data.get("China Stocks", {})
+            regular_stocks = ib_data.get("Stocks", {})
+            china_stocks_value = sum(china_stocks.values()) if china_stocks else 0
+            regular_stocks_value = sum(regular_stocks.values()) if regular_stocks else 0
+            total_stocks_value = china_stocks_value + regular_stocks_value
 
+            # Calculate percentages of total stocks
+            if total_stocks_value > 0:
+                china_pct = china_stocks_value / total_stocks_value * 100
+                regular_pct = regular_stocks_value / total_stocks_value * 100
+
+                # Format the percentage strings
+                china_pct_str = DataFormatter.format_percentage(china_pct)
+                regular_pct_str = DataFormatter.format_percentage(regular_pct)
+
+                # Process categories
+                for subcat, contents in ib_data.items():
+                    if isinstance(contents, dict) and not contents:
+                        continue
+
+                    if isinstance(contents, dict):
+                        # Special handling for China Stocks and Stocks categories
+                        if subcat == "China Stocks":
+                            # Track the row index for the category header
+                            self.category_header_rows.append(len(rows))
+                            rows.append(
+                                DataFormatter.row_left(
+                                    f"{subcat} / {china_pct_str}",
+                                    DataFormatter.format_currency(china_stocks_value),
+                                )
+                            )
+                        elif subcat == "Stocks":
+                            # Track the row index for the category header
+                            self.category_header_rows.append(len(rows))
+                            rows.append(
+                                DataFormatter.row_left(
+                                    f"{subcat} / {regular_pct_str}",
+                                    DataFormatter.format_currency(regular_stocks_value),
+                                )
+                            )
+                        else:
+                            # Track the row index for any other category header
+                            self.category_header_rows.append(len(rows))
+                            rows.append(DataFormatter.row_left(subcat))
+
+                        # Add individual components
+                        for sym, val in contents.items():
+                            rows.append(
+                                DataFormatter.row_left(
+                                    sym, DataFormatter.format_currency(val)
+                                )
+                            )
+
+                        rows.append(DataFormatter.row_left())
+                    else:
+                        rows.append(
+                            DataFormatter.row_left(
+                                subcat, DataFormatter.format_currency(contents)
+                            )
+                        )
+                        rows.append(DataFormatter.row_left())
+            else:
+                # Fallback if no stock values are available
+                rows.extend(self._parse_ib_data_with_tracking(ib_data))
+        else:
+            # Fallback if IB data is missing
+            rows.extend(self._parse_ib_data_with_tracking(ib_data))
+
+        # Handle CRYPTO_DATA and track its header
         crypto_data = self.data.get("CRYPTO_DATA", {})
         if crypto_data:
-            rows.extend(PortfolioDataParser.parse_crypto_data(crypto_data))
+            self.category_header_rows.append(len(rows))  # Track CRYPTO_DATA header
+            rows.append(DataFormatter.row_left("CRYPTO_DATA"))
 
+            total_crypto = crypto_data.get("Total_Crypto_Value", 0)
+            rows.append(
+                DataFormatter.row_left(
+                    "Total Crypto Value", DataFormatter.format_currency(total_crypto)
+                )
+            )
+            rows.append(DataFormatter.row_left())
+
+            market_vals = crypto_data.get("Crypto_Market_Values", {})
+            if market_vals:
+                self.category_header_rows.append(
+                    len(rows)
+                )  # Track Market Values header
+                rows.append(DataFormatter.row_left("Market Values"))
+                for sym, val in market_vals.items():
+                    rows.append(
+                        DataFormatter.row_left(sym, DataFormatter.format_currency(val))
+                    )
+                rows.append(DataFormatter.row_left())
+
+        # Handle CASH_DATA and track its header
         cash_data = self.data.get("CASH_DATA", {})
         if cash_data:
-            rows.extend(PortfolioDataParser.parse_cash_data(cash_data))
+            total_val = cash_data.get("Total", 0)
+            if isinstance(total_val, Decimal):
+                total_val = float(total_val)
+            self.category_header_rows.append(len(rows))  # Track CASH_DATA header
+            rows.append(
+                DataFormatter.row_left(
+                    "CASH_DATA (total)", DataFormatter.format_currency(total_val)
+                )
+            )
+            rows.append(DataFormatter.row_left())
 
+        return rows
+
+    def _parse_ib_data_with_tracking(self, ib_data: Dict) -> List[List[str]]:
+        """Parse IB data and track category header rows."""
+        rows = []
+        for subcat, contents in ib_data.items():
+            if isinstance(contents, dict) and not contents:
+                continue
+
+            if isinstance(contents, dict):
+                # Track the row index for the category header
+                self.category_header_rows.append(len(rows))
+                rows.append(DataFormatter.row_left(subcat))
+                for sym, val in contents.items():
+                    rows.append(
+                        DataFormatter.row_left(sym, DataFormatter.format_currency(val))
+                    )
+                rows.append(DataFormatter.row_left())
+            else:
+                rows.append(
+                    DataFormatter.row_left(
+                        subcat, DataFormatter.format_currency(contents)
+                    )
+                )
+                rows.append(DataFormatter.row_left())
         return rows
 
     def _set_cell(self, final_table: List[List[str]], r: int, c: int, val: str) -> None:
@@ -157,7 +270,7 @@ class PortfolioTableBuilder:
             final_table[r].append("")
         final_table[r][c] = val
 
-    def build_right_columns(self, left_table: List[List[str]]) -> List[List[str]]:
+    def build_central_columns(self, left_table: List[List[str]]) -> List[List[str]]:
         """Build complete table including right columns."""
         final_table = left_table[:]
 
@@ -169,16 +282,50 @@ class PortfolioTableBuilder:
         # Net worth
         total_assets = self.data.get("TOTAL_ASSETS", 0)
         self._set_cell(final_table, 2, 6, "Net worth")
-        self._set_cell(final_table, 2, 7, str(total_assets))
+        self._set_cell(final_table, 2, 7, DataFormatter.format_currency(total_assets))
         self._set_cell(final_table, 2, 8, "%")
 
         # Allocations
         alloc_data = self.data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
+
+        # Get the actual asset values
+        ib_data = self.data.get("IB_DATA", {})
+
+        # For bonds
+        bonds = ib_data.get("Bonds", {})
+        actual_bonds_value = sum(bonds.values()) if bonds else 0
+
+        # For stocks (combining China Stocks and Stocks)
+        china_stocks = ib_data.get("China Stocks", {})
+        regular_stocks = ib_data.get("Stocks", {})
+        actual_china_stocks_value = sum(china_stocks.values()) if china_stocks else 0
+        actual_regular_stocks_value = (
+            sum(regular_stocks.values()) if regular_stocks else 0
+        )
+
+        # Calculate total stocks value directly from the stock values
+        actual_stocks_value = actual_china_stocks_value + actual_regular_stocks_value
+
+        # Optional logging for transparency
+        logger = logging.getLogger(__name__)
+        logger.debug(f"China Stocks sum: {actual_china_stocks_value}")
+        logger.debug(f"Regular Stocks sum: {actual_regular_stocks_value}")
+        logger.debug(f"Total Stocks calculated: {actual_stocks_value}")
+
         for row_idx, (cat, pct) in enumerate(alloc_data.items(), start=3):
-            val = round(total_assets * (pct / 100))
+            # Use actual values for Bonds and Stocks, calculate others from percentage
+            if cat == "Bonds" and actual_bonds_value > 0:
+                val = actual_bonds_value
+            elif cat == "Stocks" and actual_stocks_value > 0:
+                val = actual_stocks_value
+            else:
+                val = round(total_assets * (pct / 100))
+
             self._set_cell(final_table, row_idx, 6, cat)
-            self._set_cell(final_table, row_idx, 7, str(val))
-            self._set_cell(final_table, row_idx, 8, f"{pct}")
+            self._set_cell(final_table, row_idx, 7, DataFormatter.format_currency(val))
+            self._set_cell(
+                final_table, row_idx, 8, DataFormatter.format_percentage(pct)
+            )
 
         # Fixed Income Data (K/L)
         self._build_fixed_income_section(final_table)
@@ -215,11 +362,21 @@ class PortfolioTableBuilder:
                     yearly_div = fid.get("total_yearly", 0)
 
                     self._set_cell(final_table, row_gwi, 10, "Monthly Dividend")
-                    self._set_cell(final_table, row_gwi, 11, str(monthly_div))
+                    self._set_cell(
+                        final_table,
+                        row_gwi,
+                        11,
+                        DataFormatter.format_currency(monthly_div),
+                    )
                     row_gwi += 1
 
                     self._set_cell(final_table, row_gwi, 10, "Yearly Dividend")
-                    self._set_cell(final_table, row_gwi, 11, str(yearly_div))
+                    self._set_cell(
+                        final_table,
+                        row_gwi,
+                        11,
+                        DataFormatter.format_currency(yearly_div),
+                    )
 
 
 class PortfolioUpdater:
@@ -237,10 +394,13 @@ class PortfolioUpdater:
 
         table_builder = PortfolioTableBuilder(data)
         left_table = table_builder.build_left_columns()
-        final_table = table_builder.build_right_columns(left_table)
+        final_table = table_builder.build_central_columns(left_table)
 
-        worksheet.clear()
-        worksheet.update("A1", final_table)
+        # Use the new PortfolioFormatter for formatting
+        portfolio_formatter = PortfolioFormatter(worksheet)
+        portfolio_formatter.format_portfolio_table(
+            final_table, table_builder.category_header_rows
+        )
 
         # Update timeline
         self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))
@@ -257,23 +417,9 @@ class PortfolioUpdater:
         # Get current date
         date_str = datetime.now().strftime("%d %b %Y")
 
-        # Get all existing values
-        existing_values = worksheet.get_all_values()
-
-        # Find and delete row with the same date if it exists
-        for idx, row in enumerate(existing_values, start=1):
-            if len(row) >= 2 and row[1] == date_str:
-                # Delete the row with matching date
-                worksheet.delete_rows(idx)
-                existing_values = (
-                    worksheet.get_all_values()
-                )  # Refresh values after deletion
-                break
-
-        # Add new row at the bottom
-        next_row = len(existing_values) + 1
-        worksheet.update_cell(next_row, 1, str(total_assets))
-        worksheet.update_cell(next_row, 2, date_str)
+        # Use the new TimelineFormatter for formatting
+        timeline_formatter = TimelineFormatter(worksheet)
+        timeline_formatter.format_timeline_entry(total_assets, date_str)
 
 
 def update_portfolio(

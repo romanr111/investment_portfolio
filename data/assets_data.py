@@ -1,14 +1,18 @@
-CASH = 500
-LENDED = 1674
+CASH = 350 + 28.5  # Cash in wallet;
+LENDED = 1470
 DEBT = 0
-PRIVAT = -738  # TODO To check API docs again
+PRIVAT = 1.5  # TODO To check API docs again
 
 # LANDING
 # TODO: to work on hardcoded savings format;
-ESTATE_GURU = (3095, 0.08)
-PEER_BERRY = (273, 0.068)  # TODO to withdraw
-WHITEBIT_SAVINGS = (("USDC", 11601, 0.1739), ("USDT", 2077, 0.1685))
-BYBIT_SAVINGS = {"USDC": (503, 0.138), "USDT": (543, 0.107), "DAI": (53, 0.073)}
+ESTATE_GURU = (3155, 0.08)  # TODO to withdraw 430 EUR
+PEER_BERRY = (273, 0.068)  # TODO to withdraw ALL 273 EUR
+WHITEBIT_SAVINGS = (
+    ("USDC", 11601, 0.1739),
+    ("USDC", 2004, 0.1563),
+    ("USDT", 2245, 0.1864),
+)
+BYBIT_SAVINGS = {"USDC": (500, 0.0623), "USDT": (502, 0.06), "DAI": (885, 0.0778)}
 
 # TREZOR + Other Crypto Wallets;
 TREZOR = {"BTC": 0.039994, "ETH": 0.50884}

@@ -1,111 +1,112 @@
-# TODO:
-"""
-import gspread_formatting as gsf
-from src.google_sheets.allocation import PortfolioAllocations
-
-
-class AllocationRatioCalculator:
-    @staticmethod
-    def calculate_allocation_ratio(real, exp):
-        return int((real / exp) * 100)
+from typing import List, Dict, Any, Union
+import logging
+from decimal import Decimal
+import gspread
 
 
 class SpreadsheetFormatter:
-    def __init__(self, alloc: PortfolioAllocations):
-        self.alloc = alloc
-        self.calculator = AllocationRatioCalculator()
+    """Base class for spreadsheet formatting operations."""
 
-    def format_spreadsheet(self, sheet):
-        # Setting column widths
-        gsf.set_column_widths(
-            sheet,
-            [
-                ("A", 100),
-                ("B:", 40),
-                ("C", 45),
-                ("D", 50),
-                ("E", 60),
-                ("F", 60),
-                ("G", 60),
-                ("H", 140),
-                ("I", 100),
-                ("J", 30),
-                ("K", 60),
-            ],
-        )
+    def __init__(self, worksheet: gspread.Worksheet):
+        self.worksheet = worksheet
+        self.logger = logging.getLogger(__name__)
 
-        # Formatting cells
-        self._set_static_cell_formats(sheet)
-        self._color_allocation_cells_based_on_ratio(sheet)
+    def apply_bold_formatting(
+        self, header_rows: List[int], column_index: int = 3
+    ) -> None:
+        """Apply bold formatting to specified rows in a column."""
+        if not header_rows:
+            return
 
-    def _set_static_cell_formats(self, sheet):
-        net_worth = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=True, fontSize=12),
-            horizontalAlignment="CENTER",
-        )
+        format_requests = []
+        bold_format = {"textFormat": {"bold": True}}
 
-        summary_asset_types = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=True, fontSize=10),
-            horizontalAlignment="CENTER",
-        )
+        for row_idx in header_rows:
+            format_requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": self.worksheet.id,
+                            "startRowIndex": row_idx,
+                            "endRowIndex": row_idx + 1,
+                            "startColumnIndex": column_index,
+                            "endColumnIndex": column_index + 1,
+                        },
+                        "cell": {"userEnteredFormat": bold_format},
+                        "fields": "userEnteredFormat.textFormat.bold",
+                    }
+                }
+            )
 
-        asset_types_amounts = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=False, fontSize=10),
-        )
-
-        current_allocation = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=True, fontSize=9),
-            horizontalAlignment="CENTER",
-        )
-
-        expected_allocation = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=False, fontSize=9),
-            horizontalAlignment="CENTER",
-        )
-
-        dividends = gsf.cellFormat(
-            textFormat=gsf.textFormat(bold=True, fontSize=10),
-            horizontalAlignment="CENTER",
-        )
-
-        gsf.format_cell_ranges(
-            sheet,
-            [
-                ("H3:I3", net_worth),
-                ("H4:H10", summary_asset_types),
-                ("I4:I10", asset_types_amounts),
-                ("J3:J10", current_allocation),
-                ("K3:K10", expected_allocation),
-                ("H12:I12", dividends),
-            ],
-        )
-
-    def _color_allocation_cells_based_on_ratio(self, sheet):
-        for cell, actual, expected in zip(
-            list(self.alloc.actual_allocations.keys()),
-            list(self.alloc.actual_allocations.values()),
-            list(self.alloc.expected_allocations.values()),
-        ):
-            ratio = self.calculator.calculate_allocation_ratio(actual, expected)
-            self._color_cell_based_on_ratio(sheet, cell, ratio)
-
-    def _color_cell_based_on_ratio(self, sheet, cell, ratio):
-        if ratio < 50 or ratio > 200:
-            # Red
-            color = {"red": 0.76, "green": 0.13, "blue": 0.13}
-        elif 80 <= ratio <= 120:
-            # Green
-            color = {"red": 0.72, "green": 0.84, "blue": 0.66}
-        else:
-            # Yellow
-            color = {"red": 0.973, "green": 0.793, "blue": 0.115}
-
-        sheet.format(cell, {"backgroundColor": color})
+        if format_requests:
+            self.worksheet.spreadsheet.batch_update({"requests": format_requests})
+            self.logger.info(
+                f"Applied bold formatting to {len(header_rows)} category headers"
+            )
 
 
-if __name__ == "__main__":
-    alloc = PortfolioAllocations()
-    formatter = SpreadsheetFormatter(alloc)
-    sheet = ...  # Get your Google Sheet instance here
-    formatter.format_spreadsheet(sheet)
-"""
+class PortfolioFormatter(SpreadsheetFormatter):
+    """Handles portfolio-specific formatting operations."""
+
+    def format_portfolio_table(
+        self, table_data: List[List[str]], header_rows: List[int]
+    ) -> None:
+        """Format the portfolio table with appropriate styling."""
+        # Clear existing content
+        self.worksheet.clear()
+
+        # Update table data
+        self.worksheet.update("A1", table_data)
+
+        # Apply bold formatting to category headers
+        self.apply_bold_formatting(header_rows)
+
+
+class TimelineFormatter(SpreadsheetFormatter):
+    """Handles timeline-specific formatting operations."""
+
+    def format_timeline_entry(
+        self, total_assets: Union[int, float], date_str: str
+    ) -> None:
+        """Format a new timeline entry."""
+        # Get all existing values
+        existing_values = self.worksheet.get_all_values()
+
+        # Find and delete row with the same date if it exists
+        for idx, row in enumerate(existing_values, start=1):
+            if len(row) >= 2 and row[1] == date_str:
+                self.worksheet.delete_rows(idx)
+                existing_values = self.worksheet.get_all_values()
+                break
+
+        # Add new row at the bottom
+        next_row = len(existing_values) + 1
+        self.worksheet.update_cell(next_row, 1, str(total_assets))
+        self.worksheet.update_cell(next_row, 2, date_str)
+
+
+class DataFormatter:
+    """Handles data formatting for spreadsheet cells."""
+
+    @staticmethod
+    def row_left(d_val: str = "", e_val: str = "") -> List[str]:
+        """Create a row reaching columns D & E."""
+        return ["", "", "", d_val, e_val]
+
+    @staticmethod
+    def format_fixed_income(principal: Union[int, float], interest: float) -> str:
+        """Format fixed income data."""
+        interest_str = f"{interest * 100:.1f}%"
+        return f"{principal} @ {interest_str}"
+
+    @staticmethod
+    def format_percentage(value: float) -> str:
+        """Format a percentage value."""
+        return f"{value:.1f}%"
+
+    @staticmethod
+    def format_currency(value: Union[int, float, Decimal]) -> str:
+        """Format a currency value."""
+        if isinstance(value, Decimal):
+            value = float(value)
+        return str(value)

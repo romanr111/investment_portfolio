@@ -40,10 +40,7 @@ class CoinMarketCapFetcher:
             crypto_name (str): The symbol of the cryptocurrency.
 
         Returns:
-            float: The USD price of the cryptocurrency.
-
-        Raises:
-            KeyError: If the cryptocurrency data is not found.
+            float: The USD price of the cryptocurrency, or None if not found.
         """
         self.fetch_data()
         name = CRYPTO_MAPPINGS.get(crypto_name, crypto_name)
@@ -51,5 +48,5 @@ class CoinMarketCapFetcher:
             price = self._crypto_info["data"][name]["quote"]["USD"]["price"]
             return price
         except KeyError:
-            print(f"ERROR: Price data for {name} not found.")
-            raise KeyError(f"Price data for {name} not found.")
+            print(f"WARNING: Price data for {name} not found.")
+            return None

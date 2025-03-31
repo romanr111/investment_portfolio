@@ -1,44 +1,38 @@
-# TODO: To Deprecate
-import src.helpers as helpers
-import requests
+# DEPRECATED MODULE - No longer in use
+# This module is kept for reference but all functionality has been disabled
 
-from data.api_keys import BEARER_TOKEN, WISE_PROFILE_ID, WISE_BALANCE_IDS
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Wise:
+    """
+    DEPRECATED: Wise integration module.
+
+    This class is no longer used and all functionality has been disabled.
+    It now returns empty/zero values to maintain compatibility with existing code.
+    """
+
     def __init__(self):
-        self.balances = self.fetch_balances()
+        logger.info(
+            "Wise module is deprecated and disabled - using stub implementation"
+        )
+        self.balances = {}
 
     def fetch_balances(self):
-        balances = {}
-        for currency, balance_id in WISE_BALANCE_IDS.items():
-            url = f"https://api.transferwise.com/v4/profiles/{WISE_PROFILE_ID}/balances/{balance_id}"
-            headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
-            response = requests.get(url, headers=headers)
-
-            # Check for a successful response
-            if response.status_code == 200:
-                balances[currency] = response.json()[
-                    "amount"
-                ]  # Assuming 'amount' is the field in the response
-            else:
-                print(f"Content --> {response.content}")
-                response.raise_for_status()
-        return balances
+        """DEPRECATED: Always returns empty dict"""
+        return {}
 
     def get_eur_to_usd_balance(self):
-        """Returns USD balance and USD representation of EUR asset."""
-        eur_to_usd = 0
-        if "EUR" in self.balances:
-            eur_to_usd = helpers.convert("EUR", "USD", self.balances["EUR"]["value"])
-        return eur_to_usd
+        """DEPRECATED: Always returns 0"""
+        return 0
 
     def get_usd_balance(self):
-        """Extract and return the USD balance from the balances dictionary."""
-        return self.balances.get("USD", {}).get("value", 0)
+        """DEPRECATED: Always returns 0"""
+        return 0
 
     def get_total_balance_in_usd(self):
-        """Sums up USD and converted EUR balances."""
-        total = round(self.get_usd_balance() + self.get_eur_to_usd_balance())
-        print(f"Total Wise Balance: {total}")
-        return total
+        """DEPRECATED: Always returns 0"""
+        print("Wise module is deprecated - returning 0 balance")
+        return 0
