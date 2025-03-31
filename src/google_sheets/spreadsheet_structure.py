@@ -125,6 +125,8 @@ class PortfolioTableBuilder:
         self.category_header_rows = []  # Reset the tracker
 
         ib_data = self.data.get("IB_DATA", {})
+        enhanced_stocks = self.data.get("ENHANCED_STOCKS", {})
+
         if ib_data:
             # Calculate stock values and percentages
             china_stocks = ib_data.get("China Stocks", {})
@@ -152,35 +154,101 @@ class PortfolioTableBuilder:
                         if subcat == "China Stocks":
                             # Track the row index for the category header
                             self.category_header_rows.append(len(rows))
-                            rows.append(
-                                DataFormatter.row_left(
-                                    f"{subcat} / {china_pct_str}",
-                                    DataFormatter.format_currency(china_stocks_value),
-                                )
+
+                            # Add category header with percentage - removed P&L calculation
+                            category_row = DataFormatter.row_left(
+                                f"{subcat} / {china_pct_str}",
+                                DataFormatter.format_currency(china_stocks_value),
                             )
+
+                            # No longer adding P&L percentage to category headers
+                            rows.append(category_row)
+
+                            # Add individual positions
+                            enhanced_china_stocks = (
+                                enhanced_stocks.get(subcat, {})
+                                if enhanced_stocks
+                                else {}
+                            )
+
+                            for sym, val in contents.items():
+                                position_row = DataFormatter.row_left(
+                                    sym, DataFormatter.format_currency(val)
+                                )
+
+                                # Add P&L for individual position if available
+                                if (
+                                    sym in enhanced_china_stocks
+                                    and "unrealized_pnl_percentage"
+                                    in enhanced_china_stocks[sym]
+                                ):
+                                    pnl_percent = enhanced_china_stocks[sym][
+                                        "unrealized_pnl_percentage"
+                                    ]
+                                    position_row.append(
+                                        DataFormatter.format_pnl_percentage(pnl_percent)
+                                    )
+
+                                rows.append(position_row)
+
+                            rows.append(DataFormatter.row_left())
+
                         elif subcat == "Stocks":
                             # Track the row index for the category header
                             self.category_header_rows.append(len(rows))
-                            rows.append(
-                                DataFormatter.row_left(
-                                    f"{subcat} / {regular_pct_str}",
-                                    DataFormatter.format_currency(regular_stocks_value),
-                                )
+
+                            # Add category header with percentage - removed P&L calculation
+                            category_row = DataFormatter.row_left(
+                                f"{subcat} / {regular_pct_str}",
+                                DataFormatter.format_currency(regular_stocks_value),
                             )
+
+                            # No longer adding P&L percentage to category headers
+                            rows.append(category_row)
+
+                            # Add individual positions
+                            enhanced_regular_stocks = (
+                                enhanced_stocks.get(subcat, {})
+                                if enhanced_stocks
+                                else {}
+                            )
+
+                            for sym, val in contents.items():
+                                position_row = DataFormatter.row_left(
+                                    sym, DataFormatter.format_currency(val)
+                                )
+
+                                # Add P&L for individual position if available
+                                if (
+                                    sym in enhanced_regular_stocks
+                                    and "unrealized_pnl_percentage"
+                                    in enhanced_regular_stocks[sym]
+                                ):
+                                    pnl_percent = enhanced_regular_stocks[sym][
+                                        "unrealized_pnl_percentage"
+                                    ]
+                                    position_row.append(
+                                        DataFormatter.format_pnl_percentage(pnl_percent)
+                                    )
+
+                                rows.append(position_row)
+
+                            rows.append(DataFormatter.row_left())
+
                         else:
                             # Track the row index for any other category header
                             self.category_header_rows.append(len(rows))
                             rows.append(DataFormatter.row_left(subcat))
 
-                        # Add individual components
-                        for sym, val in contents.items():
-                            rows.append(
-                                DataFormatter.row_left(
-                                    sym, DataFormatter.format_currency(val)
+                            # Add individual components
+                            for sym, val in contents.items():
+                                rows.append(
+                                    DataFormatter.row_left(
+                                        sym, DataFormatter.format_currency(val)
+                                    )
                                 )
-                            )
 
-                        rows.append(DataFormatter.row_left())
+                            rows.append(DataFormatter.row_left())
                     else:
                         rows.append(
                             DataFormatter.row_left(
@@ -392,6 +460,9 @@ class PortfolioUpdater:
         date_title = datetime.now().strftime("%d %b %Y")
         worksheet = self.portfolio_sheet.create_tab_at_left(date_title)
 
+        # Enrich data with enhanced stock positions if available
+        self._enrich_with_enhanced_stock_data(data)
+
         table_builder = PortfolioTableBuilder(data)
         left_table = table_builder.build_left_columns()
         final_table = table_builder.build_central_columns(left_table)
@@ -404,6 +475,39 @@ class PortfolioUpdater:
 
         # Update timeline
         self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))
+
+    def _enrich_with_enhanced_stock_data(self, data: Dict[str, Any]) -> None:
+        """
+        Enrich the data dictionary with enhanced stock data if available.
+
+        This method checks if there's an InteractiveBrokers instance available in the data
+        and extracts enhanced stock positions data to include in the spreadsheet.
+        """
+        # If enhanced stock data is already provided, no need to extract it
+        if "ENHANCED_STOCKS" in data:
+            return
+
+        # Try to import the InteractiveBrokers class
+        try:
+            from src.brokers.ib import InteractiveBrokers
+
+            # Check if IB_CLIENT is provided in the data
+            ib_client = data.get("IB_CLIENT")
+            if ib_client and isinstance(ib_client, InteractiveBrokers):
+                # Get enhanced stock positions
+                enhanced_stocks = ib_client.get_enhanced_stock_positions()
+                if enhanced_stocks:
+                    data["ENHANCED_STOCKS"] = enhanced_stocks
+
+                    # Log success
+                    logging.getLogger(__name__).info(
+                        "Successfully enriched data with enhanced stock positions"
+                    )
+        except (ImportError, AttributeError) as e:
+            # Log the error but continue without enhanced data
+            logging.getLogger(__name__).warning(
+                f"Could not enrich data with enhanced stock positions: {str(e)}"
+            )
 
     def update_net_worth_timeline(self, total_assets: Union[int, float]) -> None:
         """Update net worth timeline worksheet."""
@@ -423,11 +527,71 @@ class PortfolioUpdater:
 
 
 def update_portfolio(
-    data: Dict[str, Any], credentials_path: str, spreadsheet_name: str
+    data: Dict[str, Any], credentials_path: str, spreadsheet_name: str, ib_client=None
 ) -> None:
-    """Convenience function for updating portfolio."""
+    """
+    Convenience function for updating portfolio.
+
+    Args:
+        data: Dictionary containing portfolio data
+        credentials_path: Path to the Google API credentials file
+        spreadsheet_name: Name of the Google Sheet to update
+        ib_client: Optional InteractiveBrokers client instance to extract enhanced stock data
+    """
+    # If IB client is provided, add it to the data for enhanced stock positions
+    if ib_client:
+        data["IB_CLIENT"] = ib_client
+
     updater = PortfolioUpdater(credentials_path, spreadsheet_name)
     updater.update_portfolio(data)
+
+
+def create_enhanced_stocks_data(
+    china_stocks: Dict[str, Dict[str, Any]] = None,
+    regular_stocks: Dict[str, Dict[str, Any]] = None,
+    metadata: Dict[str, Any] = None,
+) -> Dict[str, Any]:
+    """
+    Create enhanced stocks data structure from raw data.
+
+    This function allows creating the enhanced stocks data structure without requiring
+    the InteractiveBrokers client, useful for testing or when constructing data manually.
+
+    Args:
+        china_stocks: Dictionary mapping stock symbols to position details for China stocks
+        regular_stocks: Dictionary mapping stock symbols to position details for regular stocks
+        metadata: Dictionary containing metadata about the stock positions
+
+    Returns:
+        Enhanced stocks data structure compatible with the spreadsheet builder
+    """
+    # Initialize with empty dictionaries if not provided
+    china_stocks = china_stocks or {}
+    regular_stocks = regular_stocks or {}
+    metadata = metadata or {}
+
+    # Create the structure
+    enhanced_data = {
+        "China Stocks": china_stocks,
+        "Stocks": regular_stocks,
+        "metadata": metadata,
+    }
+
+    # Ensure required metadata fields exist
+    if "total_stocks_value" not in metadata:
+        metadata["total_stocks_value"] = 0
+    if "china_stocks_value" not in metadata:
+        metadata["china_stocks_value"] = 0
+    if "regular_stocks_value" not in metadata:
+        metadata["regular_stocks_value"] = 0
+    if "total_portfolio_value" not in metadata:
+        metadata["total_portfolio_value"] = 0
+    if "total_unrealized_pnl" not in metadata:
+        metadata["total_unrealized_pnl"] = 0
+    if "total_unrealized_pnl_percentage" not in metadata:
+        metadata["total_unrealized_pnl_percentage"] = 0
+
+    return enhanced_data
 
 
 if __name__ == "__main__":

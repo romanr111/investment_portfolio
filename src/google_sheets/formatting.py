@@ -110,3 +110,20 @@ class DataFormatter:
         if isinstance(value, Decimal):
             value = float(value)
         return str(value)
+
+    @staticmethod
+    def format_pnl_percentage(value: float) -> str:
+        """Format a P&L percentage value with a sign prefix.
+
+        Args:
+            value: P&L percentage value
+
+        Returns:
+            Formatted string with '+' or '-' prefix and % suffix
+        """
+        if value > 0:
+            return f"+{value:.1f}%"
+        elif value < 0:
+            return f"{value:.1f}%"  # Negative sign is already included
+        else:
+            return "0.0%"

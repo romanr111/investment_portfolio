@@ -16,6 +16,7 @@ from src.helpers import calculate_total_mkt_value, convert, perform_request, sor
 class InteractiveBrokers:
     def __init__(self):
         self._portfolio_positions = None
+        self._enhanced_stock_data = None
         self.data_loader = DataLoader()
         self.summary = self.data_loader.perform_request(SUMMARY_API)
         self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
@@ -97,6 +98,142 @@ class InteractiveBrokers:
         self._portfolio_positions = portfolio
         return portfolio
 
+    def get_enhanced_stock_positions(self):
+        """
+        Get enhanced stock positions with additional details for China Stocks and Stocks categories.
+
+        Returns:
+            dict: Dictionary with 'China Stocks' and 'Stocks' categories containing detailed position information.
+        """
+        if self._enhanced_stock_data is not None:
+            return self._enhanced_stock_data
+
+        # Make sure portfolio positions are loaded
+        if self._portfolio_positions is None:
+            self._portfolio_positions = self.get_portfolio_positions()
+
+        # Get total portfolio value
+        total_portfolio_value = self._portfolio_positions["IB_Portfolio_Value"]
+
+        # Initialize the enhanced stock data structure
+        enhanced_data = {
+            CHINA_STOCKS_KEY: {},
+            IB_STOCKS_KEY: {},
+            "metadata": {
+                "total_stocks_value": self._portfolio_positions[IB_STOCKS_VALUE],
+                "china_stocks_value": sum(
+                    self._portfolio_positions[CHINA_STOCKS_KEY].values()
+                ),
+                "regular_stocks_value": sum(
+                    self._portfolio_positions[IB_STOCKS_KEY].values()
+                ),
+                "total_portfolio_value": total_portfolio_value,
+                "total_unrealized_pnl": 0,  # Will be updated as we process positions
+                "total_cost_basis": 0,  # Will be updated as we process positions
+            },
+        }
+
+        # Get portfolio positions to work with
+        china_stocks = self._portfolio_positions[CHINA_STOCKS_KEY]
+        regular_stocks = self._portfolio_positions[IB_STOCKS_KEY]
+        total_stocks_value = enhanced_data["metadata"]["total_stocks_value"]
+
+        # Process positions from the API response
+        for position in self.all_portfolio_info:
+            symbol = position["contractDesc"]
+
+            # Check if this position is in China Stocks or Regular Stocks
+            if symbol in china_stocks:
+                category = CHINA_STOCKS_KEY
+                market_value = china_stocks[symbol]
+            elif symbol in regular_stocks:
+                category = IB_STOCKS_KEY
+                market_value = regular_stocks[symbol]
+            else:
+                # Skip positions that are not in China Stocks or Regular Stocks
+                continue
+
+            # Extract position details
+            quantity = abs(position.get("position", 0))
+            avg_price = position.get("avgPrice", 0)
+            market_price = position.get("mktPrice", 0)
+
+            # Calculate cost basis for this position
+            cost_basis = avg_price * quantity
+
+            # Update total cost basis
+            enhanced_data["metadata"]["total_cost_basis"] += cost_basis
+
+            # Calculate Unrealized P&L
+            unrealized_pnl = (market_price - avg_price) * quantity
+
+            # Calculate position-specific P&L percentage relative to its cost basis
+            if cost_basis > 0:
+                unrealized_pnl_percentage = (
+                    (market_price - avg_price) / avg_price
+                ) * 100
+            else:
+                unrealized_pnl_percentage = 0
+
+            # Calculate percentages
+            stocks_percentage = (
+                (market_value / total_stocks_value) * 100
+                if total_stocks_value > 0
+                else 0
+            )
+            portfolio_percentage = (
+                (market_value / total_portfolio_value) * 100
+                if total_portfolio_value > 0
+                else 0
+            )
+
+            # Create enhanced position data
+            enhanced_data[category][symbol] = {
+                "market_value": market_value,
+                "quantity": quantity,
+                "avg_price": avg_price,
+                "current_price": market_price,
+                "unrealized_pnl": round(unrealized_pnl, 2),
+                "unrealized_pnl_percentage": round(unrealized_pnl_percentage, 2),
+                "percentage_of_stocks": round(stocks_percentage, 2),
+                "percentage_of_portfolio": round(portfolio_percentage, 2),
+            }
+
+            # Update total unrealized P&L
+            enhanced_data["metadata"]["total_unrealized_pnl"] += unrealized_pnl
+
+        # Calculate total unrealized P&L percentage relative to total cost basis
+        total_unrealized_pnl = enhanced_data["metadata"]["total_unrealized_pnl"]
+        total_cost_basis = enhanced_data["metadata"]["total_cost_basis"]
+
+        if total_cost_basis > 0:
+            enhanced_data["metadata"]["total_unrealized_pnl_percentage"] = round(
+                (total_unrealized_pnl / total_cost_basis) * 100, 2
+            )
+        else:
+            enhanced_data["metadata"]["total_unrealized_pnl_percentage"] = 0
+
+        # Cache the result
+        self._enhanced_stock_data = enhanced_data
+        return enhanced_data
+
+    def _parse_last_update_time(self, time_str):
+        """
+        Parse the last update time from IB format to a more readable date format.
+        If parsing fails, return the original string.
+        """
+        if not time_str:
+            return "Unknown"
+
+        try:
+            # IB may provide time in different formats, adapt as needed
+            # Common format: "20240331-06:44:12"
+            date_obj = datetime.strptime(time_str, "%Y%m%d-%H:%M:%S")
+            return date_obj.strftime("%Y-%m-%d")
+        except ValueError:
+            # If parsing fails, return the original string
+            return time_str
+
     def get_stocks_quantity(self):
         return {
             stock["contractDesc"]: round(stock["position"])
@@ -162,6 +299,48 @@ def main():
     try:
         ib = InteractiveBrokers()
         ib.get_full_porfolio_data()
+
+        # Test the new enhanced stock positions method
+        enhanced_stocks = ib.get_enhanced_stock_positions()
+        print("\n=== Enhanced Stock Positions ===")
+
+        # Print metadata
+        metadata = enhanced_stocks["metadata"]
+        print(f"Total Portfolio Value: ${metadata['total_portfolio_value']}")
+        print(f"Total Stocks Value: ${metadata['total_stocks_value']}")
+        print(f"Total Unrealized P&L: {metadata['total_unrealized_pnl_percentage']}%")
+        print(
+            f"China Stocks Value: ${metadata['china_stocks_value']} ({metadata['china_stocks_value']/metadata['total_stocks_value']*100:.2f}%)"
+        )
+        print(
+            f"Regular Stocks Value: ${metadata['regular_stocks_value']} ({metadata['regular_stocks_value']/metadata['total_stocks_value']*100:.2f}%)"
+        )
+
+        # Print China Stocks details
+        print("\nChina Stocks:")
+        for symbol, details in enhanced_stocks[CHINA_STOCKS_KEY].items():
+            print(f"  {symbol}:")
+            print(f"    Market Value: ${details['market_value']}")
+            print(f"    Quantity: {details['quantity']} shares")
+            print(f"    Avg Price: ${details['avg_price']:.2f}")
+            print(f"    Current Price: ${details['current_price']:.2f}")
+            print(f"    Unrealized P&L: {details['unrealized_pnl_percentage']}%")
+            print(f"    % of Stocks Portfolio: {details['percentage_of_stocks']:.2f}%")
+            print(f"    % of IB Portfolio: {details['percentage_of_portfolio']:.2f}%")
+
+        # Print Regular Stocks details
+        print("\nRegular Stocks:")
+        for symbol, details in enhanced_stocks[IB_STOCKS_KEY].items():
+            print(f"  {symbol}:")
+            print(f"    Market Value: ${details['market_value']}")
+            print(f"    Quantity: {details['quantity']} shares")
+            print(f"    Avg Price: ${details['avg_price']:.2f}")
+            print(f"    Current Price: ${details['current_price']:.2f}")
+            print(f"    Unrealized P&L: {details['unrealized_pnl_percentage']}%")
+            print(f"    % of Stocks Portfolio: {details['percentage_of_stocks']:.2f}%")
+            print(f"    % of IB Portfolio: {details['percentage_of_portfolio']:.2f}%")
+
+        print("========================\n")
 
     except Exception as e:
         print(f"ERROR: An error occurred: {str(e)}")
