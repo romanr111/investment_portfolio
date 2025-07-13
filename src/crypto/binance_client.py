@@ -7,6 +7,10 @@ from binance import Client
 from data.api_keys import BINANCE_KEY, BINANCE_SECRET
 from typing import Dict, Tuple, Callable, Any
 from src.crypto.base_exchange_client import ExchangeBase
+import requests
+import hmac
+import hashlib
+from urllib.parse import urlencode
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -152,74 +156,105 @@ class BinanceClient(ExchangeBase):
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return {}
 
-    def _safe_get_flexible_savings(self) -> Dict:
-        """Get flexible savings with timeout safety."""
-        try:
-            start_time = time.time()
-            # Updated to use a proper method for flexible savings API
-            logger.debug("Getting flexible savings positions via direct API")
-
-            # Generic request to Binance Savings API (for flexible products)
-            # Replaced with a more generic method that's available in the API
-            try:
-                flexible_savings = self.client.get_lending_position(asset=None)
-                logger.debug(
-                    "Successfully retrieved flexible savings using get_lending_position"
-                )
-            except (AttributeError, Exception) as e:
-                logger.warning(
-                    f"get_lending_position not available, using fallback: {str(e)}"
-                )
-                # Fallback to a generic request
-                flexible_savings = {"rows": []}
-                # Try to get stablecoin savings by checking account balances
-                account_info = self.client.get_account()
-                if account_info and "balances" in account_info:
-                    for balance in account_info["balances"]:
-                        if (
-                            balance["asset"] in self.STABLECOINS
-                            and float(balance["free"]) > 0
-                        ):
-                            logger.debug(
-                                f"Found stablecoin balance: {balance['asset']}: {balance['free']}"
-                            )
-
-            logger.debug(
-                f"Flexible savings retrieved in {time.time() - start_time:.2f} seconds"
+    def _get_all_rows(self, endpoint):
+        page, collected = 1, []
+        while True:
+            resp = self._binance_signed_request(
+                "GET", endpoint, params={"current": page, "size": 100}
             )
-            return flexible_savings
+            rows = resp.get("rows", [])
+            collected.extend(rows)
+
+            # stop when we've fetched everything
+            if len(collected) >= resp.get("total", len(collected)):
+                break
+            page += 1
+            time.sleep(0.1)  # polite‑ish throttle
+
+        return collected
+
+    def _binance_signed_request(self, method, endpoint, params=None):
+        if params is None:
+            params = {}
+        params["timestamp"] = int(time.time() * 1000)
+        query_string = urlencode(params)
+        # Get API key/secret from the Client instance
+        api_key = (
+            self.client.API_KEY
+            if hasattr(self.client, "API_KEY")
+            else self.client.api_key
+        )
+        api_secret = (
+            self.client.API_SECRET
+            if hasattr(self.client, "API_SECRET")
+            else self.client.api_secret
+        )
+        signature = hmac.new(
+            api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        headers = {"X-MBX-APIKEY": api_key}
+        url = f"https://api.binance.com{endpoint}?{query_string}&signature={signature}"
+        response = requests.request(method, url, headers=headers)
+        logger.debug(f"Binance API response for {endpoint}: {response.text}")
+        response.raise_for_status()
+        return response.json()
+
+    def _safe_get_flexible_savings(self) -> Dict:
+        try:
+            logger.debug("Fetching *all* flexible Simple Earn positions")
+            rows = self._get_all_rows("/sapi/v1/simple-earn/flexible/position")
+
+            parsed = []
+            for pos in rows:
+                asset = pos["asset"]
+                principal = float(pos["totalAmount"])
+                apy = float(pos.get("latestAnnualPercentageRate", 0))
+
+                if principal > 0:
+                    parsed.append(
+                        {
+                            "asset": asset,
+                            "totalAmount": principal,
+                            "latestAnnualPercentageRate": apy,
+                            "tierAnnualPercentageRate": pos.get(
+                                "tierAnnualPercentageRate", {}
+                            ),
+                            "yesterdayAirdropPercentageRate": pos.get(
+                                "yesterdayAirdropPercentageRate", 0
+                            ),
+                        }
+                    )
+            return {"rows": parsed}
         except Exception as e:
-            logger.error(f"Error getting flexible savings positions: {str(e)}")
-            logger.error(f"Stack trace: {traceback.format_exc()}")
+            logger.error("Error getting flexible savings: %s", e, exc_info=True)
             return {"rows": []}
 
     def _safe_get_fixed_savings(self) -> Dict:
-        """Get fixed savings with timeout safety."""
+        """Get locked savings with timeout safety using Simple Earn API."""
         try:
             start_time = time.time()
-            # Updated to use a proper method for fixed/locked savings API
-            logger.debug("Getting fixed savings positions via direct API")
-
-            # Generic request to Binance Savings API (for locked products)
-            # Replaced with a more generic method that's available in the API
-            try:
-                fixed_savings = self.client.get_lending_position(asset=None)
-                logger.debug(
-                    "Successfully retrieved fixed savings using get_lending_position"
-                )
-            except (AttributeError, Exception) as e:
-                logger.warning(
-                    f"get_lending_position not available for fixed savings, using fallback: {str(e)}"
-                )
-                # Fallback to a generic request
-                fixed_savings = {"rows": []}
-
             logger.debug(
-                f"Fixed savings retrieved in {time.time() - start_time:.2f} seconds"
+                "Getting locked savings positions via Simple Earn API (requests)"
             )
-            return fixed_savings
+            response = self._binance_signed_request(
+                "GET", "/sapi/v1/simple-earn/locked/position"
+            )
+            positions = response.get("rows", response.get("data", []))  # <‑‑ fixed
+            rows = []
+
+            for pos in positions:
+                asset = pos.get("asset")
+                principal = float(
+                    pos.get("amount", pos.get("totalAmount", 0))
+                )  # <‑‑ fixed
+                apy = float(pos.get("apy", pos.get("interestRate", 0)))  # <‑‑ fixed
+
+                if asset and principal > 0:
+                    rows.append({"asset": asset, "amount": principal, "apy": apy})
+
+            return {"rows": rows}
         except Exception as e:
-            logger.error(f"Error getting fixed savings positions: {str(e)}")
+            logger.error(f"Error getting locked savings positions: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return {"rows": []}
 
@@ -538,6 +573,15 @@ def main():
         crypto = binance_client.get_all_crypto_balances()
         for asset, balance in crypto.items():
             print(f"{asset}: {balance:.6f}")
+        # Now print your Flexible & Locked savings
+        print("\nSavings Positions (Binance Simple Earn):")
+        savings = binance_client.get_savings_positions().get("binance", {})
+        # If there's no real data, “None” key will show up; skip it
+        for asset, (principal, apr) in savings.items():
+            if asset == "None":
+                continue
+            # APR is a decimal like 0.0412 → format as percentage
+            print(f"{asset}: {principal} @ {apr * 100:.2f}% APR")
         logger.info("BinanceClient test run completed successfully")
     except Exception as e:
         logger.error(f"Error in BinanceClient test: {str(e)}", exc_info=True)

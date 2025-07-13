@@ -8,6 +8,7 @@ from src.crypto.binance_client import BinanceClient
 from src.crypto.okx_client import OKXFiltered
 from src.crypto.whitebit_client import WhiteBit
 from src.crypto.bybit_client import BybitFiltered
+from src.crypto.telegram_client import TelegramClient
 from src.crypto.conimarketcap_fetcher import CoinMarketCapFetcher
 
 # Set up logging
@@ -217,6 +218,7 @@ class CryptoEndpoint:
             self._safe_init_okx()
             self._safe_init_bybit()
             self._safe_init_whitebit()
+            self._safe_init_telegram()
 
             # Skip rest of initialization if no brokers were initialized
             if not self.brokers:
@@ -360,6 +362,21 @@ class CryptoEndpoint:
             logger.error(f"Error initializing WhiteBit: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without WhiteBit")
+
+    def _safe_init_telegram(self):
+        """Initialize TelegramClient with error handling."""
+        try:
+            logger.debug("Initializing TelegramClient - start")
+            start_time = time.time()
+            telegram_client = TelegramClient()
+            self.brokers.append(telegram_client)
+            logger.debug(
+                f"TelegramClient initialized in {time.time() - start_time:.2f} seconds"
+            )
+        except Exception as e:
+            logger.error(f"Error initializing TelegramClient: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            logger.warning("Continuing without TelegramClient")
 
     def get_total_crypto_value(self) -> int:
         logger.debug("Calculating total crypto value")

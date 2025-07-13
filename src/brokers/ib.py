@@ -58,7 +58,7 @@ class InteractiveBrokers:
             IB_STOCKS_KEY: {},
             SHORT_SELLING_KEY: {},
             REIT_KEY: {},
-            GOLD_KEY: {},
+            PRECIOUS_METALS_KEY: {},
             COMMODITIES_KEY: {},
         }
 
@@ -78,7 +78,14 @@ class InteractiveBrokers:
             portfolio[category][stock] = value
             total_portfolio_value += value
 
-            if category not in ["Bonds", "Short", "REIT", "Gold", "Commodities"]:
+            if category not in [
+                BONDS_KEY,
+                SHORT_SELLING_KEY,
+                REIT_KEY,
+                PRECIOUS_METALS_KEY,
+                COMMODITIES_KEY,
+            ]:
+                print(f"Adding {stock}: {value} to total_stocks")
                 total_stocks += value
 
         # Sort all dictionaries at once
@@ -138,19 +145,28 @@ class InteractiveBrokers:
         regular_stocks = self._portfolio_positions[IB_STOCKS_KEY]
         total_stocks_value = enhanced_data["metadata"]["total_stocks_value"]
 
+        # Log all positions for debugging
+        logger.debug(f"All portfolio info positions: {[pos['contractDesc'] for pos in self.all_portfolio_info]}")
+        logger.debug(f"China stocks: {list(china_stocks.keys())}")
+        logger.debug(f"Regular stocks: {list(regular_stocks.keys())}")
+
         # Process positions from the API response
         for position in self.all_portfolio_info:
             symbol = position["contractDesc"]
+            logger.debug(f"Processing position: {symbol}")
 
             # Check if this position is in China Stocks or Regular Stocks
             if symbol in china_stocks:
                 category = CHINA_STOCKS_KEY
                 market_value = china_stocks[symbol]
+                logger.debug(f"  Found in China stocks: {symbol} = ${market_value}")
             elif symbol in regular_stocks:
                 category = IB_STOCKS_KEY
                 market_value = regular_stocks[symbol]
+                logger.debug(f"  Found in regular stocks: {symbol} = ${market_value}")
             else:
-                # Skip positions that are not in China Stocks or Regular Stocks
+                # Log skipped positions for debugging
+                logger.debug(f"  Skipping position not in China or regular stocks: {symbol}")
                 continue
 
             # Extract position details
@@ -274,7 +290,7 @@ class StockCategorizer:
         category_conditions = {
             CHINA_STOCKS_KEY: (stock in CHINA_TICKERS or stock in CHINA_ADR),
             REIT_KEY: stock in public_reit_names or stock in REITS,
-            GOLD_KEY: stock in GOLD,
+            PRECIOUS_METALS_KEY: stock in PRECIOUS_METALS,
             IB_BONDS_KEY: stock in BONDS_VALUES,
             COMMODITIES_KEY: stock in COMM,
             SHORT_SELLING_KEY: mkt_value < 0,
@@ -290,6 +306,8 @@ class StockCategorizer:
     def get_value_for_category(stock, mkt_value, category):
         if category == CHINA_STOCKS_KEY and stock in CHINA_TICKERS:
             return round(convert("HKD", "USD", mkt_value))
+        if category == IB_BONDS_KEY and stock in ["IHYG", "IHYG.L"]:  # Handle both IHYG and IHYG.L
+            return round(convert("EUR", "USD", mkt_value))
         return mkt_value
 
 

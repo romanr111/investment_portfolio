@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union
+from typing import List, Union
 import logging
 from decimal import Decimal
 import gspread
@@ -43,6 +43,92 @@ class SpreadsheetFormatter:
             self.logger.info(
                 f"Applied bold formatting to {len(header_rows)} category headers"
             )
+
+    def apply_bold_and_large_font_to_range(
+        self,
+        start_row: int,
+        end_row: int,
+        start_col: int,
+        end_col: int,
+        font_size: int = 14,
+    ) -> None:
+        """Apply bold and larger font formatting to a specific cell range (zero-based, end exclusive)."""
+        format_request = {
+            "repeatCell": {
+                "range": {
+                    "sheetId": self.worksheet.id,
+                    "startRowIndex": start_row,
+                    "endRowIndex": end_row,
+                    "startColumnIndex": start_col,
+                    "endColumnIndex": end_col,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "textFormat": {"bold": True, "fontSize": font_size}
+                    }
+                },
+                "fields": "userEnteredFormat.textFormat.bold,userEnteredFormat.textFormat.fontSize",
+            }
+        }
+        self.worksheet.spreadsheet.batch_update({"requests": [format_request]})
+        self.logger.info(
+            f"Applied bold and font size {font_size} formatting to range R{start_row+1}:C{start_col+1} to R{end_row}:C{end_col}"
+        )
+
+    def set_column_width(self, column_index: int, width: int) -> None:
+        """Set the width of a column (0-based index) to the specified pixel size."""
+        format_request = {
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": self.worksheet.id,
+                    "dimension": "COLUMNS",
+                    "startIndex": column_index,
+                    "endIndex": column_index + 1,
+                },
+                "properties": {"pixelSize": width},
+                "fields": "pixelSize",
+            }
+        }
+        self.worksheet.spreadsheet.batch_update({"requests": [format_request]})
+        self.logger.info(f"Set column {column_index+1} width to {width} pixels")
+
+    def expand_columns_for_portfolio(
+        self, col_d_width: int = 200, col_k_width: int = 180
+    ) -> None:
+        """Expand both column D and column K for better fit (default widths: D=200, K=180)."""
+        self.set_column_width(3, col_d_width)  # Column D
+        self.set_column_width(10, col_k_width)  # Column K
+        self.logger.info(
+            f"Expanded columns D and K to {col_d_width} and {col_k_width} pixels respectively."
+        )
+
+    def apply_bold_to_cell(self, row: int, col: int) -> None:
+        """Apply bold formatting to a single cell (zero-based)."""
+        format_request = {
+            "repeatCell": {
+                "range": {
+                    "sheetId": self.worksheet.id,
+                    "startRowIndex": row,
+                    "endRowIndex": row + 1,
+                    "startColumnIndex": col,
+                    "endColumnIndex": col + 1,
+                },
+                "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                "fields": "userEnteredFormat.textFormat.bold",
+            }
+        }
+        self.worksheet.spreadsheet.batch_update({"requests": [format_request]})
+        self.logger.info(f"Applied bold formatting to cell R{row+1}C{col+1}")
+
+    @staticmethod
+    def calc_fixed_income_pct_of_total(
+        fixed_income_principal: float, total_assets: float
+    ) -> str:
+        """Calculate percent of fixed income principal of total assets, formatted as a percent string."""
+        if total_assets == 0:
+            return "0.0%"
+        pct = (fixed_income_principal / total_assets) * 100
+        return f"{pct:.1f}%"
 
 
 class PortfolioFormatter(SpreadsheetFormatter):

@@ -9,7 +9,7 @@ from src.brokers.ib_dividends import IBDividends
 from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
-from src.allocation_calculator import get_sorted_sector_allocations
+from src.allocation_calculator import AllocationCalculator
 from src.dasha.dasha import DashaPortfolio
 
 # Set up logging
@@ -273,7 +273,8 @@ class DataSource:
         logger.debug("Starting get_data method")
         data = self.get_combined_data()
         logger.debug("Calculating allocations")
-        allocations = get_sorted_sector_allocations(data)
+        calculator = AllocationCalculator(data)
+        allocations = calculator.get_sorted_sector_allocations()
         data["ALLOCATIONS"] = allocations
         logger.debug("Data preparation completed")
         return data

@@ -1,0 +1,32 @@
+<FlexQueryResponse queryName="stocks_count" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U9064529" fromDate="20250101" toDate="20250101" period="" whenGenerated="20250404;021857">
+<OpenPositions>
+<OpenPosition symbol="700" position="100" costBasisPrice="308.04050625" positionValue="41700" assetCategory="STK" description="TENCENT HOLDINGS LTD" />
+<OpenPosition symbol="9988" position="500" costBasisPrice="96.492513894" positionValue="41200" assetCategory="STK" description="ALIBABA GROUP HOLDING LTD" />
+<OpenPosition symbol="ADBE" position="2" costBasisPrice="512.46" positionValue="889.36" assetCategory="STK" description="ADOBE INC" />
+<OpenPosition symbol="BN" position="39" costBasisPrice="34.596064103" positionValue="2240.55" assetCategory="STK" description="BROOKFIELD CORP" />
+<OpenPosition symbol="C" position="54" costBasisPrice="47.886759259" positionValue="3801.06" assetCategory="STK" description="CITIGROUP INC" />
+<OpenPosition symbol="COF" position="10" costBasisPrice="109.04875" positionValue="1783.2" assetCategory="STK" description="CAPITAL ONE FINANCIAL CORP" />
+<OpenPosition symbol="COMB" position="130" costBasisPrice="27.249230769" positionValue="2593.5" assetCategory="STK" description="GRANITESHARES BCOM BROAD STR" />
+<OpenPosition symbol="COP" position="19" costBasisPrice="110.606602053" positionValue="1884.23" assetCategory="STK" description="CONOCOPHILLIPS" />
+<OpenPosition symbol="CP" position="11" costBasisPrice="79.755123636" positionValue="796.07" assetCategory="STK" description="CANADIAN PACIFIC KANSAS CITY" />
+<OpenPosition symbol="CVS" position="45" costBasisPrice="58.749922489" positionValue="2020.05" assetCategory="STK" description="CVS HEALTH CORP" />
+<OpenPosition symbol="CVX" position="12" costBasisPrice="147.339178667" positionValue="1738.08" assetCategory="STK" description="CHEVRON CORP" />
+<OpenPosition symbol="GOOG" position="19" costBasisPrice="136.792752421" positionValue="3618.36" assetCategory="STK" description="ALPHABET INC-CL C" />
+<OpenPosition symbol="HUM" position="7" costBasisPrice="303.220030857" positionValue="1775.97" assetCategory="STK" description="HUMANA INC" />
+<OpenPosition symbol="IAU" position="11" costBasisPrice="51.109531636" positionValue="544.61" assetCategory="STK" description="ISHARES GOLD TRUST" />
+<OpenPosition symbol="IBKR" position="6.2133" costBasisPrice="109.181346949" positionValue="1097.7" assetCategory="STK" description="INTERACTIVE BROKERS GRO-CL A" />
+<OpenPosition symbol="INTC" position="72" costBasisPrice="36.708622694" positionValue="1443.6" assetCategory="STK" description="INTEL CORP" />
+<OpenPosition symbol="KWEB" position="133" costBasisPrice="32.098683887" positionValue="3888.92" assetCategory="STK" description="KRANESHARES CSI CHINA INTERN" />
+<OpenPosition symbol="NKE" position="46" costBasisPrice="80.546883826" positionValue="3480.82" assetCategory="STK" description="NIKE INC -CL B" />
+<OpenPosition symbol="PDD" position="10" costBasisPrice="115.274972" positionValue="969.9" assetCategory="STK" description="PDD HOLDINGS INC" />
+<OpenPosition symbol="SGOV" position="17" costBasisPrice="100.452189647" positionValue="1705.44" assetCategory="STK" description="ISHARES 0-3 MONTH TREASURY B" />
+<OpenPosition symbol="TLT" position="40" costBasisPrice="93.0410748" positionValue="3493.2" assetCategory="STK" description="ISHARES 20+ YEAR TREASURY BD" />
+<OpenPosition symbol="UPS" position="6" costBasisPrice="149.385595167" positionValue="756.6" assetCategory="STK" description="UNITED PARCEL SERVICE-CL B" />
+<OpenPosition symbol="912797MK0" position="23000" costBasisPrice="99.140826087" positionValue="22880.67" assetCategory="BILL" description="B 02/13/25" />
+<OpenPosition symbol="912797NY9" position="30000" costBasisPrice="98.601233333" positionValue="29658.02" assetCategory="BILL" description="B 04/08/25" />
+</OpenPositions>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

@@ -4,7 +4,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
-from .formatting import DataFormatter, PortfolioFormatter, TimelineFormatter
+from .formatting import (
+    DataFormatter,
+    PortfolioFormatter,
+    TimelineFormatter,
+    SpreadsheetFormatter,
+)
 
 
 class GoogleSheetsClient:
@@ -344,7 +349,7 @@ class PortfolioTableBuilder:
 
         # Financial Freedom (G/H/I)
         freedom = self.data.get("FIN_FREEDOM_GOAL_PROGRESS", "")
-        self._set_cell(final_table, 0, 6, "Financial Freedom")
+        self._set_cell(final_table, 0, 6, "FIRE Goal")
         self._set_cell(final_table, 0, 7, freedom)
 
         # Net worth
@@ -472,6 +477,34 @@ class PortfolioUpdater:
         portfolio_formatter.format_portfolio_table(
             final_table, table_builder.category_header_rows
         )
+        # Expand columns D and K for better fit
+        portfolio_formatter.expand_columns_for_portfolio(
+            col_d_width=200, col_k_width=180
+        )
+        # Apply bold+large font to Net Worth cells G3:I3 (row 2, cols 6-9)
+        portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 6, 9, font_size=14)
+        # Apply bold to FIXED_INCOME_DATA cell K3 (row 2, col 10)
+        portfolio_formatter.apply_bold_to_cell(2, 10)
+        # Calculate percent of fixed income (K4) of total assets (H3) and write to L3 (row 2, col 11)
+        try:
+            # Get values from the worksheet
+            total_assets = float(
+                worksheet.cell(2 + 1, 7 + 1).value.replace(",", "")
+            )  # H3 (row 2, col 7)
+            fixed_income_cell = worksheet.cell(3 + 1, 11)  # K4 (row 3, col 10+1=11)
+            # Extract principal from string like '88345 @ 7.6%'
+            import re
+
+            match = re.match(r"(\d+)", str(fixed_income_cell.value))
+            fixed_income_principal = float(match.group(1)) if match else 0.0
+            pct_str = SpreadsheetFormatter.calc_fixed_income_pct_of_total(
+                fixed_income_principal, total_assets
+            )
+            worksheet.update_cell(2 + 1, 12, pct_str)  # L3 (row 2, col 11+1=12)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Could not calculate/write fixed income percent: {e}"
+            )
 
         # Update timeline
         self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))

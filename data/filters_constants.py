@@ -22,6 +22,8 @@ BONDS_VALUES = [
     "HYDB",  # iShares High Yield Bond Factor ETF
     "GHYG",  # iShares Global High Yield Corporate Bond ETF
     "SPHY",  # SPDR Portfolio High Yield Bond ETF
+    "IHYG",  # iShares International High Yield Bond ETF
+    "IHYG.L",  # iShares EUR High Yield Corporate Bond ETF (LSE)
     # International/Emerging Markets Bonds
     "EMB",  # iShares J.P. Morgan USD Emerging Markets Bond ETF
     "EMLC",  # VanEck J.P. Morgan EM Local Currency Bond ETF
@@ -244,8 +246,8 @@ COMM = [
 ]
 
 # Gold
-GOLD = [
-    # Physical Gold ETFs
+PRECIOUS_METALS = [
+    # Gold ETFs
     "GLD",  # SPDR Gold Shares
     "IAU",  # iShares Gold Trust
     "SGOL",  # Aberdeen Standard Physical Gold Shares ETF
@@ -256,9 +258,13 @@ GOLD = [
     "GDX",  # VanEck Gold Miners ETF
     "GDXJ",  # VanEck Junior Gold Miners ETF
     "RING",  # iShares MSCI Global Gold Miners ETF
+    # Silver ETFs
+    "SLV",  # iShares Silver Trust
+    "PSLV",  # Sprott Physical Silver Trust
+    # Add more silver/precious metals ETFs as needed
 ]
 
-
+PRECIOUS_METALS_KEY = "Precious Metals"
 BONDS_KEY = "Bonds"
 STOCKS_KEY = "Stocks"
 CRYPTO_LENDING_KEY = "Crypto Landing"
@@ -276,6 +282,6 @@ IB_STOCKS_VALUE = "Total Stocks Value"
 
 PLATFORM_GROUPING = {
     BONDS_KEY: BONDS_VALUES,
-    CRYPTO_LENDING_KEY: ["binance", "okx", "bybit", "whitebit"],
-    P2P_LENDING_KEY: ["EstateGuru", "PeerBerry"],
+    CRYPTO_LENDING_KEY: ["binance", "okx", "bybit", "whitebit", "telegram"],
+    P2P_LENDING_KEY: ["EstateGuru", "PeerBerry", "TelegramSavings"],
 }
