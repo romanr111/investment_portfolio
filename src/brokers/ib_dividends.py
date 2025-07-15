@@ -16,18 +16,18 @@ from src.brokers.ib import InteractiveBrokers
 from src.brokers.ib_bond_data_fetcher import IBBondsClient
 from src.brokers.data_fetchers.yfinance_fetcher import YFinanceFetcher
 
-# Configure loggin
+# Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(), logging.FileHandler("ib_dividends_debug.log")],
+    handlers=[logging.StreamHandler()],
 )
 
 # Set specific log levels for noisy loggers
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("yfinance").setLevel(logging.INFO)
-logging.getLogger("peewee").setLevel(logging.WARNING)  # Reduce peewee debug logging
+logging.getLogger("peewee").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -317,24 +317,26 @@ class PortfolioAnalyzer:
                 continue
 
         bond_yearly = sum(
-            data.yearly_income for data in results.values() if data.asset_type == "bond"
+            data.yearly_income
+            for data in results.values()
+            if data.asset_type in ["bond", "bond_etf"]
         )
         stock_yearly = sum(
             data.yearly_income
             for data in results.values()
-            if data.asset_type in ["stock", "bond_etf"]
+            if data.asset_type in ["stock"]
         )
 
         total_yearly = bond_yearly + stock_yearly
         monthly_total = total_yearly / 12
 
         # Log summary information
-        print("\n[IB]")
+        print("\n[IB] Dividends")
         logger.info(f"Total yearly bond income (no tax): ${bond_yearly:.2f}")
-        logger.info(f"Total yearly stock/ETF dividends after tax: ${stock_yearly:.2f}")
+        logger.info(f"Total yearly stock dividends after tax: ${stock_yearly:.2f}")
         logger.info(f"Total combined yearly income: ${total_yearly:.2f}")
         logger.info(f"Monthly total: ${monthly_total:.2f}")
-        print("[IB]")
+        print("[IB] Dividends")
 
         return PortfolioSummary(
             monthly_total=round(monthly_total, 2),
