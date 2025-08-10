@@ -528,7 +528,7 @@ class PortfolioUpdater:
             ib_client = data.get("IB_CLIENT")
             if ib_client and isinstance(ib_client, InteractiveBrokers):
                 # Get enhanced stock positions
-                enhanced_stocks = ib_client.get_enhanced_stock_positions()
+                enhanced_stocks = ib_client.get_stock_positions_analytics()
                 if enhanced_stocks:
                     data["ENHANCED_STOCKS"] = enhanced_stocks
 

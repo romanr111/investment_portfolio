@@ -1,12 +1,15 @@
 import csv
+import logging
 from datetime import datetime
 import time
 
 from data.filters_constants import *
 
-
 from data.endpoints import POSITIONS_API, SUMMARY_API
 from src.helpers import calculate_total_mkt_value, convert, perform_request, sort_dict
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
@@ -18,9 +21,30 @@ class InteractiveBrokers:
         self._portfolio_positions = None
         self._enhanced_stock_data = None
         self.data_loader = DataLoader()
-        self.summary = self.data_loader.perform_request(SUMMARY_API)
-        self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
-        self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
+
+        try:
+            self.summary = self.data_loader.perform_request(SUMMARY_API)
+            self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
+
+            if self.summary is None or self.all_portfolio_info is None:
+                print("\n=== IB Login Required ===")
+                print("Please login to Interactive Brokers Client Portal Gateway")
+                print("Run: cd clientportal.gw && bin/run.sh root/conf.yaml")
+                print("Then restart this application.")
+                print("========================\n")
+                raise SystemExit("Interactive Brokers login required")
+            else:
+                self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
+
+        except Exception as e:
+            print(f"\n=== IB Connection Error ===")
+            print(f"Error connecting to Interactive Brokers: {str(e)}")
+            print(
+                "Please ensure IB Client Portal Gateway is running and you are logged in."
+            )
+            print("Run: cd clientportal.gw && bin/run.sh root/conf.yaml")
+            print("==========================\n")
+            raise SystemExit("Interactive Brokers connection failed")
 
     def get_full_porfolio_data(self):
         """Get complete portfolio data with minimal recalculation."""
@@ -105,12 +129,17 @@ class InteractiveBrokers:
         self._portfolio_positions = portfolio
         return portfolio
 
-    def get_enhanced_stock_positions(self):
+    def get_stock_positions_analytics(self):
         """
-        Get enhanced stock positions with additional details for China Stocks and Stocks categories.
+        Analyzes stock positions with detailed performance metrics and portfolio allocation.
 
         Returns:
-            dict: Dictionary with 'China Stocks' and 'Stocks' categories containing detailed position information.
+            dict: Contains analytics for Chinese and regular stocks with fields:
+                - market_value, quantity, avg_price, current_price
+                - unrealized_pnl (absolute and percentage)
+                - portfolio weights (% of stocks and total portfolio)
+                - metadata: aggregated portfolio metrics and summaries
+                All stocks are sorted by market value in descending order within their categories.
         """
         if self._enhanced_stock_data is not None:
             return self._enhanced_stock_data
@@ -146,13 +175,21 @@ class InteractiveBrokers:
         total_stocks_value = enhanced_data["metadata"]["total_stocks_value"]
 
         # Log all positions for debugging
-        logger.debug(f"All portfolio info positions: {[pos['contractDesc'] for pos in self.all_portfolio_info]}")
+        logger.debug(
+            f"All portfolio info positions: {[pos['contractDesc'] for pos in self.all_portfolio_info]}"
+        )
         logger.debug(f"China stocks: {list(china_stocks.keys())}")
         logger.debug(f"Regular stocks: {list(regular_stocks.keys())}")
 
         # Process positions from the API response
-        for position in self.all_portfolio_info:
-            symbol = position["contractDesc"]
+        if self.all_portfolio_info is None:
+            logger.warning("all_portfolio_info is None, skipping position processing.")
+            positions_iterable = []
+        else:
+            positions_iterable = self.all_portfolio_info
+
+        for position in positions_iterable:
+            symbol = position.get("contractDesc")
             logger.debug(f"Processing position: {symbol}")
 
             # Check if this position is in China Stocks or Regular Stocks
@@ -166,13 +203,19 @@ class InteractiveBrokers:
                 logger.debug(f"  Found in regular stocks: {symbol} = ${market_value}")
             else:
                 # Log skipped positions for debugging
-                logger.debug(f"  Skipping position not in China or regular stocks: {symbol}")
+                logger.debug(
+                    f"  Skipping position not in China or regular stocks: {symbol}"
+                )
                 continue
 
             # Extract position details
             quantity = abs(position.get("position", 0))
             avg_price = position.get("avgPrice", 0)
             market_price = position.get("mktPrice", 0)
+
+            # Special case for 9988 ticker
+            if symbol == "9988":
+                avg_price = 152
 
             # Calculate cost basis for this position
             cost_basis = avg_price * quantity
@@ -228,6 +271,16 @@ class InteractiveBrokers:
             )
         else:
             enhanced_data["metadata"]["total_unrealized_pnl_percentage"] = 0
+
+        # Sort stocks by market value in descending order within each category
+        for category in [CHINA_STOCKS_KEY, IB_STOCKS_KEY]:
+            enhanced_data[category] = dict(
+                sorted(
+                    enhanced_data[category].items(),
+                    key=lambda x: x[1]["market_value"],
+                    reverse=True,
+                )
+            )
 
         # Cache the result
         self._enhanced_stock_data = enhanced_data
@@ -306,7 +359,10 @@ class StockCategorizer:
     def get_value_for_category(stock, mkt_value, category):
         if category == CHINA_STOCKS_KEY and stock in CHINA_TICKERS:
             return round(convert("HKD", "USD", mkt_value))
-        if category == IB_BONDS_KEY and stock in ["IHYG", "IHYG.L"]:  # Handle both IHYG and IHYG.L
+        if category == IB_BONDS_KEY and stock in [
+            "IHYG",
+            "IHYG.L",
+        ]:  # Handle both IHYG and IHYG.L
             return round(convert("EUR", "USD", mkt_value))
         return mkt_value
 
@@ -318,12 +374,12 @@ def main():
         ib = InteractiveBrokers()
         ib.get_full_porfolio_data()
 
-        # Test the new enhanced stock positions method
-        enhanced_stocks = ib.get_enhanced_stock_positions()
-        print("\n=== Enhanced Stock Positions ===")
+        # Get detailed analytics for stock positions
+        stock_analytics = ib.get_stock_positions_analytics()
+        print("\n=== Stock Positions Analytics ===")
 
         # Print metadata
-        metadata = enhanced_stocks["metadata"]
+        metadata = stock_analytics["metadata"]
         print(f"Total Portfolio Value: ${metadata['total_portfolio_value']}")
         print(f"Total Stocks Value: ${metadata['total_stocks_value']}")
         print(f"Total Unrealized P&L: {metadata['total_unrealized_pnl_percentage']}%")
@@ -336,7 +392,7 @@ def main():
 
         # Print China Stocks details
         print("\nChina Stocks:")
-        for symbol, details in enhanced_stocks[CHINA_STOCKS_KEY].items():
+        for symbol, details in stock_analytics[CHINA_STOCKS_KEY].items():
             print(f"  {symbol}:")
             print(f"    Market Value: ${details['market_value']}")
             print(f"    Quantity: {details['quantity']} shares")
@@ -348,7 +404,7 @@ def main():
 
         # Print Regular Stocks details
         print("\nRegular Stocks:")
-        for symbol, details in enhanced_stocks[IB_STOCKS_KEY].items():
+        for symbol, details in stock_analytics[IB_STOCKS_KEY].items():
             print(f"  {symbol}:")
             print(f"    Market Value: ${details['market_value']}")
             print(f"    Quantity: {details['quantity']} shares")

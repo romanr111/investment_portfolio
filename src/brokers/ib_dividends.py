@@ -92,6 +92,7 @@ class YFinanceDataFetcher(DataFetcher):
         - Maps Hong Kong stocks to ADR equivalents
         - Maps 9988 to BABA (Alibaba ADR)
         - Maps IHYG to IHYG.L (iShares High Yield Corporate Bond ETF)
+        - Maps BRK B to BRK-B (Berkshire Hathaway Class B)
         - Returns original symbol for other cases
         """
         # Special case for Alibaba Hong Kong listing
@@ -101,6 +102,10 @@ class YFinanceDataFetcher(DataFetcher):
         # Special case for iShares High Yield Corporate Bond ETF
         if symbol == "IHYG":
             return "IHYG.L"
+
+        # Special case for Berkshire Hathaway Class B
+        if symbol == "BRK B":
+            return "BRK-B"
 
         # Use ADR mapping for Hong Kong stocks
         return self.adr_map.get(symbol, symbol)

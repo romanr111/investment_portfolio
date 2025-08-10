@@ -1,5 +1,54 @@
 #!/usr/bin/env python3
 
+"""
+Portfolio Analysis and Report Generation Module
+
+Analyzes changes in investment portfolios from Interactive Brokers XML exports and generates
+reports in text and Markdown formats for Young Investors Club (YIC).
+
+## Usage
+
+### Command Line
+```bash
+# Generate both text and Markdown reports (default)
+python analyze_portfolio_reports.py
+
+# Generate only text report
+python analyze_portfolio_reports.py --format text
+
+# Generate only Markdown report
+python analyze_portfolio_reports.py --format markdown
+```
+
+### Programmatic Usage
+```python
+from analyze_portfolio_reports import XMLPortfolioParser, PortfolioAnalyzer, TableFormatter
+
+# Parse portfolio data
+parser = XMLPortfolioParser()
+initial_portfolio, _, _ = parser.parse("reporting/stocks_count.xml")
+final_portfolio, _, _ = parser.parse("reporting/stocks_count (1).xml")
+
+# Analyze and format
+initial_portfolio.calculate_weights()
+final_portfolio.calculate_weights()
+analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
+formatter = TableFormatter(analyzer, format_type="markdown")
+report = formatter.format_as_table()
+```
+
+## Preconditions
+
+1. **Input Files**: Place Interactive Brokers XML exports in the current directory:
+   - `stocks_count1.xml` - Initial portfolio state
+   - `stocks_count2.xml` - Final portfolio state
+
+2. **XML Format**: Files must contain `<FlexStatement>` with `fromDate`/`toDate` and `<OpenPosition>` elements with:
+   - `symbol`, `position`, `costBasisPrice`, `positionValue`, `assetCategory`, `markPrice`
+
+3. **Output**: Markdown reports are saved as `portfolio_report_YYYY_qN.md` in the current directory.
+"""
+
 # Module for creating Young Investors Club report;
 import os
 import xml.etree.ElementTree as ET
@@ -8,9 +57,40 @@ import argparse
 from typing import Dict, List, Tuple, Set, Optional
 from datetime import datetime
 
-# Constants
-EXCLUDED_SYMBOLS = ["TLT", "IAU", "912797NY9", "912797PS0", "SGOV", "COMB"]
-LONG_BONDS_GOLD_COMMODITIES = ["TLT", "IAU", "COMB"]
+# Import bond tickers list
+from data.filters_constants import BONDS_VALUES, PRECIOUS_METALS
+
+# Filter out duplicate exchange-specific tickers (e.g., IHYG.L)
+BONDS_CORE = [t for t in BONDS_VALUES if "." not in t]
+PRECIOUS_METALS_CORE = [t for t in PRECIOUS_METALS if "." not in t]
+
+# Symbols to exclude from main portfolio calculations (displayed separately)
+EXCLUDED_SYMBOLS = list(
+    dict.fromkeys(
+        BONDS_CORE
+        + PRECIOUS_METALS_CORE
+        + [
+            "SGOV",  # Government Money Market Fund
+            "COMB",  # Commodity broad ETF
+            "SLV",  # Silver ETF
+            "BILLS",  # Aggregated Treasury Bills position
+        ]
+    ).keys()
+)
+
+# Special assets to be shown in a separate table (bonds, gold, commodities)
+LONG_BONDS_GOLD_COMMODITIES = list(
+    dict.fromkeys(
+        BONDS_CORE
+        + PRECIOUS_METALS_CORE
+        + [
+            "COMB",  # Commodity broad ETF
+            "SLV",  # Silver ETF
+            "BILLS",  # Aggregated Treasury Bills position
+        ]
+    ).keys()
+)
+
 HKD_TO_USD_RATE = (
     0.128  # Approximate HKD to USD conversion rate, should be updated with current rate
 )
@@ -26,7 +106,7 @@ PORTFOLIO_WEIGHT = "Вага у портфоліо"
 AVERAGE_PRICE = "Cередня ціна"
 
 # Table headers
-HEADER_SYMBOL = "Акція"
+HEADER_SYMBOL = "Позиція"
 HEADER_ACTIVITY = "Остання активність"
 HEADER_AVG_PRICE = "Середня ціна"
 HEADER_WEIGHT = "Вага"
@@ -81,24 +161,82 @@ class Stock:
         return 0.0
 
 
+class TreasuryBillsAggregate:
+    """Class representing aggregated Treasury Bills position"""
+
+    def __init__(self):
+        self.symbol = "BILLS"
+        self.total_value = 0.0
+        self.weighted_avg_price = 0.0
+        self.individual_bills = []  # List of individual BILL positions
+        self.asset_category = "BILL"
+        self.is_chinese_stock = False
+        self.weight = 0.0
+
+    def add_bill(self, stock: Stock) -> None:
+        """Add an individual Treasury Bill to the aggregate"""
+        if stock.asset_category == "BILL":
+            self.individual_bills.append(stock)
+            self.total_value += stock.usd_value
+
+    def calculate_weighted_average_price(self) -> None:
+        """Calculate weighted average price of all Treasury Bills"""
+        total_nominal_value = 0.0
+        weighted_price_sum = 0.0
+
+        for bill in self.individual_bills:
+            nominal_value = bill.shares
+            total_nominal_value += nominal_value
+            weighted_price_sum += bill.cost_basis * nominal_value
+
+        if total_nominal_value > 0:
+            self.weighted_avg_price = weighted_price_sum / total_nominal_value
+        else:
+            self.weighted_avg_price = 0.0
+
+    @property
+    def usd_value(self) -> float:
+        """Get total USD value of all Treasury Bills"""
+        return self.total_value
+
+    def set_weight(self, total_portfolio_value: float) -> None:
+        """Set the weight of Treasury Bills in the portfolio"""
+        if total_portfolio_value > 0:
+            self.weight = (self.usd_value / total_portfolio_value) * 100
+        else:
+            self.weight = 0
+
+
 class Portfolio:
     """Class representing a portfolio of stocks"""
 
     def __init__(self, portfolio_date: str):
         self.date = portfolio_date
         self.stocks: Dict[str, Stock] = {}
+        self.treasury_bills: Optional[TreasuryBillsAggregate] = None
 
     def add_stock(self, stock: Stock) -> None:
         """Add a stock to the portfolio"""
-        self.stocks[stock.symbol] = stock
+        if stock.asset_category == "BILL":
+            # Aggregate Treasury Bills
+            if self.treasury_bills is None:
+                self.treasury_bills = TreasuryBillsAggregate()
+            self.treasury_bills.add_bill(stock)
+        else:
+            self.stocks[stock.symbol] = stock
 
     def get_stock(self, symbol: str) -> Optional[Stock]:
         """Get a stock by symbol"""
+        if symbol == "BILLS" and self.treasury_bills:
+            return self.treasury_bills
         return self.stocks.get(symbol)
 
     def get_symbols(self) -> Set[str]:
         """Get all stock symbols in portfolio"""
-        return set(self.stocks.keys())
+        symbols = set(self.stocks.keys())
+        if self.treasury_bills and self.treasury_bills.total_value > 0:
+            symbols.add("BILLS")
+        return symbols
 
     def calculate_weights(self) -> None:
         """Calculate weights of all stocks in portfolio"""
@@ -106,6 +244,10 @@ class Portfolio:
 
         for stock in self.stocks.values():
             stock.set_weight(total_value)
+
+        if self.treasury_bills:
+            self.treasury_bills.calculate_weighted_average_price()
+            self.treasury_bills.set_weight(total_value)
 
     def get_total_value(self) -> float:
         """Calculate total value of portfolio (excluding certain assets)"""
@@ -150,6 +292,10 @@ class PortfolioAnalyzer:
         avg_price = 0.0
         weight = 0.0
         price_change_pct = 0.0
+
+        # Special handling for Treasury Bills aggregate
+        if symbol == "BILLS":
+            return self._analyze_treasury_bills_change()
 
         # Both initial and final
         if initial_stock and final_stock:
@@ -212,6 +358,55 @@ class PortfolioAnalyzer:
                 price_change_pct = final_stock.get_price_change_pct()
 
             weight = final_stock.weight
+            self.activity_counts["new"] += 1
+
+        return activity, avg_price, weight, price_change_pct
+
+    def _analyze_treasury_bills_change(self) -> Tuple[str, float, float, float]:
+        """Analyze change for aggregated Treasury Bills positions"""
+        initial_bills = self.initial_portfolio.treasury_bills
+        final_bills = self.final_portfolio.treasury_bills
+
+        activity = ""
+        avg_price = 0.0
+        weight = 0.0
+        price_change_pct = 0.0
+
+        # Both periods have Treasury Bills
+        if initial_bills and final_bills:
+            # Compare total values
+            value_change_pct = (
+                (final_bills.total_value - initial_bills.total_value)
+                / initial_bills.total_value
+                * 100
+                if initial_bills.total_value > 0
+                else 0
+            )
+
+            if value_change_pct > 5:  # Threshold for significant change
+                activity = f"{INCREASED} (+{int(round(abs(value_change_pct)))}%)"
+                self.activity_counts["increased"] += 1
+            elif value_change_pct < -5:
+                activity = f"{DECREASED} (-{int(round(abs(value_change_pct)))}%)"
+                self.activity_counts["decreased"] += 1
+            else:
+                activity = UNCHANGED
+                self.activity_counts["unchanged"] += 1
+
+            avg_price = final_bills.weighted_avg_price
+            weight = final_bills.weight
+
+        # Treasury Bills eliminated
+        elif initial_bills and not final_bills:
+            activity = ELIMINATED
+            avg_price = initial_bills.weighted_avg_price
+            self.activity_counts["eliminated"] += 1
+
+        # New Treasury Bills position
+        elif final_bills and not initial_bills:
+            activity = NEW_POSITION
+            avg_price = final_bills.weighted_avg_price
+            weight = final_bills.weight
             self.activity_counts["new"] += 1
 
         return activity, avg_price, weight, price_change_pct
@@ -361,20 +556,29 @@ class TableFormatter:
         special_data = []
 
         # Create table header
-        header = f"{HEADER_SYMBOL.ljust(self.symbol_width)}  {HEADER_ACTIVITY.ljust(self.activity_width)}  {HEADER_AVG_PRICE.ljust(self.price_width)}"
-        separator = f"{'-' * self.symbol_width}  {'-' * self.activity_width}  {'-' * self.price_width}"
+        header = f"{HEADER_SYMBOL.ljust(self.symbol_width)}  {HEADER_ACTIVITY.ljust(self.activity_width)}  {HEADER_AVG_PRICE.ljust(self.price_width)}  {'Вага (від загальної вартості)'.ljust(self.weight_width)}"
+        separator = f"{'-' * self.symbol_width}  {'-' * self.activity_width}  {'-' * self.price_width}  {'-' * self.weight_width}"
 
         table_lines = [header, separator]
 
+        # Get all symbols that actually exist in either portfolio
+        all_existing_symbols = self.analyzer.initial_portfolio.get_symbols().union(
+            self.analyzer.final_portfolio.get_symbols()
+        )
+
         # Check each special asset
         for symbol in LONG_BONDS_GOLD_COMMODITIES:
+            # Skip if symbol doesn't exist in either portfolio
+            if symbol not in all_existing_symbols:
+                continue
+
             activity, avg_price, _, price_change_pct = self.analyzer.analyze_change(
                 symbol
             )
 
-            # Skip if there are no changes (activity is "Без змін")
+            # Show unchanged positions as well
             if activity == UNCHANGED:
-                continue
+                activity = "Без змін"
 
             # Format values for the table
             symbol_str = symbol.ljust(self.symbol_width)
@@ -393,21 +597,52 @@ class TableFormatter:
                 # Special case for COMB to add dividend note
                 if symbol == "COMB" and price_change_pct < 0:
                     if abs(price_change_pct) < 1:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% виплата дивів рахується в збитки)"
+                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% дивіденди)"
                     else:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% виплата дивів рахується в збитки)"
+                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% дивіденди)"
             price_str = price_str.ljust(self.price_width)
 
+            # Calculate weight for the special assets table based on total portfolio value
+            # Use stocks value + estimate of special assets value as total portfolio
+            stocks_total = self.analyzer.final_portfolio.get_total_value()
+
+            # Get all special assets value to add to stocks total
+            special_assets_value = 0
+            for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
+                special_stock = self.analyzer.final_portfolio.get_stock(
+                    special_symbol
+                ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
+                if special_stock:
+                    special_assets_value += special_stock.usd_value
+
+            total_portfolio_value = stocks_total + special_assets_value
+
+            # Get the stock data from appropriate portfolio (prefer final, fallback to initial)
+            stock_data = self.analyzer.final_portfolio.get_stock(
+                symbol
+            ) or self.analyzer.initial_portfolio.get_stock(symbol)
+
+            if stock_data and total_portfolio_value > 0:
+                weight = (stock_data.usd_value / total_portfolio_value) * 100
+            else:
+                weight = 0
+
+            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+            weight_str = weight_str.ljust(self.weight_width)
+
             # Create row
-            row = f"{symbol_str}  {activity_str}  {price_str}"
-            special_data.append(row)
+            row = f"{symbol_str}  {activity_str}  {price_str}  {weight_str}"
+            special_data.append((weight, row))
+
+        # Sort by weight in descending order
+        special_data.sort(reverse=True)
 
         # Only show the table if there are assets with changes
         if not special_data:
             return ""
 
-        # Add rows to table
-        table_lines.extend(special_data)
+        # Add sorted rows to table
+        table_lines.extend([data[1] for data in special_data])
 
         return "\n".join(table_lines)
 
@@ -485,19 +720,28 @@ class TableFormatter:
         special_data = []
 
         # Create Markdown table header for special assets
-        header = f"| {HEADER_SYMBOL} | {HEADER_ACTIVITY} | {HEADER_AVG_PRICE} |"
-        separator = f"|{'-' * (self.symbol_width + 2)}|{'-' * (self.activity_width + 2)}|{'-' * (self.price_width + 2)}|"
+        header = f"| {HEADER_SYMBOL} | {HEADER_ACTIVITY} | {HEADER_AVG_PRICE} | Вага (від загальної вартості) |"
+        separator = f"|{'-' * (self.symbol_width + 2)}|{'-' * (self.activity_width + 2)}|{'-' * (self.price_width + 2)}|{'-' * (self.weight_width + 2)}|"
 
         table_lines = [header, separator]
 
+        # Get all symbols that actually exist in either portfolio
+        all_existing_symbols = self.analyzer.initial_portfolio.get_symbols().union(
+            self.analyzer.final_portfolio.get_symbols()
+        )
+
         # Check each special asset
         for symbol in LONG_BONDS_GOLD_COMMODITIES:
+            # Skip if symbol doesn't exist in either portfolio
+            if symbol not in all_existing_symbols:
+                continue
+
             activity, avg_price, _, price_change_pct = self.analyzer.analyze_change(
                 symbol
             )
 
-            # Skip if there are no changes (activity is "Без змін")
-            if activity == UNCHANGED:
+            # Skip if no meaningful data (empty activity and zero price means position doesn't exist)
+            if not activity.strip() and avg_price == 0.0:
                 continue
 
             # Format values for the table
@@ -513,20 +757,51 @@ class TableFormatter:
                 # Special case for COMB to add dividend note
                 if symbol == "COMB" and price_change_pct < 0:
                     if abs(price_change_pct) < 1:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% виплата дивів рахується в збитки)"
+                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% дивіденди)"
                     else:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% виплата дивів рахується в збитки)"
+                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% дивіденди)"
+
+            # Calculate weight for the special assets table based on total portfolio value
+            # Use stocks value + estimate of special assets value as total portfolio
+            stocks_total = self.analyzer.final_portfolio.get_total_value()
+
+            # Get all special assets value to add to stocks total
+            special_assets_value = 0
+            for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
+                special_stock = self.analyzer.final_portfolio.get_stock(
+                    special_symbol
+                ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
+                if special_stock:
+                    special_assets_value += special_stock.usd_value
+
+            total_portfolio_value = stocks_total + special_assets_value
+
+            # Get the stock data from appropriate portfolio (prefer final, fallback to initial)
+            stock_data = self.analyzer.final_portfolio.get_stock(
+                symbol
+            ) or self.analyzer.initial_portfolio.get_stock(symbol)
+
+            if stock_data and total_portfolio_value > 0:
+                weight = (stock_data.usd_value / total_portfolio_value) * 100
+            else:
+                weight = 0
+
+            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+            weight_str = weight_str.ljust(self.weight_width)
 
             # Create row
-            row = f"| {symbol} | {activity} | {price_str} |"
-            special_data.append(row)
+            row = f"| {symbol} | {activity} | {price_str} | {weight_str} |"
+            special_data.append((weight, row))
+
+        # Sort by weight in descending order
+        special_data.sort(reverse=True)
 
         # Only show the table if there are assets with changes
         if not special_data:
             return ""
 
-        # Add rows to table
-        table_lines.extend(special_data)
+        # Add sorted rows to table
+        table_lines.extend([data[1] for data in special_data])
 
         return "\n".join(table_lines)
 
@@ -610,23 +885,43 @@ def main():
     )
     args = parser.parse_args()
 
-    # Use specified files with markPrice attribute available in stocks_count (1).xml
-    initial_file = "reporting/stocks_count.xml"
-    final_file = "reporting/stocks_count (1).xml"
+    # Determine base directory (directory where this script resides)
+    from pathlib import Path
 
-    print(f"Analyzing positions from {initial_file} to {final_file}...")
+    base_dir = Path(__file__).resolve().parent
+
+    # Find all files matching pattern in base directory
+    matching_files = list(base_dir.glob("stocks_count*.xml"))
+
+    initial_file = None
+    final_file = None
+    for path in matching_files:
+        name = path.name
+        if name.endswith("1.xml"):
+            initial_file = path
+        elif name.endswith("2.xml"):
+            final_file = path
+
+    if not initial_file or not final_file:
+        print("Error: Could not find required files in", base_dir)
+        print("Expected: stocks_count1.xml (initial) and stocks_count2.xml (final)")
+        return
+
+    print(f"Analyzing positions from {initial_file.name} to {final_file.name}...")
 
     # Parse portfolio data
     parser = XMLPortfolioParser()
-    initial_portfolio, initial_from_date, initial_to_date = parser.parse(initial_file)
-    final_portfolio, final_from_date, final_to_date = parser.parse(final_file)
+    initial_portfolio, initial_from_date, initial_to_date = parser.parse(
+        str(initial_file)
+    )
+    final_portfolio, final_from_date, final_to_date = parser.parse(str(final_file))
 
     # Calculate portfolio weights
     initial_portfolio.calculate_weights()
     final_portfolio.calculate_weights()
 
-    # Format date for report header - use final_to_date as the period
-    period_formatted = format_date_with_quarter(final_to_date)
+    # Format date for report header - use initial_to_date as the period
+    period_formatted = format_date_with_quarter(initial_to_date)
 
     # Generate and print output
     print(f"Зміни в портфелі акцій за {period_formatted}:")
@@ -647,11 +942,13 @@ def main():
         markdown_output = markdown_formatter.format_as_table()
 
         # Save markdown output to a file without printing to console
-        report_filename = generate_report_filename(final_to_date)
-        with open(report_filename, "w", encoding="utf-8") as f:
+        report_filename = generate_report_filename(initial_to_date)
+        # Save to script directory (where XML files are located)
+        output_path = base_dir / report_filename
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(f"\n # Зміни в портфелі акцій за {period_formatted}\n\n")
             f.write(markdown_output)
-        print(f"\nMarkdown звіт збережено у файл: {report_filename}")
+        print(f"\nMarkdown звіт збережено у файл: {output_path}")
 
 
 if __name__ == "__main__":
