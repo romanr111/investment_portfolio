@@ -241,9 +241,6 @@ class YFinanceFetcher:
 
                 if data.get("success", False):
                     results[symbol_upper] = data
-                    logger.info(
-                        f"Fetched dividend data for {symbol_upper}: yield={data['dividend_yield']:.2f}%"
-                    )
                 else:
                     error_msg = data.get("error", "Unknown error")
                     results[symbol_upper] = {

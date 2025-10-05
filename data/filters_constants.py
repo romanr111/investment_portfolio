@@ -37,6 +37,18 @@ BONDS_VALUES = [
     "VTIP",  # Vanguard Short-Term Inflation-Protected Securities ETF
 ]
 
+# International bonds that require special handling
+INTERNATIONAL_BONDS = [
+    "IHYG",  # iShares International High Yield Bond ETF (US listing)
+    "IHYG.L",  # iShares EUR High Yield Corporate Bond ETF (LSE)
+    "IHYU",  # iShares USD High Yield Corporate Bond UCITS ETF (primary)
+    "IHYU.L",  # iShares USD High Yield Corporate Bond UCITS ETF (LSE)
+    "EHYD",  # iShares Euro High Yield Corp Bond UCITS ETF
+    "EHYD.L",  # iShares Euro High Yield Corp Bond UCITS ETF (LSE)
+    "HYLD",  # Invesco USD High Yield Dist. UCITS ETF
+    "HYLD.L",  # Invesco USD High Yield Dist. UCITS ETF (LSE)
+]
+
 POPULAR_ETFS = [
     # Broad Market US
     "SPY",  # SPDR S&P 500 ETF Trust - tracks S&P 500

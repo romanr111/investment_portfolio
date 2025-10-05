@@ -151,7 +151,6 @@ class InteractiveBrokers:
         # Get total portfolio value
         total_portfolio_value = self._portfolio_positions["IB_Portfolio_Value"]
 
-        # Initialize the enhanced stock data structure
         enhanced_data = {
             CHINA_STOCKS_KEY: {},
             IB_STOCKS_KEY: {},

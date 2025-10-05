@@ -10,6 +10,7 @@ from .formatting import (
     TimelineFormatter,
     SpreadsheetFormatter,
 )
+from data.assets_data import OTHER_BETS
 
 
 class GoogleSheetsClient:
@@ -308,6 +309,28 @@ class PortfolioTableBuilder:
             )
             rows.append(DataFormatter.row_left())
 
+        other_assets = self.data.get("OTHER_ASSETS")
+        if not other_assets:
+            try:
+                other_assets = {"Other": float(OTHER_BETS)}
+            except Exception:
+                other_assets = {}
+
+        for label, raw_val in other_assets.items():
+            try:
+                other_val = float(raw_val)
+            except (TypeError, ValueError):
+                continue
+
+            if other_val:
+                self.category_header_rows.append(len(rows))
+                rows.append(
+                    DataFormatter.row_left(
+                        label, DataFormatter.format_currency(other_val)
+                    )
+                )
+                rows.append(DataFormatter.row_left())
+
         return rows
 
     def _parse_ib_data_with_tracking(self, ib_data: Dict) -> List[List[str]]:
@@ -352,10 +375,15 @@ class PortfolioTableBuilder:
         self._set_cell(final_table, 0, 6, "FIRE Goal")
         self._set_cell(final_table, 0, 7, freedom)
 
-        # Net worth
+        # Net worth (TOTAL_ASSETS already includes OTHER_BETS)
         total_assets = self.data.get("TOTAL_ASSETS", 0)
         self._set_cell(final_table, 2, 6, "Net worth")
-        self._set_cell(final_table, 2, 7, DataFormatter.format_currency(total_assets))
+        self._set_cell(
+            final_table,
+            2,
+            7,
+            DataFormatter.format_currency(total_assets),
+        )
         self._set_cell(final_table, 2, 8, "%")
 
         # Allocations
@@ -385,20 +413,45 @@ class PortfolioTableBuilder:
         logger.debug(f"Regular Stocks sum: {actual_regular_stocks_value}")
         logger.debug(f"Total Stocks calculated: {actual_stocks_value}")
 
-        for row_idx, (cat, pct) in enumerate(alloc_data.items(), start=3):
+        other_assets = self.data.get("OTHER_ASSETS")
+        if other_assets:
+            try:
+                other_val = sum(float(v) for v in other_assets.values())
+            except (TypeError, ValueError):
+                other_val = 0.0
+        else:
+            try:
+                from data.assets_data import OTHER_BETS
+
+                other_val = float(OTHER_BETS)
+            except Exception:
+                other_val = 0.0
+
+        # Start writing allocation rows from row index 3, skipping small categories
+        current_row_idx = 3
+        for cat, pct in alloc_data.items():
             # Use actual values for Bonds and Stocks, calculate others from percentage
             if cat == "Bonds" and actual_bonds_value > 0:
                 val = actual_bonds_value
             elif cat == "Stocks" and actual_stocks_value > 0:
                 val = actual_stocks_value
+            elif cat.lower() == "other bets" and other_val:
+                val = other_val
             else:
                 val = round(total_assets * (pct / 100))
 
-            self._set_cell(final_table, row_idx, 6, cat)
-            self._set_cell(final_table, row_idx, 7, DataFormatter.format_currency(val))
+            # Skip categories with negligible size (< 1 unit or < 1%)
+            if val < 1:
+                continue
+
+            self._set_cell(final_table, current_row_idx, 6, cat)
             self._set_cell(
-                final_table, row_idx, 8, DataFormatter.format_percentage(pct)
+                final_table, current_row_idx, 7, DataFormatter.format_currency(val)
             )
+            self._set_cell(
+                final_table, current_row_idx, 8, DataFormatter.format_percentage(pct)
+            )
+            current_row_idx += 1
 
         # Fixed Income Data (K/L)
         self._build_fixed_income_section(final_table)
@@ -485,26 +538,8 @@ class PortfolioUpdater:
         portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 6, 9, font_size=14)
         # Apply bold to FIXED_INCOME_DATA cell K3 (row 2, col 10)
         portfolio_formatter.apply_bold_to_cell(2, 10)
-        # Calculate percent of fixed income (K4) of total assets (H3) and write to L3 (row 2, col 11)
-        try:
-            # Get values from the worksheet
-            total_assets = float(
-                worksheet.cell(2 + 1, 7 + 1).value.replace(",", "")
-            )  # H3 (row 2, col 7)
-            fixed_income_cell = worksheet.cell(3 + 1, 11)  # K4 (row 3, col 10+1=11)
-            # Extract principal from string like '88345 @ 7.6%'
-            import re
-
-            match = re.match(r"(\d+)", str(fixed_income_cell.value))
-            fixed_income_principal = float(match.group(1)) if match else 0.0
-            pct_str = SpreadsheetFormatter.calc_fixed_income_pct_of_total(
-                fixed_income_principal, total_assets
-            )
-            worksheet.update_cell(2 + 1, 12, pct_str)  # L3 (row 2, col 11+1=12)
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                f"Could not calculate/write fixed income percent: {e}"
-            )
+        # Calculate and display percent of fixed income of total assets
+        self._write_fixed_income_percentage(worksheet)
 
         # Update timeline
         self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))
@@ -542,6 +577,41 @@ class PortfolioUpdater:
                 f"Could not enrich data with enhanced stock positions: {str(e)}"
             )
 
+    def _write_fixed_income_percentage(self, worksheet: gspread.Worksheet) -> None:
+        """Compute % of fixed income principal relative to total assets and write next to header.
+
+        Cells (1-based indices):
+        - Net worth value at H3
+        - FIXED_INCOME_DATA header at K3; percentage should go to L3
+        - Fixed income total value string at L4 (formatted like '88345 @ 7.6%')
+        """
+        # 1-based indices for clarity
+        NET_WORTH_ROW, NET_WORTH_COL = 3, 8  # H3
+        FI_HEADER_ROW, FI_PCT_COL = 3, 12  # L3
+        FI_TOTAL_ROW, FI_TOTAL_VALUE_COL = 4, 12  # L4
+
+        try:
+            # Read total assets (H3), stripping thousands separators
+            raw_total_assets = worksheet.cell(NET_WORTH_ROW, NET_WORTH_COL).value or "0"
+            total_assets = float(str(raw_total_assets).replace(",", ""))
+
+            # Read fixed income combined value (L4) like '88345 @ 7.6%'
+            fixed_income_value = worksheet.cell(FI_TOTAL_ROW, FI_TOTAL_VALUE_COL).value
+            import re
+
+            match = re.match(r"(\d+)", str(fixed_income_value))
+            fixed_income_principal = float(match.group(1)) if match else 0.0
+
+            pct_str = SpreadsheetFormatter.calc_fixed_income_pct_of_total(
+                fixed_income_principal, total_assets
+            )
+            # Write percentage to L3
+            worksheet.update_cell(FI_HEADER_ROW, FI_PCT_COL, pct_str)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Could not calculate/write fixed income percent: {e}"
+            )
+
     def update_net_worth_timeline(self, total_assets: Union[int, float]) -> None:
         """Update net worth timeline worksheet."""
         try:
@@ -559,7 +629,7 @@ class PortfolioUpdater:
         timeline_formatter.format_timeline_entry(total_assets, date_str)
 
 
-def update_portfolio(
+def update_portfolio_spreadsheet(
     data: Dict[str, Any], credentials_path: str, spreadsheet_name: str, ib_client=None
 ) -> None:
     """

@@ -182,8 +182,13 @@ class DataFormatter:
     @staticmethod
     def format_fixed_income(principal: Union[int, float], interest: float) -> str:
         """Format fixed income data."""
+        # Ensure principal is displayed as an integer (no decimals)
+        try:
+            principal_int = int(round(float(principal)))
+        except Exception:
+            principal_int = int(principal) if isinstance(principal, int) else 0
         interest_str = f"{interest * 100:.1f}%"
-        return f"{principal} @ {interest_str}"
+        return f"{principal_int} @ {interest_str}"
 
     @staticmethod
     def format_percentage(value: float) -> str:
@@ -195,6 +200,8 @@ class DataFormatter:
         """Format a currency value."""
         if isinstance(value, Decimal):
             value = float(value)
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
         return str(value)
 
     @staticmethod

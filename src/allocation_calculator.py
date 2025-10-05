@@ -9,97 +9,140 @@ class AllocationCalculator:
     def _calculate_allocations(data: dict) -> dict:
         from decimal import Decimal, ROUND_HALF_UP, getcontext
 
-        # Set precision
-        getcontext().prec = 6
+        getcontext().prec = 10
 
-        total_assets = Decimal(data.get("TOTAL_ASSETS", 0))
+        def to_decimal(value) -> Decimal:
+            try:
+                return Decimal(str(value))
+            except Exception:
+                return Decimal("0")
 
-        # Extract sector values
-        bonds_value = Decimal(sum(data.get("IB_DATA", {}).get("Bonds", {}).values()))
-        stocks_value = Decimal(data.get("IB_DATA", {}).get("Total Stocks Value", 0))
-        commodities_value = Decimal(
-            sum(data.get("IB_DATA", {}).get("Commodities", {}).values())
-        )
-        precious_metals_value = Decimal(
-            sum(data.get("IB_DATA", {}).get("Precious Metals", {}).values())
-        )
-        crypto_spot_value = Decimal(
-            data.get("CRYPTO_DATA", {}).get("Total_Crypto_Value", 0)
-        )
-        crypto_lending_value = Decimal(
-            data.get("FIXED_INCOME_DATA", {})
-            .get("group_weighted_interest", {})
-            .get("Crypto Landing", (0,))[0]
-        )
-        p2p_lending_value = Decimal(
-            data.get("FIXED_INCOME_DATA", {})
-            .get("group_weighted_interest", {})
-            .get("p2p_lending", (0,))[0]
-        )
-        reit_value = Decimal(sum(data.get("IB_DATA", {}).get("REIT", {}).values()))
-        cash_value = Decimal(float(data.get("CASH_DATA", {}).get("Total", 0)))
+        def sum_as_decimal(values) -> Decimal:
+            return sum((to_decimal(v) for v in values), Decimal("0"))
 
-        # Compute percentages with higher precision
-        allocation_breakdown = {
-            "Bonds": (bonds_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Stocks": (stocks_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Commodities": (commodities_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Precious Metals": (precious_metals_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Crypto Coins": (crypto_spot_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Crypto Lending": (crypto_lending_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "P2P Lending": (p2p_lending_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "REIT": (reit_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
-            "Cash": (cash_value / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            ),
+        total_assets = to_decimal(data.get("TOTAL_ASSETS", 0))
+        if total_assets == 0:
+            return {"allocation_breakdown": {}, "total_fixed_income_pct": 0.0}
+
+        ib_data = data.get("IB_DATA", {})
+
+        bonds_value = sum_as_decimal(ib_data.get("Bonds", {}).values())
+        stocks_value = to_decimal(ib_data.get("Total Stocks Value", 0))
+        commodities_value = sum_as_decimal(ib_data.get("Commodities", {}).values())
+        precious_metals_value = sum_as_decimal(ib_data.get("Precious Metals", {}).values())
+        reit_value = sum_as_decimal(ib_data.get("REIT", {}).values())
+
+        crypto_data = data.get("CRYPTO_DATA", {})
+        crypto_spot_value = to_decimal(crypto_data.get("Total_Crypto_Value", 0))
+
+        fi_data = data.get("FIXED_INCOME_DATA", {})
+        group_interest = fi_data.get("group_weighted_interest", {})
+        crypto_lending_value = to_decimal(group_interest.get("Crypto Landing", (0,))[0])
+        p2p_lending_value = to_decimal(group_interest.get("p2p_lending", (0,))[0])
+
+        cash_total = data.get("CASH_DATA", {}).get("Total", 0)
+        cash_value = to_decimal(cash_total)
+
+        other_assets = data.get("OTHER_ASSETS", {})
+        if other_assets:
+            other_value = sum_as_decimal(other_assets.values())
+        else:
+            try:
+                from data.assets_data import OTHER_BETS
+
+                other_value = to_decimal(OTHER_BETS)
+            except Exception:
+                other_value = Decimal("0")
+
+        category_values = {
+            "Bonds": bonds_value,
+            "Stocks": stocks_value,
+            "Commodities": commodities_value,
+            "Precious Metals": precious_metals_value,
+            "Crypto Coins": crypto_spot_value,
+            "Crypto Lending": crypto_lending_value,
+            "P2P Lending": p2p_lending_value,
+            "REIT": reit_value,
+            "Cash": cash_value,
+            "Other Bets": other_value,
         }
 
-        # Sum all percentages
-        total_percentage = sum(allocation_breakdown.values())
+        hundred = Decimal("100")
+        quantize_unit = Decimal("0.1")
 
-        # Calculate discrepancy
-        discrepancy = Decimal("100.00") - total_percentage
+        raw_percentages = {
+            cat: (value / total_assets * hundred) if total_assets else Decimal("0")
+            for cat, value in category_values.items()
+        }
 
-        # Assign discrepancy to the largest sector
-        if discrepancy != Decimal("0.00"):
-            largest_sector = max(allocation_breakdown, key=allocation_breakdown.get)
-            allocation_breakdown[largest_sector] += discrepancy
+        rounded_percentages = {
+            cat: raw.quantize(quantize_unit, rounding=ROUND_HALF_UP)
+            for cat, raw in raw_percentages.items()
+        }
 
-        # Convert to float for final output
-        final_allocations = {k: float(v) for k, v in allocation_breakdown.items()}
+        total_rounded = sum(rounded_percentages.values())
+        discrepancy = hundred - total_rounded
 
-        # Sort the allocations
+        if discrepancy != Decimal("0"):
+            steps = int(
+                (abs(discrepancy) / quantize_unit).to_integral_value(
+                    rounding=ROUND_HALF_UP
+                )
+            )
+            for _ in range(steps):
+                if discrepancy == Decimal("0"):
+                    break
+                if discrepancy > 0:
+                    # Increase categories with the largest positive residual first
+                    cat = max(
+                        rounded_percentages.keys(),
+                        key=lambda c: (
+                            raw_percentages[c] - rounded_percentages[c],
+                            raw_percentages[c],
+                        ),
+                    )
+                    rounded_percentages[cat] += quantize_unit
+                    discrepancy -= quantize_unit
+                else:
+                    # Reduce categories that were rounded up the most
+                    candidates = sorted(
+                        (
+                            c
+                            for c in rounded_percentages
+                            if rounded_percentages[c] > Decimal("0")
+                        ),
+                        key=lambda c: (
+                            raw_percentages[c] - rounded_percentages[c],
+                            raw_percentages[c],
+                        ),
+                    )
+                    cat = None
+                    for candidate in candidates:
+                        if rounded_percentages[candidate] - quantize_unit >= Decimal("0"):
+                            cat = candidate
+                            break
+                    if cat is None:
+                        break
+                    rounded_percentages[cat] -= quantize_unit
+                    discrepancy += quantize_unit
+
+        final_allocations = {k: float(v) for k, v in rounded_percentages.items()}
+
         sorted_allocation = dict(
             sorted(final_allocations.items(), key=lambda item: item[1], reverse=True)
         )
 
-        # Calculate total fixed income percentage
-        total_fixed_income = Decimal(
-            data.get("FIXED_INCOME_DATA", {})
-            .get("fixed_inc_principal_and_interest", {})
-            .get("principal", 0)
+        total_fixed_income = to_decimal(
+            fi_data.get("fixed_inc_principal_and_interest", {}).get("principal", 0)
         )
-        total_fixed_income_pct = float(
-            (total_fixed_income / total_assets * 100).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
+        if total_assets == 0:
+            total_fixed_income_pct = 0.0
+        else:
+            total_fixed_income_pct = float(
+                (total_fixed_income / total_assets * hundred).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
             )
-        )
 
         return {
             "allocation_breakdown": sorted_allocation,

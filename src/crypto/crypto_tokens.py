@@ -7,7 +7,8 @@ from src.crypto.base_exchange_client import ExchangeBase
 from src.crypto.binance_client import BinanceClient
 from src.crypto.okx_client import OKXFiltered
 from src.crypto.whitebit_client import WhiteBit
-from src.crypto.bybit_client import BybitFiltered
+
+# from src.crypto.bybit_client import BybitFiltered  # Commented out: disable Bybit
 from src.crypto.telegram_client import TelegramClient
 from src.crypto.conimarketcap_fetcher import CoinMarketCapFetcher
 
@@ -216,7 +217,7 @@ class CryptoEndpoint:
             # Initialize each broker with safety checks
             self._safe_init_binance()
             self._safe_init_okx()
-            self._safe_init_bybit()
+            # self._safe_init_bybit()  # Commented out: disable Bybit initialization
             self._safe_init_whitebit()
             self._safe_init_telegram()
 
@@ -334,19 +335,9 @@ class CryptoEndpoint:
             logger.warning("Continuing without OKXFiltered")
 
     def _safe_init_bybit(self):
-        """Initialize BybitFiltered with error handling."""
-        try:
-            logger.debug("Initializing BybitFiltered - start")
-            start_time = time.time()
-            bybit_client = BybitFiltered()
-            self.brokers.append(bybit_client)
-            logger.debug(
-                f"BybitFiltered initialized in {time.time() - start_time:.2f} seconds"
-            )
-        except Exception as e:
-            logger.error(f"Error initializing BybitFiltered: {str(e)}")
-            logger.error(f"Stack trace: {traceback.format_exc()}")
-            logger.warning("Continuing without BybitFiltered")
+        """Bybit initialization is disabled."""
+        # Intentionally disabled
+        return
 
     def _safe_init_whitebit(self):
         """Initialize WhiteBit with error handling."""

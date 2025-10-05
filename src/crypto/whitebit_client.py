@@ -94,6 +94,19 @@ class WhiteBit(ExchangeBase):
                 available = float(data.get("available", "0"))
                 if available >= self.MIN_CRYPTO_BALANCE:
                     balances[ticker] = self._round_amount(available)
+
+            # Ensure tokens from WHITEBIT_SAVINGS are present based on rules:
+            core_tokens = {"BTC", "ETH", "SOL", "BNB"}
+            excluded_stablecoins = {"USDT", "USDC"}
+            for position in WHITEBIT_SAVINGS:
+                ticker = position[0]
+                if ticker in core_tokens or ticker not in excluded_stablecoins:
+                    if ticker not in balances:
+                        try:
+                            principal = float(position[1])
+                        except Exception:
+                            principal = 0.0
+                        balances[ticker] = self._round_amount(principal)
             return balances
         except Exception as e:
             return {}

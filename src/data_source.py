@@ -10,7 +10,7 @@ from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
 from src.allocation_calculator import AllocationCalculator
-from src.dasha.dasha import DashaPortfolio
+from data.assets_data import OTHER_BETS
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class DataSource:
             self._prepare_portfolio_data()
             self._calculate_stock_dividends()
             self._setup_fixed_income()
-            self._setup_cash_and_dasha()
+            self._setup_cash()
             self.total_assets = self.calculate_total_assets()
             self.ff_progress = self.calculate_ff_goal_progress()
             logger.info(
@@ -62,6 +62,7 @@ class DataSource:
         data = self.get_combined_data()
         calculator = AllocationCalculator(data)
         data["ALLOCATIONS"] = calculator.get_sorted_sector_allocations()
+        print(f"\nFull portfolio data returned by DataSource: {data}\n")
         return data
 
     def _initialize_data_sources(self) -> None:
@@ -70,6 +71,7 @@ class DataSource:
             self.ib = InteractiveBrokers()
             self.crypto = CryptoEndpoint()
             self.crypto_savings = self.crypto.all_crypto_savings
+            logger.info(f"Crypto savings {self.crypto_savings}")
         except Exception as e:
             logger.error(f"Error in _initialize_data_sources: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
@@ -111,13 +113,12 @@ class DataSource:
         self.fi_data = self.fixed_income_endpoint.get_combined_fixed_income_data()
         self._update_fixed_income_with_stocks()
 
-    def _setup_cash_and_dasha(self) -> None:
-        """Initialize cash and Dasha portfolio components."""
+    def _setup_cash(self) -> None:
+        """Initialize cash."""
         self.cash = CashPortfolio(
             self.ib_data["Net_cash"],
             self.crypto.free_cash,
         )
-        self.dasha = DashaPortfolio(self.ib)
 
     def _update_fixed_income_with_stocks(self) -> None:
         """Update fixed income data with stock-related calculations."""
@@ -155,6 +156,7 @@ class DataSource:
             self.fi_data["group_weighted_interest"]["Crypto Landing"][0],
             self.fi_data["group_weighted_interest"]["p2p_lending"][0],
             float(self.cash.total_cash),
+            float(OTHER_BETS),
         ]
         total = int(sum(asset_values))
         return total
@@ -178,6 +180,9 @@ class DataSource:
             "CASH_DATA": {
                 "Total": self.cash.total_cash,
                 "Breakdown": self.cash.as_dict(),
+            },
+            "OTHER_ASSETS": {
+                "Other Bets": int(OTHER_BETS),
             },
             "TOTAL_ASSETS": self.total_assets,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,

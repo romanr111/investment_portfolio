@@ -36,14 +36,14 @@
 
 2. Запустіть скрипт:
    ```
-   python3 analyze_portfolio.py
+   python3.10 analyze_portfolio.py
    ```
 
 3. Для вибору конкретного формату виводу використовуйте аргумент `--format`:
    ```
-   python3 analyze_portfolio.py --format text     # тільки текстовий формат
-   python3 analyze_portfolio.py --format markdown # тільки markdown формат
-   python3 analyze_portfolio.py --format both     # обидва формати (за замовчуванням)
+   python3.10 analyze_portfolio.py --format text     # тільки текстовий формат
+   python3.10 analyze_portfolio.py --format markdown # тільки markdown формат
+   python3.10 analyze_portfolio.py --format both     # обидва формати (за замовчуванням)
    ```
 
 4. Перегляньте результати в консолі
@@ -115,5 +115,14 @@ Markdown-версія звіту автоматично зберігається
 
 ## Вимоги
 
-- Python 3.6+
-- Стандартні бібліотеки Python (os, xml, glob, typing) 
+- Python 3.10+ (оновлено в 2025 році)
+- Стандартні бібліотеки Python (os, xml, glob, typing)
+
+## Налаштування Python
+
+Проект використовує Python 3.10. Файл `.python-version` вказує на використання Python 3.10.18.
+
+Для установки залежностей:
+```bash
+python3.10 -m pip install -r requirements.txt
+``` 

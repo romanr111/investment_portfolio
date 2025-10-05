@@ -466,6 +466,10 @@ class TableFormatter:
         self.price_width = 15
         self.weight_width = 10
 
+    def _display_symbol(self, symbol: str) -> str:
+        """Return the user-facing label for a given ticker."""
+        return "T Bills" if symbol == "BILLS" else symbol
+
     def format_as_table(self) -> str:
         """Format portfolio analysis as a table based on format_type"""
         if self.format_type == "markdown":
@@ -493,7 +497,8 @@ class TableFormatter:
             )
 
             # Format values with fixed width
-            symbol_str = symbol[: self.symbol_width].ljust(self.symbol_width)
+            symbol_display = self._display_symbol(symbol)
+            symbol_str = symbol_display[: self.symbol_width].ljust(self.symbol_width)
             activity_str = activity[: self.activity_width].ljust(self.activity_width)
 
             # Format price with change percentage
@@ -581,7 +586,8 @@ class TableFormatter:
                 activity = "Без змін"
 
             # Format values for the table
-            symbol_str = symbol.ljust(self.symbol_width)
+            symbol_display = self._display_symbol(symbol)
+            symbol_str = symbol_display.ljust(self.symbol_width)
             activity_str = activity.ljust(self.activity_width)
 
             # Format price with change percentage
@@ -680,7 +686,8 @@ class TableFormatter:
             weight_str = f"{weight:.2f}%" if weight > 0 else "-"
 
             # Create markdown row
-            row = f"| {symbol} | {activity} | {price_str} | {weight_str} |"
+            symbol_display = self._display_symbol(symbol)
+            row = f"| {symbol_display} | {activity} | {price_str} | {weight_str} |"
             output_data.append((weight, row))
 
         # Sort by weight in descending order
@@ -790,7 +797,8 @@ class TableFormatter:
             weight_str = weight_str.ljust(self.weight_width)
 
             # Create row
-            row = f"| {symbol} | {activity} | {price_str} | {weight_str} |"
+            symbol_display = self._display_symbol(symbol)
+            row = f"| {symbol_display} | {activity} | {price_str} | {weight_str} |"
             special_data.append((weight, row))
 
         # Sort by weight in descending order

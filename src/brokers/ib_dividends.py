@@ -11,6 +11,8 @@ from data.filters_constants import (
     HK_TO_ADR_MAP,
     STOCKS_KEY,
     BONDS_VALUES,
+    CHINA_TICKERS,
+    INTERNATIONAL_BONDS,
 )
 from src.brokers.ib import InteractiveBrokers
 from src.brokers.ib_bond_data_fetcher import IBBondsClient
@@ -29,6 +31,13 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("yfinance").setLevel(logging.INFO)
 logging.getLogger("peewee").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+
+# Precompute set of Hong Kong listed tickers to avoid ADR tax treatment
+CHINA_HK_TICKERS = {ticker.upper() for ticker in CHINA_TICKERS}
+
+# International bond tickers that shouldn't get US withholding adjustments
+INTERNATIONAL_BOND_TICKERS = {ticker.upper() for ticker in INTERNATIONAL_BONDS}
 
 
 # Data Models
@@ -166,9 +175,34 @@ class YFinanceDataFetcher(DataFetcher):
 class BondProcessor(AssetProcessor):
     """Processes bond-specific assets."""
 
+    TAX_DISCOUNT = 0.85  # 15% USA tax
+
     def __init__(self, bond_data_client: IBBondsClient):
         self.bond_client = bond_data_client
         self.bond_data: Dict[str, Tuple[Any, float]] = {}
+
+    def calculate_tax_multiplier(self, symbol: str) -> float:
+        """Calculate tax multiplier based on asset type and location.
+
+        Args:
+            symbol: The asset symbol (e.g., 'IBCID791308604', 'IHYG')
+            asset_type: The asset type ('bond')
+
+        Returns:
+            float: Tax multiplier (1.0 for no tax, 0.85 for 15% tax)
+        """
+        symbol_upper = symbol.upper()
+
+        # Treasury bonds (IBCID bonds) get no tax discount
+        if symbol.startswith("IBCID"):
+            return 1.0
+
+        # International bonds (like IHYG) get no tax discount
+        if symbol_upper in INTERNATIONAL_BOND_TICKERS:
+            return 1.0
+
+        # All other bonds get 15% tax discount
+        return self.TAX_DISCOUNT  # 0.85
 
     def fetch_bond_data(self, bond_ids: List[str]) -> None:
         """Fetches data for a list of bond IDs."""
@@ -206,7 +240,10 @@ class BondProcessor(AssetProcessor):
 
         # Ensure yield_rate is a decimal (e.g., 0.0427 for 4.27%)
         # The yield_rate from IB is already in decimal form
-        yearly_income = market_value * yield_rate
+
+        # Calculate yearly income using the new tax multiplier logic
+        tax_multiplier = self.calculate_tax_multiplier(symbol)
+        yearly_income = market_value * yield_rate * tax_multiplier
 
         return AssetInfo(
             market_value=market_value,
@@ -219,6 +256,37 @@ class BondProcessor(AssetProcessor):
 
 class StockProcessor(AssetProcessor):
     """Processes stock and ETF assets using yfinance exclusively."""
+
+    def calculate_tax_multiplier(self, symbol: str) -> float:
+        """Calculate tax multiplier based on asset type and location.
+
+        Args:
+            symbol: The asset symbol (e.g., '9988', 'IBCID791308604', 'SPY')
+
+        Returns:
+            float: Tax multiplier (1.0 for no tax, 0.85 for 15% tax)
+        """
+        symbol_upper = symbol.upper()
+
+        # Non-USA assets get no tax discount (multiplier = 1.0)
+        # Hong Kong-listed China stocks keep full withholding
+        if symbol_upper in CHINA_HK_TICKERS:
+            return 1.0
+
+        # International bonds (like IHYG)
+        if symbol_upper in INTERNATIONAL_BOND_TICKERS:
+            return 1.0
+
+        # Treasury bonds (IBCID bonds that are treasuries)
+        # Note: This is a simplified check - in practice you might need to
+        # check bond metadata to determine if it's a treasury
+        if symbol.startswith("IBCID"):
+            # For now, assume all IBCID bonds are treasuries (no tax)
+            # TODO: Add logic to check bond metadata for treasury classification
+            return 1.0
+
+        # All other USA assets (stocks, ETFs, corporate bonds) get 15% tax discount
+        return self.TAX_DISCOUNT  # 0.85
 
     TAX_DISCOUNT = 0.85  # 15% USA tax
 
@@ -267,9 +335,8 @@ class StockProcessor(AssetProcessor):
                 logger.debug(f"Zero or negative yield for {symbol_upper}: {yield_rate}")
                 return default_info
 
-            # Calculate yearly income
-            # Bond ETFs don't get tax discount applied
-            tax_multiplier = 1.0 if is_bond_etf else self.TAX_DISCOUNT
+            # Calculate yearly income using the new tax multiplier logic
+            tax_multiplier = self.calculate_tax_multiplier(symbol_upper)
             yearly_income = market_value * yield_rate * tax_multiplier
 
             logger.info(
