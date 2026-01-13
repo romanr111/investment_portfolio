@@ -10,7 +10,7 @@ from src.logging.portfolio_logger import (
 from src.data_source import DataSource
 
 #
-# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
+# cd Documents/Development/investment_portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
 #
 
 CREDENTIALS_PATH = "data/credentials.json"

@@ -20,28 +20,11 @@ python analyze_portfolio_reports.py --format text
 python analyze_portfolio_reports.py --format markdown
 ```
 
-### Programmatic Usage
-```python
-from analyze_portfolio_reports import XMLPortfolioParser, PortfolioAnalyzer, TableFormatter
-
-# Parse portfolio data
-parser = XMLPortfolioParser()
-initial_portfolio, _, _ = parser.parse("reporting/stocks_count.xml")
-final_portfolio, _, _ = parser.parse("reporting/stocks_count (1).xml")
-
-# Analyze and format
-initial_portfolio.calculate_weights()
-final_portfolio.calculate_weights()
-analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
-formatter = TableFormatter(analyzer, format_type="markdown")
-report = formatter.format_as_table()
-```
-
 ## Preconditions
 
 1. **Input Files**: Place Interactive Brokers XML exports in the current directory:
-   - `stocks_count1.xml` - Initial portfolio state
-   - `stocks_count2.xml` - Final portfolio state
+   - `stocks_count_trades1.xml` - Initial portfolio state
+   - `stocks_count_trades2.xml` - Final portfolio state with transactions included
 
 2. **XML Format**: Files must contain `<FlexStatement>` with `fromDate`/`toDate` and `<OpenPosition>` elements with:
    - `symbol`, `position`, `costBasisPrice`, `positionValue`, `assetCategory`, `markPrice`
@@ -103,13 +86,20 @@ UNCHANGED = "Без змін"
 NEW_POSITION = "Нова позиція"
 ELIMINATED = "Закрита позиція"
 PORTFOLIO_WEIGHT = "Вага у портфоліо"
-AVERAGE_PRICE = "Cередня ціна"
+AVERAGE_PRICE = "Середня ціна входу"
 
 # Table headers
 HEADER_SYMBOL = "Позиція"
 HEADER_ACTIVITY = "Остання активність"
-HEADER_AVG_PRICE = "Середня ціна"
+HEADER_AVG_PRICE = "Середня ціна входу"
 HEADER_WEIGHT = "Вага"
+
+# Activity icons for better readability
+ICON_NEW = "🆕"
+ICON_INCREASED = "➕"
+ICON_DECREASED = "➖"
+ICON_UNCHANGED = ""
+ICON_ELIMINATED = "✖"
 
 
 class Stock:
@@ -158,6 +148,25 @@ class Stock:
         """Calculate percentage change between cost basis and current market price"""
         if self.cost_basis > 0 and self.mark_price > 0:
             return ((self.mark_price - self.cost_basis) / self.cost_basis) * 100
+        return 0.0
+
+
+class TradeSummary:
+    """Class representing aggregated trade data for a symbol"""
+
+    def __init__(self):
+        self.total_quantity = 0.0
+        self.weighted_price_sum = 0.0
+
+    def add_trade(self, quantity: float, price: float) -> None:
+        """Add a trade to the summary"""
+        self.total_quantity += quantity
+        self.weighted_price_sum += quantity * price
+
+    def average_price(self) -> float:
+        """Return the weighted average price"""
+        if self.total_quantity > 0:
+            return self.weighted_price_sum / self.total_quantity
         return 0.0
 
 
@@ -214,6 +223,7 @@ class Portfolio:
         self.date = portfolio_date
         self.stocks: Dict[str, Stock] = {}
         self.treasury_bills: Optional[TreasuryBillsAggregate] = None
+        self.sell_trades: Dict[str, TradeSummary] = {}
 
     def add_stock(self, stock: Stock) -> None:
         """Add a stock to the portfolio"""
@@ -230,6 +240,21 @@ class Portfolio:
         if symbol == "BILLS" and self.treasury_bills:
             return self.treasury_bills
         return self.stocks.get(symbol)
+
+    def add_sell_trade(self, symbol: str, quantity: float, price: float) -> None:
+        """Add a sell trade to the portfolio trade summary"""
+        if quantity <= 0 or price <= 0:
+            return
+        summary = self.sell_trades.get(symbol)
+        if summary is None:
+            summary = TradeSummary()
+            self.sell_trades[symbol] = summary
+        summary.add_trade(quantity, price)
+
+    def get_avg_sell_price(self, symbol: str) -> float:
+        """Get the weighted average sell price for a symbol"""
+        summary = self.sell_trades.get(symbol)
+        return summary.average_price() if summary else 0.0
 
     def get_symbols(self) -> Set[str]:
         """Get all stock symbols in portfolio"""
@@ -306,13 +331,17 @@ class PortfolioAnalyzer:
             )
 
             if pct_change > 0:
-                activity = f"{INCREASED} (+{int(round(abs(pct_change)))}%)"
+                activity = (
+                    f"{ICON_INCREASED} {INCREASED} (+{int(round(abs(pct_change)))}%)"
+                )
                 self.activity_counts["increased"] += 1
             elif pct_change < 0:
-                activity = f"{DECREASED} (-{int(round(abs(pct_change)))}%)"
+                activity = (
+                    f"{ICON_DECREASED} {DECREASED} (-{int(round(abs(pct_change)))}%)"
+                )
                 self.activity_counts["decreased"] += 1
             else:
-                activity = UNCHANGED
+                activity = f"{ICON_UNCHANGED} {UNCHANGED}"
                 self.activity_counts["unchanged"] += 1
 
             # Handle special case for 9988
@@ -331,7 +360,7 @@ class PortfolioAnalyzer:
 
         # Eliminated position
         elif initial_stock and not final_stock:
-            activity = ELIMINATED
+            activity = f"{ICON_ELIMINATED} {ELIMINATED}"
 
             # Handle special case for 9988
             if symbol in self.hardcoded_prices:
@@ -339,11 +368,15 @@ class PortfolioAnalyzer:
             else:
                 avg_price = initial_stock.cost_basis
 
+            sell_avg_price = self.final_portfolio.get_avg_sell_price(symbol)
+            if avg_price > 0 and sell_avg_price > 0:
+                price_change_pct = ((sell_avg_price - avg_price) / avg_price) * 100
+
             self.activity_counts["eliminated"] += 1
 
         # New position
         elif final_stock and not initial_stock:
-            activity = NEW_POSITION
+            activity = f"{ICON_NEW} {NEW_POSITION}"
 
             # Handle special case for 9988
             if symbol in self.hardcoded_prices:
@@ -384,13 +417,13 @@ class PortfolioAnalyzer:
             )
 
             if value_change_pct > 5:  # Threshold for significant change
-                activity = f"{INCREASED} (+{int(round(abs(value_change_pct)))}%)"
+                activity = f"{ICON_INCREASED} {INCREASED} (+{int(round(abs(value_change_pct)))}%)"
                 self.activity_counts["increased"] += 1
             elif value_change_pct < -5:
-                activity = f"{DECREASED} (-{int(round(abs(value_change_pct)))}%)"
+                activity = f"{ICON_DECREASED} {DECREASED} (-{int(round(abs(value_change_pct)))}%)"
                 self.activity_counts["decreased"] += 1
             else:
-                activity = UNCHANGED
+                activity = f"{ICON_UNCHANGED} {UNCHANGED}"
                 self.activity_counts["unchanged"] += 1
 
             avg_price = final_bills.weighted_avg_price
@@ -398,13 +431,13 @@ class PortfolioAnalyzer:
 
         # Treasury Bills eliminated
         elif initial_bills and not final_bills:
-            activity = ELIMINATED
+            activity = f"{ICON_ELIMINATED} {ELIMINATED}"
             avg_price = initial_bills.weighted_avg_price
             self.activity_counts["eliminated"] += 1
 
         # New Treasury Bills position
         elif final_bills and not initial_bills:
-            activity = NEW_POSITION
+            activity = f"{ICON_NEW} {NEW_POSITION}"
             avg_price = final_bills.weighted_avg_price
             weight = final_bills.weight
             self.activity_counts["new"] += 1
@@ -451,6 +484,22 @@ class XMLPortfolioParser:
 
             portfolio.add_stock(stock)
 
+        for trade in root.findall(".//Trade"):
+            symbol = trade.attrib.get("symbol", "")
+            if not symbol:
+                continue
+
+            buy_sell = trade.attrib.get("buySell", "").upper()
+            quantity = float(trade.attrib.get("quantity", "0"))
+            trade_price = float(trade.attrib.get("tradePrice", "0"))
+
+            is_sell = buy_sell == "SELL" or quantity < 0
+            if not is_sell:
+                continue
+
+            sell_quantity = abs(quantity)
+            portfolio.add_sell_trade(symbol, sell_quantity, trade_price)
+
         return portfolio, from_date, to_date
 
 
@@ -462,13 +511,61 @@ class TableFormatter:
         self.format_type = format_type  # "text" or "markdown"
         # Fixed column widths
         self.symbol_width = 8
-        self.activity_width = 20
-        self.price_width = 15
-        self.weight_width = 10
+        self.activity_width = 24
+        self.price_width = 32
+        self.weight_width = 14
 
     def _display_symbol(self, symbol: str) -> str:
         """Return the user-facing label for a given ticker."""
         return "T Bills" if symbol == "BILLS" else symbol
+
+    def _format_price_cell(self, symbol: str, avg_price: float) -> str:
+        """Format entry/exit prices with P&L percentage."""
+        if avg_price <= 0:
+            return "-"
+
+        final_stock = self.analyzer.final_portfolio.get_stock(symbol)
+        if final_stock:
+            target_price = float(getattr(final_stock, "mark_price", 0.0))
+            if target_price <= 0:
+                return f"{avg_price:.2f}$"
+            pct_change = ((target_price - avg_price) / avg_price) * 100
+            sign = "+" if pct_change > 0 else ""
+            if abs(pct_change) < 1:
+                pct_str = f"{sign}{pct_change:.1f}%"
+            else:
+                pct_str = f"{sign}{pct_change:.0f}%"
+            if symbol == "COMB" and pct_change < 0:
+                pct_str = f"{pct_str} дивіденди"
+            return f"{avg_price:.2f}$ ({pct_str})"
+
+        target_price = self.analyzer.final_portfolio.get_avg_sell_price(symbol)
+        if target_price > 0:
+            pct_change = ((target_price - avg_price) / avg_price) * 100
+            sign = "+" if pct_change > 0 else ""
+            if abs(pct_change) < 1:
+                pct_str = f"{sign}{pct_change:.1f}%"
+            else:
+                pct_str = f"{sign}{pct_change:.0f}%"
+            return f"{avg_price:.2f}$ → {target_price:.2f}$ (Exit) ({pct_str})"
+
+        return f"{avg_price:.2f}$"
+
+    def _format_weight_cell(self, symbol: str) -> Tuple[str, float]:
+        """Format weight for open and closed positions."""
+        initial_stock = self.analyzer.initial_portfolio.get_stock(symbol)
+        final_stock = self.analyzer.final_portfolio.get_stock(symbol)
+
+        if final_stock:
+            weight = final_stock.weight
+            return (f"{weight:.2f}%" if weight > 0 else "-"), weight
+
+        if initial_stock:
+            weight = initial_stock.weight
+            if weight > 0:
+                return f"{weight:.2f}% → 0%", 0.0
+
+        return "-", 0.0
 
     def format_as_table(self) -> str:
         """Format portfolio analysis as a table based on format_type"""
@@ -492,34 +589,23 @@ class TableFormatter:
             if self._should_skip(symbol):
                 continue
 
-            activity, avg_price, weight, price_change_pct = (
-                self.analyzer.analyze_change(symbol)
-            )
+            activity, avg_price, _, _ = self.analyzer.analyze_change(symbol)
 
             # Format values with fixed width
             symbol_display = self._display_symbol(symbol)
             symbol_str = symbol_display[: self.symbol_width].ljust(self.symbol_width)
             activity_str = activity[: self.activity_width].ljust(self.activity_width)
 
-            # Format price with change percentage
-            price_str = f"{avg_price:.2f}$"
-            if price_change_pct != 0:
-                sign = "+" if price_change_pct > 0 else ""
-                # Show decimal for small changes, integers for larger ones
-                if abs(price_change_pct) < 1:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}%)"
-                else:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}%)"
+            price_str = self._format_price_cell(symbol, avg_price).ljust(
+                self.price_width
+            )
 
-                # Remove special case for COMB here - not needed in main table
-            price_str = price_str.ljust(self.price_width)
-
-            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+            weight_str, weight_sort = self._format_weight_cell(symbol)
             weight_str = weight_str.ljust(self.weight_width)
 
             # Create row
             row = f"{symbol_str}  {activity_str}  {price_str}  {weight_str}"
-            output_data.append((weight, row))
+            output_data.append((weight_sort, row))
 
         # Sort by weight in descending order
         output_data.sort(reverse=True)
@@ -543,15 +629,26 @@ class TableFormatter:
         summary = f"{'Підсумок'.ljust(self.symbol_width)}  {activity_summary.ljust(self.activity_width)}  {''.ljust(self.price_width)}  {'100.00%'.ljust(self.weight_width)}"
         table_lines.append(summary)
 
+        # Add legend
+        table_lines.append("Примітка: комісії, дивіденди не враховані.")
+        table_lines.append("Для закритих позицій друга ціна — середня ціна виходу.")
+        table_lines.append("")
+
         # Add total value
         total_value = self.analyzer.final_portfolio.get_total_value()
-        total_line = f"\nЗагальна вартість всіх акцій (в USD, без облігацій, золота та товарних активів): {total_value:,.2f}$"
+        total_line = (
+            "Загальна вартість всіх акцій (в USD, без облігацій, золота та "
+            f"товарних активів): {total_value:,.2f}$"
+        )
         table_lines.append(total_line)
 
         # Add special assets table
         special_assets_table = self._format_special_assets_table_text()
         if special_assets_table:
-            table_lines.append("\n\nОблігації, золото та товарні активи\n")
+            table_lines.append("")
+            table_lines.append("")
+            table_lines.append("Облігації, золото та товарні активи")
+            table_lines.append("")
             table_lines.append(special_assets_table)
 
         return "\n".join(table_lines)
@@ -571,74 +668,54 @@ class TableFormatter:
             self.analyzer.final_portfolio.get_symbols()
         )
 
+        # Calculate weight base for special assets once
+        stocks_total = self.analyzer.final_portfolio.get_total_value()
+        special_assets_value = 0
+        for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
+            special_stock = self.analyzer.final_portfolio.get_stock(
+                special_symbol
+            ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
+            if special_stock:
+                special_assets_value += special_stock.usd_value
+        total_portfolio_value = stocks_total + special_assets_value
+
         # Check each special asset
         for symbol in LONG_BONDS_GOLD_COMMODITIES:
             # Skip if symbol doesn't exist in either portfolio
             if symbol not in all_existing_symbols:
                 continue
 
-            activity, avg_price, _, price_change_pct = self.analyzer.analyze_change(
-                symbol
-            )
-
-            # Show unchanged positions as well
-            if activity == UNCHANGED:
-                activity = "Без змін"
+            activity, avg_price, _, _ = self.analyzer.analyze_change(symbol)
 
             # Format values for the table
             symbol_display = self._display_symbol(symbol)
             symbol_str = symbol_display.ljust(self.symbol_width)
             activity_str = activity.ljust(self.activity_width)
 
-            # Format price with change percentage
-            price_str = f"{avg_price:.2f}$"
-            if price_change_pct != 0:
-                sign = "+" if price_change_pct > 0 else ""
-                # Show decimal for small changes, integers for larger ones
-                if abs(price_change_pct) < 1:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}%)"
-                else:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}%)"
+            price_str = self._format_price_cell(symbol, avg_price).ljust(
+                self.price_width
+            )
 
-                # Special case for COMB to add dividend note
-                if symbol == "COMB" and price_change_pct < 0:
-                    if abs(price_change_pct) < 1:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% дивіденди)"
-                    else:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% дивіденди)"
-            price_str = price_str.ljust(self.price_width)
+            initial_stock = self.analyzer.initial_portfolio.get_stock(symbol)
+            final_stock = self.analyzer.final_portfolio.get_stock(symbol)
+            weight_sort = 0.0
 
-            # Calculate weight for the special assets table based on total portfolio value
-            # Use stocks value + estimate of special assets value as total portfolio
-            stocks_total = self.analyzer.final_portfolio.get_total_value()
-
-            # Get all special assets value to add to stocks total
-            special_assets_value = 0
-            for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
-                special_stock = self.analyzer.final_portfolio.get_stock(
-                    special_symbol
-                ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
-                if special_stock:
-                    special_assets_value += special_stock.usd_value
-
-            total_portfolio_value = stocks_total + special_assets_value
-
-            # Get the stock data from appropriate portfolio (prefer final, fallback to initial)
-            stock_data = self.analyzer.final_portfolio.get_stock(
-                symbol
-            ) or self.analyzer.initial_portfolio.get_stock(symbol)
-
-            if stock_data and total_portfolio_value > 0:
-                weight = (stock_data.usd_value / total_portfolio_value) * 100
+            if final_stock and total_portfolio_value > 0:
+                weight = (final_stock.usd_value / total_portfolio_value) * 100
+                weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+                weight_sort = weight
+            elif initial_stock and total_portfolio_value > 0:
+                weight = (initial_stock.usd_value / total_portfolio_value) * 100
+                weight_str = f"{weight:.2f}% → 0%" if weight > 0 else "-"
+                weight_sort = 0.0
             else:
-                weight = 0
+                weight_str = "-"
 
-            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
             weight_str = weight_str.ljust(self.weight_width)
 
             # Create row
             row = f"{symbol_str}  {activity_str}  {price_str}  {weight_str}"
-            special_data.append((weight, row))
+            special_data.append((weight_sort, row))
 
         # Sort by weight in descending order
         special_data.sort(reverse=True)
@@ -667,28 +744,17 @@ class TableFormatter:
             if self._should_skip(symbol):
                 continue
 
-            activity, avg_price, weight, price_change_pct = (
-                self.analyzer.analyze_change(symbol)
-            )
+            activity, avg_price, _, _ = self.analyzer.analyze_change(symbol)
 
             # Format values for markdown table
-            price_str = f"{avg_price:.2f}$"
-            if price_change_pct != 0:
-                sign = "+" if price_change_pct > 0 else ""
-                # Show decimal for small changes, integers for larger ones
-                if abs(price_change_pct) < 1:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}%)"
-                else:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}%)"
+            price_str = self._format_price_cell(symbol, avg_price)
 
-                # Remove special case for COMB here - not needed in main table
-
-            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+            weight_str, weight_sort = self._format_weight_cell(symbol)
 
             # Create markdown row
             symbol_display = self._display_symbol(symbol)
             row = f"| {symbol_display} | {activity} | {price_str} | {weight_str} |"
-            output_data.append((weight, row))
+            output_data.append((weight_sort, row))
 
         # Sort by weight in descending order
         output_data.sort(reverse=True)
@@ -709,15 +775,27 @@ class TableFormatter:
         summary = f"| **Підсумок** | {activity_summary} | | **100.00%** |"
         table_lines.append(summary)
 
+        # Add legend
+        table_lines.append("")
+        table_lines.append("Примітка: комісії, дивіденди та FX не враховані.")
+        table_lines.append("Для закритих позицій друга ціна — середня ціна виходу.")
+        table_lines.append("")
+
         # Add total value
         total_value = self.analyzer.final_portfolio.get_total_value()
-        total_line = f"\n**Загальна вартість всіх акцій (в USD, без облігацій, золота та товарних активів): {total_value:,.2f}$**"
+        total_line = (
+            "**Загальна вартість всіх акцій (в USD, без облігацій, золота та "
+            f"товарних активів): {total_value:,.2f}$**"
+        )
         table_lines.append(total_line)
 
         # Add special assets table
         special_assets_table = self._format_special_assets_table()
         if special_assets_table:
-            table_lines.append("\n\n## Облігації, золото та товарні активи\n")
+            table_lines.append("")
+            table_lines.append("")
+            table_lines.append("## Облігації, золото та товарні активи")
+            table_lines.append("")
             table_lines.append(special_assets_table)
 
         return "\n".join(table_lines)
@@ -737,69 +815,51 @@ class TableFormatter:
             self.analyzer.final_portfolio.get_symbols()
         )
 
+        # Calculate weight base for special assets once
+        stocks_total = self.analyzer.final_portfolio.get_total_value()
+        special_assets_value = 0
+        for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
+            special_stock = self.analyzer.final_portfolio.get_stock(
+                special_symbol
+            ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
+            if special_stock:
+                special_assets_value += special_stock.usd_value
+        total_portfolio_value = stocks_total + special_assets_value
+
         # Check each special asset
         for symbol in LONG_BONDS_GOLD_COMMODITIES:
             # Skip if symbol doesn't exist in either portfolio
             if symbol not in all_existing_symbols:
                 continue
 
-            activity, avg_price, _, price_change_pct = self.analyzer.analyze_change(
-                symbol
-            )
+            activity, avg_price, _, _ = self.analyzer.analyze_change(symbol)
 
             # Skip if no meaningful data (empty activity and zero price means position doesn't exist)
             if not activity.strip() and avg_price == 0.0:
                 continue
 
             # Format values for the table
-            price_str = f"{avg_price:.2f}$"
-            if price_change_pct != 0:
-                sign = "+" if price_change_pct > 0 else ""
-                # Show decimal for small changes, integers for larger ones
-                if abs(price_change_pct) < 1:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}%)"
-                else:
-                    price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}%)"
+            price_str = self._format_price_cell(symbol, avg_price)
 
-                # Special case for COMB to add dividend note
-                if symbol == "COMB" and price_change_pct < 0:
-                    if abs(price_change_pct) < 1:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.1f}% дивіденди)"
-                    else:
-                        price_str = f"{avg_price:.2f}$ ({sign}{price_change_pct:.0f}% дивіденди)"
+            initial_stock = self.analyzer.initial_portfolio.get_stock(symbol)
+            final_stock = self.analyzer.final_portfolio.get_stock(symbol)
+            weight_sort = 0.0
 
-            # Calculate weight for the special assets table based on total portfolio value
-            # Use stocks value + estimate of special assets value as total portfolio
-            stocks_total = self.analyzer.final_portfolio.get_total_value()
-
-            # Get all special assets value to add to stocks total
-            special_assets_value = 0
-            for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
-                special_stock = self.analyzer.final_portfolio.get_stock(
-                    special_symbol
-                ) or self.analyzer.initial_portfolio.get_stock(special_symbol)
-                if special_stock:
-                    special_assets_value += special_stock.usd_value
-
-            total_portfolio_value = stocks_total + special_assets_value
-
-            # Get the stock data from appropriate portfolio (prefer final, fallback to initial)
-            stock_data = self.analyzer.final_portfolio.get_stock(
-                symbol
-            ) or self.analyzer.initial_portfolio.get_stock(symbol)
-
-            if stock_data and total_portfolio_value > 0:
-                weight = (stock_data.usd_value / total_portfolio_value) * 100
+            if final_stock and total_portfolio_value > 0:
+                weight = (final_stock.usd_value / total_portfolio_value) * 100
+                weight_str = f"{weight:.2f}%" if weight > 0 else "-"
+                weight_sort = weight
+            elif initial_stock and total_portfolio_value > 0:
+                weight = (initial_stock.usd_value / total_portfolio_value) * 100
+                weight_str = f"{weight:.2f}% → 0%" if weight > 0 else "-"
+                weight_sort = 0.0
             else:
-                weight = 0
-
-            weight_str = f"{weight:.2f}%" if weight > 0 else "-"
-            weight_str = weight_str.ljust(self.weight_width)
+                weight_str = "-"
 
             # Create row
             symbol_display = self._display_symbol(symbol)
             row = f"| {symbol_display} | {activity} | {price_str} | {weight_str} |"
-            special_data.append((weight, row))
+            special_data.append((weight_sort, row))
 
         # Sort by weight in descending order
         special_data.sort(reverse=True)

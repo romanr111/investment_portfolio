@@ -1,7 +1,7 @@
 CASH = 983  # Estate Guru cash
 LENDED = 933
 DEBT = 0
-PRIVAT = -1700
+PRIVAT = 0
 
 # Crypto Savings
 TELEGRAM_WALLET_SAVINGS = (3295, 0.13)

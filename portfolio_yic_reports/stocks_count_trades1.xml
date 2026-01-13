@@ -1,0 +1,35 @@
+<FlexQueryResponse queryName="stocks_count_trades" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U9064529" fromDate="20251001" toDate="20251001" period="" whenGenerated="20260113;105649">
+<OpenPositions>
+<OpenPosition symbol="IHYG" position="35" costBasisPrice="93.795714286" positionValue="3237.85" assetCategory="STK" markPrice="92.51" />
+<OpenPosition symbol="9988" position="500" costBasisPrice="94.530331932" positionValue="88500" assetCategory="STK" markPrice="177" />
+<OpenPosition symbol="ASML" position="1" costBasisPrice="745.595046" positionValue="1003.27" assetCategory="STK" markPrice="1003.27" />
+<OpenPosition symbol="BN" position="55" costBasisPrice="39.8785752" positionValue="3733.4" assetCategory="STK" markPrice="67.88" />
+<OpenPosition symbol="BRK B" position="8" costBasisPrice="484.338699375" positionValue="3985.6" assetCategory="STK" markPrice="498.2" />
+<OpenPosition symbol="C" position="25" costBasisPrice="48.3172" positionValue="2467.75" assetCategory="STK" markPrice="98.71" />
+<OpenPosition symbol="COF" position="10" costBasisPrice="109.04875" positionValue="2134.8" assetCategory="STK" markPrice="213.48" />
+<OpenPosition symbol="COMB" position="145" costBasisPrice="26.586590966" positionValue="3175.5" assetCategory="STK" markPrice="21.9" />
+<OpenPosition symbol="COP" position="25" costBasisPrice="106.8096126" positionValue="2386.5" assetCategory="STK" markPrice="95.46" />
+<OpenPosition symbol="CP" position="23" costBasisPrice="77.290300522" positionValue="1721.09" assetCategory="STK" markPrice="74.83" />
+<OpenPosition symbol="CVS" position="30" costBasisPrice="56.6218914" positionValue="2306.1" assetCategory="STK" markPrice="76.87" />
+<OpenPosition symbol="CVX" position="12" costBasisPrice="147.339178667" positionValue="1854.96" assetCategory="STK" markPrice="154.58" />
+<OpenPosition symbol="GOOG" position="19" costBasisPrice="136.792752421" positionValue="4665.26" assetCategory="STK" markPrice="245.54" />
+<OpenPosition symbol="HUM" position="8" costBasisPrice="289.4940385" positionValue="1974.16" assetCategory="STK" markPrice="246.77" />
+<OpenPosition symbol="IAU" position="80" costBasisPrice="59.810371338" positionValue="5830.4" assetCategory="STK" markPrice="72.88" />
+<OpenPosition symbol="IBKR" position="17.3979" costBasisPrice="58.669749567" positionValue="1196.63" assetCategory="STK" markPrice="68.78" />
+<OpenPosition symbol="KWEB" position="113" costBasisPrice="32.50740885" positionValue="4795.72" assetCategory="STK" markPrice="42.44" />
+<OpenPosition symbol="NKE" position="67" costBasisPrice="77.150560866" positionValue="4971.4" assetCategory="STK" markPrice="74.2" />
+<OpenPosition symbol="PDD" position="9" costBasisPrice="116.513537778" positionValue="1209.6" assetCategory="STK" markPrice="134.4" />
+<OpenPosition symbol="SLV" position="71" costBasisPrice="30.232633479" positionValue="3046.61" assetCategory="STK" markPrice="42.91" />
+<OpenPosition symbol="SPHY" position="80" costBasisPrice="23.187546" positionValue="1907.2" assetCategory="STK" markPrice="23.84" />
+<OpenPosition symbol="TLT" position="85" costBasisPrice="90.495114718" positionValue="7589.65" assetCategory="STK" markPrice="89.29" />
+<OpenPosition symbol="UBER" position="3" costBasisPrice="86.122379333" positionValue="289.83" assetCategory="STK" markPrice="96.61" />
+<OpenPosition symbol="UNH" position="11" costBasisPrice="273.805963364" positionValue="3831.3" assetCategory="STK" markPrice="348.3" />
+<OpenPosition symbol="VOO" position="4" costBasisPrice="522.048746" positionValue="2458.28" assetCategory="STK" markPrice="614.57" />
+<OpenPosition symbol="912797RC3" position="31000" costBasisPrice="99.375903226" positionValue="30958.36" assetCategory="BILL" markPrice="99.865667" />
+</OpenPositions><Trades>
+</Trades>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>
