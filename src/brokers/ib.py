@@ -131,15 +131,16 @@ class InteractiveBrokers:
 
     def get_stock_positions_analytics(self):
         """
-        Analyzes stock positions with detailed performance metrics and portfolio allocation.
+        Analyzes equity and precious metals positions with detailed performance metrics.
 
         Returns:
-            dict: Contains analytics for Chinese and regular stocks with fields:
+            dict: Contains analytics for Chinese stocks, regular stocks, and precious metals
+            positions with fields:
                 - market_value, quantity, avg_price, current_price
                 - unrealized_pnl (absolute and percentage)
                 - portfolio weights (% of stocks and total portfolio)
                 - metadata: aggregated portfolio metrics and summaries
-                All stocks are sorted by market value in descending order within their categories.
+                Positions are sorted by market value in descending order within categories.
         """
         if self._enhanced_stock_data is not None:
             return self._enhanced_stock_data
@@ -154,6 +155,7 @@ class InteractiveBrokers:
         enhanced_data = {
             CHINA_STOCKS_KEY: {},
             IB_STOCKS_KEY: {},
+            PRECIOUS_METALS_KEY: {},
             "metadata": {
                 "total_stocks_value": self._portfolio_positions[IB_STOCKS_VALUE],
                 "china_stocks_value": sum(
@@ -171,6 +173,7 @@ class InteractiveBrokers:
         # Get portfolio positions to work with
         china_stocks = self._portfolio_positions[CHINA_STOCKS_KEY]
         regular_stocks = self._portfolio_positions[IB_STOCKS_KEY]
+        precious_metals = self._portfolio_positions[PRECIOUS_METALS_KEY]
         total_stocks_value = enhanced_data["metadata"]["total_stocks_value"]
 
         # Log all positions for debugging
@@ -179,6 +182,7 @@ class InteractiveBrokers:
         )
         logger.debug(f"China stocks: {list(china_stocks.keys())}")
         logger.debug(f"Regular stocks: {list(regular_stocks.keys())}")
+        logger.debug(f"Precious metals: {list(precious_metals.keys())}")
 
         # Process positions from the API response
         if self.all_portfolio_info is None:
@@ -191,7 +195,7 @@ class InteractiveBrokers:
             symbol = position.get("contractDesc")
             logger.debug(f"Processing position: {symbol}")
 
-            # Check if this position is in China Stocks or Regular Stocks
+            # Check if this position is in China Stocks, Regular Stocks, or Precious Metals
             if symbol in china_stocks:
                 category = CHINA_STOCKS_KEY
                 market_value = china_stocks[symbol]
@@ -200,10 +204,14 @@ class InteractiveBrokers:
                 category = IB_STOCKS_KEY
                 market_value = regular_stocks[symbol]
                 logger.debug(f"  Found in regular stocks: {symbol} = ${market_value}")
+            elif symbol in precious_metals:
+                category = PRECIOUS_METALS_KEY
+                market_value = precious_metals[symbol]
+                logger.debug(f"  Found in precious metals: {symbol} = ${market_value}")
             else:
                 # Log skipped positions for debugging
                 logger.debug(
-                    f"  Skipping position not in China or regular stocks: {symbol}"
+                    f"  Skipping position not in tracked categories: {symbol}"
                 )
                 continue
 
@@ -219,9 +227,6 @@ class InteractiveBrokers:
             # Calculate cost basis for this position
             cost_basis = avg_price * quantity
 
-            # Update total cost basis
-            enhanced_data["metadata"]["total_cost_basis"] += cost_basis
-
             # Calculate Unrealized P&L
             unrealized_pnl = (market_price - avg_price) * quantity
 
@@ -234,11 +239,18 @@ class InteractiveBrokers:
                 unrealized_pnl_percentage = 0
 
             # Calculate percentages
-            stocks_percentage = (
-                (market_value / total_stocks_value) * 100
-                if total_stocks_value > 0
-                else 0
-            )
+            if category in [CHINA_STOCKS_KEY, IB_STOCKS_KEY]:
+                stocks_percentage = (
+                    (market_value / total_stocks_value) * 100
+                    if total_stocks_value > 0
+                    else 0
+                )
+                # Keep stock-level metadata semantics unchanged.
+                enhanced_data["metadata"]["total_cost_basis"] += cost_basis
+                enhanced_data["metadata"]["total_unrealized_pnl"] += unrealized_pnl
+            else:
+                stocks_percentage = 0
+
             portfolio_percentage = (
                 (market_value / total_portfolio_value) * 100
                 if total_portfolio_value > 0
@@ -257,9 +269,6 @@ class InteractiveBrokers:
                 "percentage_of_portfolio": round(portfolio_percentage, 2),
             }
 
-            # Update total unrealized P&L
-            enhanced_data["metadata"]["total_unrealized_pnl"] += unrealized_pnl
-
         # Calculate total unrealized P&L percentage relative to total cost basis
         total_unrealized_pnl = enhanced_data["metadata"]["total_unrealized_pnl"]
         total_cost_basis = enhanced_data["metadata"]["total_cost_basis"]
@@ -271,8 +280,8 @@ class InteractiveBrokers:
         else:
             enhanced_data["metadata"]["total_unrealized_pnl_percentage"] = 0
 
-        # Sort stocks by market value in descending order within each category
-        for category in [CHINA_STOCKS_KEY, IB_STOCKS_KEY]:
+        # Sort positions by market value in descending order within each category
+        for category in [CHINA_STOCKS_KEY, IB_STOCKS_KEY, PRECIOUS_METALS_KEY]:
             enhanced_data[category] = dict(
                 sorted(
                     enhanced_data[category].items(),

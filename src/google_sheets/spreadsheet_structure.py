@@ -241,6 +241,39 @@ class PortfolioTableBuilder:
 
                             rows.append(DataFormatter.row_left())
 
+                        elif subcat == "Precious Metals":
+                            # Track the row index for the category header
+                            self.category_header_rows.append(len(rows))
+                            rows.append(DataFormatter.row_left(subcat))
+
+                            # Add individual positions with purchase-price delta if available
+                            enhanced_precious_metals = (
+                                enhanced_stocks.get(subcat, {})
+                                if enhanced_stocks
+                                else {}
+                            )
+
+                            for sym, val in contents.items():
+                                position_row = DataFormatter.row_left(
+                                    sym, DataFormatter.format_currency(val)
+                                )
+
+                                if (
+                                    sym in enhanced_precious_metals
+                                    and "unrealized_pnl_percentage"
+                                    in enhanced_precious_metals[sym]
+                                ):
+                                    pnl_percent = enhanced_precious_metals[sym][
+                                        "unrealized_pnl_percentage"
+                                    ]
+                                    position_row.append(
+                                        DataFormatter.format_pnl_percentage(pnl_percent)
+                                    )
+
+                                rows.append(position_row)
+
+                            rows.append(DataFormatter.row_left())
+
                         else:
                             # Track the row index for any other category header
                             self.category_header_rows.append(len(rows))
@@ -652,6 +685,7 @@ def update_portfolio_spreadsheet(
 def create_enhanced_stocks_data(
     china_stocks: Dict[str, Dict[str, Any]] = None,
     regular_stocks: Dict[str, Dict[str, Any]] = None,
+    precious_metals: Dict[str, Dict[str, Any]] = None,
     metadata: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
@@ -663,6 +697,7 @@ def create_enhanced_stocks_data(
     Args:
         china_stocks: Dictionary mapping stock symbols to position details for China stocks
         regular_stocks: Dictionary mapping stock symbols to position details for regular stocks
+        precious_metals: Dictionary mapping metal symbols to position details
         metadata: Dictionary containing metadata about the stock positions
 
     Returns:
@@ -671,12 +706,14 @@ def create_enhanced_stocks_data(
     # Initialize with empty dictionaries if not provided
     china_stocks = china_stocks or {}
     regular_stocks = regular_stocks or {}
+    precious_metals = precious_metals or {}
     metadata = metadata or {}
 
     # Create the structure
     enhanced_data = {
         "China Stocks": china_stocks,
         "Stocks": regular_stocks,
+        "Precious Metals": precious_metals,
         "metadata": metadata,
     }
 
