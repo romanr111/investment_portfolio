@@ -120,6 +120,86 @@ class SpreadsheetFormatter:
         self.worksheet.spreadsheet.batch_update({"requests": [format_request]})
         self.logger.info(f"Applied bold formatting to cell R{row+1}C{col+1}")
 
+    def apply_percentage_gradient_to_column(
+        self,
+        start_row: int,
+        end_row: int,
+        column_index: int = 5,
+        min_value: float = -0.30,
+        mid_value: float = 0.0,
+        max_value: float = 0.50,
+    ) -> None:
+        """Apply percentage display and red-white-green gradient to a column range."""
+        if end_row <= start_row:
+            return
+
+        target_range = {
+            "sheetId": self.worksheet.id,
+            "startRowIndex": start_row,
+            "endRowIndex": end_row,
+            "startColumnIndex": column_index,
+            "endColumnIndex": column_index + 1,
+        }
+
+        number_format_request = {
+            "repeatCell": {
+                "range": target_range,
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "PERCENT",
+                            "pattern": "+0.0%;-0.0%;0.0%",
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        }
+
+        gradient_request = {
+            "addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [target_range],
+                    "gradientRule": {
+                        "minpoint": {
+                            "type": "NUMBER",
+                            "value": str(min_value),
+                            "color": {
+                                "red": 245 / 255,
+                                "green": 69 / 255,
+                                "blue": 69 / 255,
+                            },
+                        },
+                        "midpoint": {
+                            "type": "NUMBER",
+                            "value": str(mid_value),
+                            "color": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                        },
+                        "maxpoint": {
+                            "type": "NUMBER",
+                            "value": str(max_value),
+                            "color": {
+                                "red": 46 / 255,
+                                "green": 204 / 255,
+                                "blue": 113 / 255,
+                            },
+                        },
+                    },
+                },
+                "index": 0,
+            }
+        }
+
+        self.worksheet.spreadsheet.batch_update(
+            {"requests": [number_format_request, gradient_request]}
+        )
+        self.logger.info(
+            "Applied percentage gradient formatting to column %s for rows %s-%s",
+            column_index + 1,
+            start_row + 1,
+            end_row,
+        )
+
     @staticmethod
     def calc_fixed_income_pct_of_total(
         fixed_income_principal: float, total_assets: float
@@ -135,7 +215,7 @@ class PortfolioFormatter(SpreadsheetFormatter):
     """Handles portfolio-specific formatting operations."""
 
     def format_portfolio_table(
-        self, table_data: List[List[str]], header_rows: List[int]
+        self, table_data: List[List[Union[str, float]]], header_rows: List[int]
     ) -> None:
         """Format the portfolio table with appropriate styling."""
         # Clear existing content
@@ -146,6 +226,12 @@ class PortfolioFormatter(SpreadsheetFormatter):
 
         # Apply bold formatting to category headers
         self.apply_bold_formatting(header_rows)
+        # Column F stores unrealized P&L deltas.
+        self.apply_percentage_gradient_to_column(
+            start_row=0,
+            end_row=len(table_data),
+            column_index=5,
+        )
 
 
 class TimelineFormatter(SpreadsheetFormatter):
@@ -205,18 +291,13 @@ class DataFormatter:
         return str(value)
 
     @staticmethod
-    def format_pnl_percentage(value: float) -> str:
-        """Format a P&L percentage value with a sign prefix.
+    def format_pnl_percentage(value: float) -> float:
+        """Convert a P&L percentage to decimal form for Sheets percent formatting.
 
         Args:
-            value: P&L percentage value
+            value: P&L percentage value (for example, -14.2 means -14.2%)
 
         Returns:
-            Formatted string with '+' or '-' prefix and % suffix
+            Decimal percentage value (for example, -0.142)
         """
-        if value > 0:
-            return f"+{value:.1f}%"
-        elif value < 0:
-            return f"{value:.1f}%"  # Negative sign is already included
-        else:
-            return "0.0%"
+        return round(value / 100, 6)
