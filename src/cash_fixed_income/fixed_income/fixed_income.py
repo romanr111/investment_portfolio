@@ -112,6 +112,11 @@ class EstateGuru(EurAsset):
         super().__init__(principal, interest)
 
 
+class PeerBerry(EurAsset):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
 class FixedIncomePortfolio:
     def __init__(self, ib_bonds, ib_div_details, crypto_savings):
         self.ib_div_details = ib_div_details
@@ -148,9 +153,10 @@ class FixedIncomePortfolio:
 
     def _initialize_assets(self):
         eg = EstateGuru(*ESTATE_GURU)
+        pb = PeerBerry(*PEER_BERRY)
         bond_assets = MultipleAssets(self.bonds_data)
         crypto_assets = MultipleAssets(self._flatten_savings_for_assets())
-        return FixedIncomeAssets(bond_assets, crypto_assets, eg)
+        return FixedIncomeAssets(bond_assets, crypto_assets, eg, pb)
 
     @property
     def summary(self):
@@ -159,6 +165,7 @@ class FixedIncomePortfolio:
             CRYPTO_LENDING_KEY: self.savings_data,
             P2P_LENDING_KEY: {
                 "EstateGuru": ESTATE_GURU,
+                "PeerBerry": PEER_BERRY,
             },
         }
 
