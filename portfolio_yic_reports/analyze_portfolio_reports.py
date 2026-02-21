@@ -74,6 +74,22 @@ LONG_BONDS_GOLD_COMMODITIES = list(
     ).keys()
 )
 
+# Core symbols for Core/Satellite split (edit to match your rules)
+CORE_SYMBOLS = {
+    "VOO",
+    "QQQ",
+    "BRK B",
+    "BN",
+}
+
+# Chinese equity symbols for China vs. rest split
+CHINA_EQUITY_SYMBOLS = {
+    "9988",
+    "700",
+    "KWEB",
+    "PDD",
+}
+
 HKD_TO_USD_RATE = (
     0.128  # Approximate HKD to USD conversion rate, should be updated with current rate
 )
@@ -567,6 +583,44 @@ class TableFormatter:
 
         return "-", 0.0
 
+    def _calculate_core_satellite_ratio(self) -> Tuple[float, float]:
+        """Calculate Core/Satellite split for equity positions."""
+        core_value = 0.0
+        total_value = 0.0
+
+        for stock in self.analyzer.final_portfolio.stocks.values():
+            if stock.is_excluded():
+                continue
+            total_value += stock.usd_value
+            if stock.symbol in CORE_SYMBOLS:
+                core_value += stock.usd_value
+
+        if total_value <= 0:
+            return 0.0, 0.0
+
+        core_pct = (core_value / total_value) * 100
+        satellite_pct = 100 - core_pct
+        return core_pct, satellite_pct
+
+    def _calculate_china_ratio(self) -> Tuple[float, float]:
+        """Calculate China vs. rest split for equity positions."""
+        china_value = 0.0
+        total_value = 0.0
+
+        for stock in self.analyzer.final_portfolio.stocks.values():
+            if stock.is_excluded():
+                continue
+            total_value += stock.usd_value
+            if stock.symbol in CHINA_EQUITY_SYMBOLS:
+                china_value += stock.usd_value
+
+        if total_value <= 0:
+            return 0.0, 0.0
+
+        china_pct = (china_value / total_value) * 100
+        rest_pct = 100 - china_pct
+        return china_pct, rest_pct
+
     def format_as_table(self) -> str:
         """Format portfolio analysis as a table based on format_type"""
         if self.format_type == "markdown":
@@ -630,8 +684,19 @@ class TableFormatter:
         table_lines.append(summary)
 
         # Add legend
-        table_lines.append("Примітка: комісії, дивіденди не враховані.")
+        table_lines.append("Примітка: комісії, дивіденди та FX не враховані.")
+        table_lines.append("")
         table_lines.append("Для закритих позицій друга ціна — середня ціна виходу.")
+        table_lines.append("")
+        core_pct, satellite_pct = self._calculate_core_satellite_ratio()
+        table_lines.append(
+            f"Співвідношення Core/Satellite (акції): {core_pct:.2f}% / {satellite_pct:.2f}%."
+        )
+        table_lines.append("")
+        china_pct, rest_pct = self._calculate_china_ratio()
+        table_lines.append(
+            f"Співвідношення Китай/Інші (акції): {china_pct:.2f}% / {rest_pct:.2f}%."
+        )
         table_lines.append("")
 
         # Add total value
@@ -778,7 +843,18 @@ class TableFormatter:
         # Add legend
         table_lines.append("")
         table_lines.append("Примітка: комісії, дивіденди та FX не враховані.")
+        table_lines.append("")
         table_lines.append("Для закритих позицій друга ціна — середня ціна виходу.")
+        table_lines.append("")
+        core_pct, satellite_pct = self._calculate_core_satellite_ratio()
+        table_lines.append(
+            f"Співвідношення Core/Satellite (акції): {core_pct:.2f}% / {satellite_pct:.2f}%."
+        )
+        table_lines.append("")
+        china_pct, rest_pct = self._calculate_china_ratio()
+        table_lines.append(
+            f"Співвідношення Китай/Інші (акції): {china_pct:.2f}% / {rest_pct:.2f}%."
+        )
         table_lines.append("")
 
         # Add total value
@@ -983,6 +1059,17 @@ def main():
         str(initial_file)
     )
     final_portfolio, final_from_date, final_to_date = parser.parse(str(final_file))
+
+    # HARD-CODED ONE-OFF: adjust BN initial shares for the stock split.
+    # Remove this block after the next report run.
+    bn_initial = initial_portfolio.get_stock("BN")
+    if bn_initial:
+        original_bn_shares = bn_initial.shares
+        bn_initial.shares = 82.5
+        print(
+            "NOTE: BN initial shares hardcoded from "
+            f"{original_bn_shares} to {bn_initial.shares} due to stock split."
+        )
 
     # Calculate portfolio weights
     initial_portfolio.calculate_weights()
