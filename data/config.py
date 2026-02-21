@@ -7,7 +7,7 @@ def load_ib_config():
     """Load Interactive Brokers configuration from the client portal gateway config file."""
     default_config = {"port": 5050, "host": "localhost"}
     try:
-        # Prefer local-repo gateway config, then support explicit/legacy locations.
+        # Prefer explicit env path, then repo-local and known legacy locations.
         repo_root = Path(__file__).resolve().parents[1]
         candidate_paths = []
 
