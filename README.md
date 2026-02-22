@@ -176,14 +176,18 @@ python3.10 main.py --skip-dalio-analysis
 
 ## Dalio Holy Grail Analyzer
 
-Модуль `analytics/dalio_holy_grail.py` реализует анализ диверсификации по подходу Ray Dalio:
-- нормализация исторических данных в базовую валюту
-- `weights_by_date`
-- `correlation_matrix` + rolling корреляции `12m/36m`
-- `covariance_matrix`
-- `risk_contribution_by_bucket`
-- `stress_test_results`
-- правила управления риском (корреляционный порог, лимит risk contribution, drift от target)
+Модуль `analytics/dalio_holy_grail.py` реалізує risk-аналітику портфеля в дусі Dalio Holy Grail (фокус на незалежних джерелах ризику, а не тільки на кількості інструментів).
+
+Що робить модуль:
+- нормалізує історію в базову валюту (`--base-currency`) через `--fx` або `--fx-file`
+- агрегує дублікати `(date, asset_bucket)` в один bucket на дату
+- рахує ваги по датах (`weights_by_date`) та ключові leverage/netting метрики
+- будує матрицю доходностей і кореляційну/коваріаційну структуру (`sample` або `ewma`)
+- оцінює внесок кожного bucket у ризик портфеля (`risk_contribution_by_bucket`)
+- агрегує експозицію по факторах (`factor_exposure`)
+- рахує tail-risk (`VaR`, `CVaR`, drawdown) на лагованих вагах `w_{t-1}` без look-ahead bias
+- виконує stress-тести по сценаріях і показує покриття bucket-ів шоками
+- формує зведення правил керування ризиком (`management_rules`) для алертів по кореляції, risk contribution, drift, якості даних та leverage
 
 ### Вхідні дані
 
@@ -191,8 +195,8 @@ CSV з колонками:
 - `date`
 - `asset_bucket`
 - `market_value`
-- `return_pct` (опционально, если отсутствует - рассчитывается автоматически)
-- `currency` (опционально, по умолчанию `USD`)
+- `return_pct` (опціонально; якщо порожній/відсутній, рахується як `pct_change` на рівні bucket)
+- `currency` (опціонально, за замовчуванням `USD`)
 
 ### Приклад запуску
 
@@ -210,39 +214,51 @@ python3.10 -m analytics.dalio_holy_grail \
   --min-pair-overlap 24
 ```
 
-Если нужны курсы валют, добавьте аргументы вида:
+Якщо потрібні фіксовані FX-курси, додайте:
 
 ```bash
 --fx EUR=1.08 --fx UAH=0.024
 ```
 
-Для исторических FX-курсов по датам используйте файл:
+Якщо потрібні історичні FX-курси по датах, використовуйте:
 
 ```bash
 --fx-file data/fx_history.csv
 ```
 
-Где `fx_history.csv` содержит колонки:
+`fx_history.csv` має містити:
 - `date`
 - `currency`
 - `fx_rate_to_base`
 
-По умолчанию сценарии стресс-теста требуют 100% покрытия bucket-ов шоками.
-Если хотите разрешить частичное покрытие (и получать это в отчёте), добавьте:
+За замовчуванням stress-сценарії мають покривати 100% bucket-ів шоками.
+Щоб дозволити часткове покриття, додайте:
 
 ```bash
 --allow-partial-scenarios
 ```
 
-Дополнительно сохраняются:
-- `tail_risk_metrics.csv` (`VaR 95`, `CVaR 95`, `max drawdown`, `worst rolling 12m drawdown`)
-- `pairwise_confidence.csv` (overlap наблюдений, coverage ratio и confidence flag для каждой пары активов)
+### Що зберігається у результатах
 
-Примечания по логике расчёта:
-- tail-risk рассчитывается на лагированных весах (`w_{t-1}`), чтобы избежать look-ahead bias
-- если часть bucket-ов исключена из `risk_contribution` из-за неполной ковариации, это отражается в `summary.json` полями `risk_contribution_data_complete` и `rc_excluded_weight_pct`
-- unit доходностей задаётся явно (`--return-unit decimal|percent`), эвристика auto не используется
-- по умолчанию требуется 100% покрытие `factor_map` (unmapped buckets вызывают ошибку; `--allow-unmapped-factors` ослабляет правило)
-- добавлены quality checks для short exposure, gross leverage и netting (`--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`)
+У `analytics/output` пишуться:
+- `normalized_data.csv`
+- `weights_by_date.csv`
+- `correlation_matrix.csv`
+- `rolling_correlation.csv` (вікна `12m` і `36m`)
+- `covariance_matrix.csv`
+- `risk_contribution_by_bucket.csv`
+- `factor_exposure.csv`
+- `stress_test_results.csv`
+- `quality_checks.csv`
+- `high_correlation_pairs.csv`
+- `pairwise_confidence.csv` (overlap, coverage, `HIGH/LOW`)
+- `tail_risk_metrics.csv`
+- `weight_drift.csv`
+- `summary.json` з `diversification_metrics` та `management_rules`
 
-Результаты сохраняются в `analytics/output/*.csv` и `analytics/output/summary.json`.
+### Важливі правила/прапорці
+
+- `--return-unit decimal|percent`: формат `return_pct` задається явно (auto-detect не використовується)
+- `--allow-unmapped-factors`: без цього прапорця bucket-и без `factor_map` викликають помилку
+- `--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`: контроль short/netting ризику
+- `--min-pair-overlap`: поріг, нижче якого парні метрики позначаються як `LOW` confidence
