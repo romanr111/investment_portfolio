@@ -125,4 +125,124 @@ Markdown-версія звіту автоматично зберігається
 Для установки залежностей:
 ```bash
 python3.10 -m pip install -r requirements.txt
-``` 
+```
+
+## Збереження snapshot + ретроспективи з Google Sheets
+
+При запуску `main.py` тепер виконується:
+- збереження `DataSource.get_combined_data()` у JSON snapshot:
+  - `data/snapshots/combined_data_<date>_<timestamp>.json`
+  - `data/snapshots/combined_data_latest.json`
+- синхронізація історії з датованих вкладок Google Sheets (формат назви вкладки: `31 Dec 2025`)
+  у уніфіковані файли:
+  - `data/portfolio_history.csv`
+  - `data/portfolio_history.jsonl`
+- запуск Dalio Holy Grail аналізатора в кінці пайплайну, з результатом у CLI
+  та збереженням таблиць у `analytics/output`
+
+Базовий запуск:
+
+```bash
+python3.10 main.py
+```
+
+Корисні прапорці:
+
+```bash
+python3.10 main.py \
+  --history-start-date 2024-01-01 \
+  --history-end-date 2026-12-31 \
+  --history-frequency monthly \
+  --history-return-source blank \
+  --history-strict-required-buckets
+```
+
+Щоб пропустити фінальний Dalio прогін:
+
+```bash
+python3.10 main.py --skip-dalio-analysis
+```
+
+Примітка по `return_pct`:
+- за замовчуванням уніфікована історія пишеться з порожнім `return_pct` (`--history-return-source blank`)
+- це зроблено навмисно, щоб уникнути хибних “дохідностей” при поповненнях/виводах
+- якщо потрібно, можна записувати `pct_change` (`--history-return-source pct-change`)
+
+Примітка по датах історії:
+- за замовчуванням `--history-frequency monthly`: береться остання вкладка в місяці,
+  дата у файлі ставиться як month-end (`YYYY-MM-DD`)
+- це робить ряд рівномірним для ризик-аналізу Dalio
+- якщо потрібні сирі дати вкладок, використовуйте `--history-frequency raw`
+
+## Dalio Holy Grail Analyzer
+
+Модуль `analytics/dalio_holy_grail.py` реализует анализ диверсификации по подходу Ray Dalio:
+- нормализация исторических данных в базовую валюту
+- `weights_by_date`
+- `correlation_matrix` + rolling корреляции `12m/36m`
+- `covariance_matrix`
+- `risk_contribution_by_bucket`
+- `stress_test_results`
+- правила управления риском (корреляционный порог, лимит risk contribution, drift от target)
+
+### Вхідні дані
+
+CSV з колонками:
+- `date`
+- `asset_bucket`
+- `market_value`
+- `return_pct` (опционально, если отсутствует - рассчитывается автоматически)
+- `currency` (опционально, по умолчанию `USD`)
+
+### Приклад запуску
+
+```bash
+python3.10 -m analytics.dalio_holy_grail \
+  --input data/portfolio_history.csv \
+  --output-dir analytics/output \
+  --base-currency USD \
+  --corr-threshold 0.6 \
+  --max-risk-contribution 0.25 \
+  --drift-threshold 0.20 \
+  --return-unit decimal \
+  --covariance-method ewma \
+  --ewma-alpha 0.06 \
+  --min-pair-overlap 24
+```
+
+Если нужны курсы валют, добавьте аргументы вида:
+
+```bash
+--fx EUR=1.08 --fx UAH=0.024
+```
+
+Для исторических FX-курсов по датам используйте файл:
+
+```bash
+--fx-file data/fx_history.csv
+```
+
+Где `fx_history.csv` содержит колонки:
+- `date`
+- `currency`
+- `fx_rate_to_base`
+
+По умолчанию сценарии стресс-теста требуют 100% покрытия bucket-ов шоками.
+Если хотите разрешить частичное покрытие (и получать это в отчёте), добавьте:
+
+```bash
+--allow-partial-scenarios
+```
+
+Дополнительно сохраняются:
+- `tail_risk_metrics.csv` (`VaR 95`, `CVaR 95`, `max drawdown`, `worst rolling 12m drawdown`)
+- `pairwise_confidence.csv` (overlap наблюдений, coverage ratio и confidence flag для каждой пары активов)
+
+Примечания по логике расчёта:
+- tail-risk рассчитывается на лагированных весах (`w_{t-1}`), чтобы избежать look-ahead bias
+- если часть bucket-ов исключена из `risk_contribution` из-за неполной ковариации, это отражается в `summary.json` полями `risk_contribution_data_complete` и `rc_excluded_weight_pct`
+- unit доходностей задаётся явно (`--return-unit decimal|percent`), эвристика auto не используется
+- по умолчанию требуется 100% покрытие `factor_map` (unmapped buckets вызывают ошибку; `--allow-unmapped-factors` ослабляет правило)
+- добавлены quality checks для short exposure, gross leverage и netting (`--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`)
+
+Результаты сохраняются в `analytics/output/*.csv` и `analytics/output/summary.json`.
