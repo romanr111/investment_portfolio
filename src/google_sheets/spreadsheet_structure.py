@@ -726,6 +726,8 @@ def create_enhanced_stocks_data(
         metadata["regular_stocks_value"] = 0
     if "total_portfolio_value" not in metadata:
         metadata["total_portfolio_value"] = 0
+    if "total_cost_basis" not in metadata:
+        metadata["total_cost_basis"] = 0
     if "total_unrealized_pnl" not in metadata:
         metadata["total_unrealized_pnl"] = 0
     if "total_unrealized_pnl_percentage" not in metadata:
