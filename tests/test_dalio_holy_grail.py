@@ -860,6 +860,281 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
                 self.history,
                 layer_b_require_data=True,
             ).run_analysis()
+    def test_layer_a_neff_identity_correlation_close_to_asset_count(self) -> None:
+        labels = ["A", "B", "C", "D"]
+        identity = pd.DataFrame(np.eye(len(labels)), index=labels, columns=labels)
+        neff = self.analyzer._effective_bets_from_correlation(identity)
+        self.assertAlmostEqual(neff, 4.0, places=8)
+
+    def test_layer_a_neff_fully_correlated_close_to_one(self) -> None:
+        labels = ["A", "B", "C", "D"]
+        fully_corr = pd.DataFrame(np.ones((len(labels), len(labels))), index=labels, columns=labels)
+        neff = self.analyzer._effective_bets_from_correlation(fully_corr)
+        self.assertAlmostEqual(neff, 1.0, places=8)
+
+    def test_layer_a_hac_clustering_finds_two_blocks(self) -> None:
+        labels = ["A", "B", "C", "D"]
+        correlation = pd.DataFrame(
+            [
+                [1.0, 0.9, 0.1, 0.1],
+                [0.9, 1.0, 0.1, 0.1],
+                [0.1, 0.1, 1.0, 0.88],
+                [0.1, 0.1, 0.88, 1.0],
+            ],
+            index=labels,
+            columns=labels,
+        )
+        clusters = self.analyzer._hac_clusters_from_correlation(correlation, corr_cutoff=0.7)
+        self.assertEqual(int(clusters.nunique()), 2)
+        self.assertEqual(int(clusters.loc["A"]), int(clusters.loc["B"]))
+        self.assertEqual(int(clusters.loc["C"]), int(clusters.loc["D"]))
+        self.assertNotEqual(int(clusters.loc["A"]), int(clusters.loc["C"]))
+
+    def test_layer_a_trc_concentration_metrics_are_bounded(self) -> None:
+        result = self.analyzer.run_analysis()
+        primary = (
+            result.layer_a_metrics_rolling
+            .loc[result.layer_a_metrics_rolling["window_months"] == 36]
+            .dropna(subset=["portfolio_volatility"])
+            .iloc[-1]
+        )
+        self.assertGreaterEqual(float(primary["max_trc_share_pct"]), 0.0)
+        self.assertLessEqual(float(primary["max_trc_share_pct"]), 100.0)
+        self.assertGreaterEqual(float(primary["risk_hhi"]), 0.0)
+        self.assertLessEqual(float(primary["risk_hhi"]), 1.0)
+        self.assertGreaterEqual(float(primary["n_rc"]), 1.0)
+
+    def test_layer_a_n_rc_increases_when_latest_weights_are_more_even(self) -> None:
+        latest_date = self.history["date"].max()
+
+        concentrated = self.history.copy()
+        concentrated.loc[
+            (concentrated["date"] == latest_date)
+            & (concentrated["asset_bucket"] == "Crypto Coins"),
+            "market_value",
+        ] *= 10.0
+
+        balanced = self.history.copy()
+        for bucket in balanced["asset_bucket"].unique():
+            balanced.loc[
+                (balanced["date"] == latest_date) & (balanced["asset_bucket"] == bucket),
+                "market_value",
+            ] = 1000.0
+
+        concentrated_result = DalioHolyGrailAnalyzer(concentrated).run_analysis()
+        balanced_result = DalioHolyGrailAnalyzer(balanced).run_analysis()
+
+        concentrated_primary = (
+            concentrated_result.layer_a_metrics_rolling
+            .loc[concentrated_result.layer_a_metrics_rolling["window_months"] == 36]
+            .dropna(subset=["n_rc"])
+            .iloc[-1]
+        )
+        balanced_primary = (
+            balanced_result.layer_a_metrics_rolling
+            .loc[balanced_result.layer_a_metrics_rolling["window_months"] == 36]
+            .dropna(subset=["n_rc"])
+            .iloc[-1]
+        )
+        self.assertGreater(float(balanced_primary["n_rc"]), float(concentrated_primary["n_rc"]))
+
+    def test_layer_a_diversification_ratio_higher_for_less_correlated_returns(self) -> None:
+        dates = pd.date_range("2020-01-31", periods=60, freq="ME")
+        independent_rows = []
+        correlated_rows = []
+        assets = ["A", "B", "C"]
+        correlated_values = {asset: 100.0 for asset in assets}
+        independent_values = {asset: 100.0 for asset in assets}
+
+        for idx, date in enumerate(dates):
+            common = 0.01 * math.sin(idx / 4.0)
+            idio = {
+                "A": 0.012 * math.sin(idx / 3.0),
+                "B": 0.011 * math.cos(idx / 5.0),
+                "C": 0.013 * math.sin(idx / 6.0 + 0.3),
+            }
+            correlated_returns = {
+                asset: common + 0.002 * idio[asset]
+                for asset in assets
+            }
+            independent_returns = {
+                asset: idio[asset]
+                for asset in assets
+            }
+            for asset in assets:
+                correlated_values[asset] *= 1.0 + correlated_returns[asset]
+                independent_values[asset] *= 1.0 + independent_returns[asset]
+                correlated_rows.append(
+                    {
+                        "date": date,
+                        "asset_bucket": asset,
+                        "market_value": correlated_values[asset],
+                        "currency": "USD",
+                    }
+                )
+                independent_rows.append(
+                    {
+                        "date": date,
+                        "asset_bucket": asset,
+                        "market_value": independent_values[asset],
+                        "currency": "USD",
+                    }
+                )
+
+        scenario = {"s": {"A": 0.0, "B": 0.0, "C": 0.0}}
+        factors = {"A": "Growth/Risk-On", "B": "Deflation/Risk-Off", "C": "Inflation Hedge"}
+
+        correlated_result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(correlated_rows),
+            min_history_months=1,
+            min_covariance_observations=12,
+            scenario_shocks=scenario,
+            factor_map=factors,
+        ).run_analysis()
+        independent_result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(independent_rows),
+            min_history_months=1,
+            min_covariance_observations=12,
+            scenario_shocks=scenario,
+            factor_map=factors,
+        ).run_analysis()
+
+        correlated_dr = (
+            correlated_result.layer_a_metrics_rolling
+            .loc[correlated_result.layer_a_metrics_rolling["window_months"] == 36]
+            .dropna(subset=["diversification_ratio"])
+            .iloc[-1]["diversification_ratio"]
+        )
+        independent_dr = (
+            independent_result.layer_a_metrics_rolling
+            .loc[independent_result.layer_a_metrics_rolling["window_months"] == 36]
+            .dropna(subset=["diversification_ratio"])
+            .iloc[-1]["diversification_ratio"]
+        )
+        self.assertGreater(float(independent_dr), float(correlated_dr))
+
+    def test_layer_a_rolling_outputs_have_expected_shape_and_columns(self) -> None:
+        result = self.analyzer.run_analysis()
+
+        metrics = result.layer_a_metrics_rolling
+        self.assertEqual(set(metrics["window_months"].unique().tolist()), {12, 24, 36})
+        self.assertTrue(
+            {
+                "date",
+                "window_months",
+                "asset_count",
+                "observation_count",
+                "covariance_coverage_pct",
+                "avg_corr",
+                "avg_abs_corr",
+                "high_corr_pair_share_pct",
+                "cluster_count",
+                "neff",
+                "portfolio_volatility",
+                "max_trc_share_pct",
+                "risk_hhi",
+                "n_rc",
+                "risk_gini",
+                "diversification_ratio",
+            }.issubset(metrics.columns)
+        )
+
+        self.assertTrue(
+            {
+                "date",
+                "window_months",
+                "asset_bucket",
+                "weight",
+                "trc",
+                "trc_share_signed",
+                "trc_share_abs",
+                "covariance_included",
+            }.issubset(result.layer_a_trc_rolling.columns)
+        )
+        self.assertTrue(
+            {
+                "date",
+                "window_months",
+                "asset_bucket",
+                "cluster_id",
+            }.issubset(result.layer_a_cluster_membership_rolling.columns)
+        )
+
+    def test_layer_a_incomplete_covariance_marks_missing_trc_rows(self) -> None:
+        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
+        rows = []
+        old_value = 100.0
+        cash_value = 200.0
+        for date in dates:
+            old_value *= 1.01
+            cash_value *= 1.0001
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "Old",
+                    "market_value": old_value,
+                    "currency": "USD",
+                }
+            )
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "Cash",
+                    "market_value": cash_value,
+                    "currency": "USD",
+                }
+            )
+
+        new_value = 1000.0
+        for date in dates[-6:]:
+            new_value *= 1.05
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "NewHuge",
+                    "market_value": new_value,
+                    "currency": "USD",
+                }
+            )
+
+        result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=12,
+            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
+            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
+        ).run_analysis()
+
+        latest_date = result.normalized_data["date"].max()
+        latest_metrics = result.layer_a_metrics_rolling.loc[
+            (result.layer_a_metrics_rolling["date"] == latest_date)
+            & (result.layer_a_metrics_rolling["window_months"] == 36)
+        ].iloc[0]
+        self.assertLess(float(latest_metrics["covariance_coverage_pct"]), 100.0)
+
+        latest_new_huge_trc = result.layer_a_trc_rolling.loc[
+            (result.layer_a_trc_rolling["date"] == latest_date)
+            & (result.layer_a_trc_rolling["window_months"] == 36)
+            & (result.layer_a_trc_rolling["asset_bucket"] == "NewHuge")
+        ].iloc[0]
+        self.assertFalse(bool(latest_new_huge_trc["covariance_included"]))
+        self.assertTrue(pd.isna(latest_new_huge_trc["trc"]))
+
+    def test_layer_a_regression_preserves_legacy_outputs_and_adds_new_keys(self) -> None:
+        result = self.analyzer.run_analysis()
+        tables = result.to_tables()
+
+        self.assertIn("correlation_matrix", tables)
+        self.assertIn("risk_contribution_by_bucket", tables)
+        self.assertIn("layer_a_metrics_rolling", tables)
+        self.assertIn("layer_a_trc_rolling", tables)
+        self.assertIn("layer_a_cluster_membership_rolling", tables)
+
+        self.assertIn("corr_threshold", result.management_rules)
+        self.assertIn("risk_contribution_breach_count", result.management_rules)
+        self.assertIn("layer_a_primary_window_months", result.management_rules)
+        self.assertIn("layer_a_alert_high_corr", result.management_rules)
+        self.assertIn("layer_a_breach_rate_last_12_obs_pct", result.management_rules)
 
 
 if __name__ == "__main__":

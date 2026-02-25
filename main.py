@@ -48,6 +48,19 @@ def _load_factor_returns(path: Optional[str]) -> Optional[pd.DataFrame]:
     if not factor_path.exists():
         raise FileNotFoundError(f"Layer B factor CSV not found: {factor_path}")
     return pd.read_csv(factor_path)
+def _parse_layer_a_windows(raw_windows: str) -> tuple[int, ...]:
+    windows = []
+    for token in raw_windows.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        windows.append(int(token))
+    if not windows:
+        raise ValueError("Layer A windows must contain at least one integer.")
+    positive_unique = sorted({window for window in windows if window > 0})
+    if not positive_unique:
+        raise ValueError("Layer A windows must be positive integers.")
+    return tuple(positive_unique)
 
 
 def _build_cli() -> argparse.ArgumentParser:
@@ -265,6 +278,41 @@ def _build_cli() -> argparse.ArgumentParser:
         default=80.0,
         help="Alert threshold for minimum factor coverage percentage.",
     )
+    parser.add_argument(
+        "--dalio-layer-a-windows",
+        default="12,24,36",
+        help="Comma-separated rolling windows (months) for Layer A metrics.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-high-corr-threshold",
+        type=float,
+        default=0.70,
+        help="Pair-level absolute correlation threshold used in Layer A metrics.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-cluster-corr-cutoff",
+        type=float,
+        default=0.70,
+        help="Correlation cutoff for NumPy HAC clustering in Layer A.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-trc-max-share",
+        type=float,
+        default=0.35,
+        help="Maximum allowed absolute TRC share (fraction) before Layer A alert.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-min-n-rc",
+        type=float,
+        default=4.0,
+        help="Minimum effective number of risk contributors before Layer A alert.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-primary-window",
+        type=int,
+        default=36,
+        help="Primary Layer A rolling window used for summary alerts.",
+    )
     return parser
 
 
@@ -296,6 +344,12 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
         layer_b_factor_hhi_threshold=args.dalio_layer_b_factor_hhi_threshold,
         layer_b_residual_share_threshold=args.dalio_layer_b_residual_share_threshold,
         layer_b_min_coverage_pct=args.dalio_layer_b_min_coverage_pct,
+        layer_a_windows=_parse_layer_a_windows(args.dalio_layer_a_windows),
+        layer_a_high_corr_threshold=args.dalio_layer_a_high_corr_threshold,
+        layer_a_cluster_corr_cutoff=args.dalio_layer_a_cluster_corr_cutoff,
+        layer_a_trc_max_share_threshold=args.dalio_layer_a_trc_max_share,
+        layer_a_min_n_rc=args.dalio_layer_a_min_n_rc,
+        layer_a_primary_window=args.dalio_layer_a_primary_window,
     )
     result = analyzer.run_analysis(
         corr_threshold=args.dalio_corr_threshold,
