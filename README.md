@@ -191,6 +191,11 @@ python3.10 main.py --skip-dalio-analysis
   - `diversification_ratio = sum(|w_i|*sigma_i)/sigma_p`
 - оцінює внесок кожного bucket у ризик портфеля (`risk_contribution_by_bucket`)
 - агрегує експозицію по факторах (`factor_exposure`)
+- виконує Layer B (economic risk-source diversification) на факторних рядах:
+  - rolling OLS betas `r_i = alpha_i + beta_i^T f + eps_i` (window `36m` за замовчуванням)
+  - факторний TRC, `factor_hhi`, `max_factor_trc_share_pct`, `factor_n_rc`, `factor_gini`
+  - декомпозицію факторний vs residual risk (`factor_risk_share_pct`, `residual_risk_share_pct`)
+  - діагностику якості моделі (condition number / VIF) і coverage
 - рахує tail-risk (`VaR`, `CVaR`, drawdown) на лагованих вагах `w_{t-1}` без look-ahead bias
 - виконує stress-тести по сценаріях і показує покриття bucket-ів шоками
 - формує зведення правил керування ризиком (`management_rules`) для алертів по кореляції, risk contribution, drift, якості даних та leverage
@@ -218,6 +223,15 @@ python3.10 -m analytics.dalio_holy_grail \
   --covariance-method ewma \
   --ewma-alpha 0.06 \
   --min-pair-overlap 24 \
+  --factor-input-csv data/factor_returns.csv \
+  --layer-b-window-months 36 \
+  --layer-b-min-observations 24 \
+  --layer-b-collinearity-cond-threshold 30 \
+  --layer-b-vif-threshold 10 \
+  --layer-b-max-factor-trc-share 0.35 \
+  --layer-b-factor-hhi-threshold 0.35 \
+  --layer-b-residual-share-threshold 0.40 \
+  --layer-b-min-coverage-pct 80 \
   --layer-a-windows 12,24,36 \
   --layer-a-high-corr-threshold 0.70 \
   --layer-a-cluster-corr-cutoff 0.70 \
@@ -243,6 +257,13 @@ python3.10 -m analytics.dalio_holy_grail \
 - `currency`
 - `fx_rate_to_base`
 
+`factor_returns.csv` (Layer B) має бути wide-формату:
+- `date`
+- `growth`
+- `inflation`
+- `real_rates`
+- `credit_liquidity`
+
 За замовчуванням stress-сценарії мають покривати 100% bucket-ів шоками.
 Щоб дозволити часткове покриття, додайте:
 
@@ -263,6 +284,11 @@ python3.10 -m analytics.dalio_holy_grail \
 - `covariance_matrix.csv`
 - `risk_contribution_by_bucket.csv`
 - `factor_exposure.csv`
+- `factor_returns_aligned.csv`
+- `factor_betas_by_bucket_rolling.csv`
+- `factor_model_quality_rolling.csv`
+- `factor_risk_contribution_rolling.csv`
+- `factor_residual_risk_rolling.csv`
 - `stress_test_results.csv`
 - `quality_checks.csv`
 - `high_correlation_pairs.csv`
@@ -277,6 +303,10 @@ python3.10 -m analytics.dalio_holy_grail \
 - `--allow-unmapped-factors`: без цього прапорця bucket-и без `factor_map` викликають помилку
 - `--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`: контроль short/netting ризику
 - `--min-pair-overlap`: поріг, нижче якого парні метрики позначаються як `LOW` confidence
+- Layer B (phase 1 deprecation policy):
+  - за замовчуванням `factor_input_csv` опційний; без нього Layer B вимикається і повертає deprecation notice у `management_rules`
+  - `--layer-b-require-data` (або `--dalio-layer-b-require-data` у `main.py`) робить факторні дані обов'язковими вже зараз
+  - у майбутньому major version факторні дані стануть обов'язковими за замовчуванням
 - Layer A defaults (Balanced):
   - `high_corr_pair_share_pct > 30` при `|corr| > 0.70` → high-corr alert
   - `max_trc_share_pct > 35` → concentration alert
