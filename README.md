@@ -183,6 +183,12 @@ python3.10 main.py --skip-dalio-analysis
 - агрегує дублікати `(date, asset_bucket)` в один bucket на дату
 - рахує ваги по датах (`weights_by_date`) та ключові leverage/netting метрики
 - будує матрицю доходностей і кореляційну/коваріаційну структуру (`sample` або `ewma`)
+- будує Layer A (статистична диверсифікація) на rolling вікнах (`12/24/36m` за замовчуванням):
+  - `avg_corr`, `avg_abs_corr`, `high_corr_pair_share_pct`
+  - `N_eff` (Effective Number of Bets) з власних значень кореляційної матриці
+  - NumPy HAC кластеризацію (`d_ij = 1 - |corr_ij|`) і `cluster_count`
+  - rolling `TRC`-декомпозицію ризику, `max_trc_share_pct`, `risk_hhi`, `n_rc`, `risk_gini`
+  - `diversification_ratio = sum(|w_i|*sigma_i)/sigma_p`
 - оцінює внесок кожного bucket у ризик портфеля (`risk_contribution_by_bucket`)
 - агрегує експозицію по факторах (`factor_exposure`)
 - рахує tail-risk (`VaR`, `CVaR`, drawdown) на лагованих вагах `w_{t-1}` без look-ahead bias
@@ -211,7 +217,13 @@ python3.10 -m analytics.dalio_holy_grail \
   --return-unit decimal \
   --covariance-method ewma \
   --ewma-alpha 0.06 \
-  --min-pair-overlap 24
+  --min-pair-overlap 24 \
+  --layer-a-windows 12,24,36 \
+  --layer-a-high-corr-threshold 0.70 \
+  --layer-a-cluster-corr-cutoff 0.70 \
+  --layer-a-trc-max-share 0.35 \
+  --layer-a-min-n-rc 4.0 \
+  --layer-a-primary-window 36
 ```
 
 Якщо потрібні фіксовані FX-курси, додайте:
@@ -245,6 +257,9 @@ python3.10 -m analytics.dalio_holy_grail \
 - `weights_by_date.csv`
 - `correlation_matrix.csv`
 - `rolling_correlation.csv` (вікна `12m` і `36m`)
+- `layer_a_metrics_rolling.csv` (`12/24/36m` за замовчуванням)
+- `layer_a_trc_rolling.csv`
+- `layer_a_cluster_membership_rolling.csv`
 - `covariance_matrix.csv`
 - `risk_contribution_by_bucket.csv`
 - `factor_exposure.csv`
@@ -262,3 +277,7 @@ python3.10 -m analytics.dalio_holy_grail \
 - `--allow-unmapped-factors`: без цього прапорця bucket-и без `factor_map` викликають помилку
 - `--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`: контроль short/netting ризику
 - `--min-pair-overlap`: поріг, нижче якого парні метрики позначаються як `LOW` confidence
+- Layer A defaults (Balanced):
+  - `high_corr_pair_share_pct > 30` при `|corr| > 0.70` → high-corr alert
+  - `max_trc_share_pct > 35` → concentration alert
+  - `n_rc < 4` або `neff < 4` → low-independent-bets alert
