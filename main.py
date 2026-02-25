@@ -4,6 +4,7 @@ import logging
 import sys
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -38,6 +39,15 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _load_factor_returns(path: Optional[str]) -> Optional[pd.DataFrame]:
+    if not path:
+        return None
+    factor_path = Path(path)
+    if not factor_path.exists():
+        raise FileNotFoundError(f"Layer B factor CSV not found: {factor_path}")
+    return pd.read_csv(factor_path)
 
 
 def _build_cli() -> argparse.ArgumentParser:
@@ -194,6 +204,67 @@ def _build_cli() -> argparse.ArgumentParser:
         default=12,
         help="Minimum observations required for covariance estimation.",
     )
+    parser.add_argument(
+        "--dalio-factor-input-csv",
+        default=None,
+        help=(
+            "Optional wide CSV with Layer B factor returns. "
+            "Required columns: date,growth,inflation,real_rates,credit_liquidity."
+        ),
+    )
+    parser.add_argument(
+        "--dalio-layer-b-window-months",
+        type=int,
+        default=36,
+        help="Rolling window size (months) for Layer B factor modeling.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-min-observations",
+        type=int,
+        default=24,
+        help="Minimum aligned observations needed for Layer B OLS.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-require-data",
+        action="store_true",
+        help="Require factor input CSV and fail if Layer B cannot run.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-collinearity-cond-threshold",
+        type=float,
+        default=30.0,
+        help="Condition number threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-vif-threshold",
+        type=float,
+        default=10.0,
+        help="VIF threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-max-factor-trc-share",
+        type=float,
+        default=0.35,
+        help="Alert threshold for max factor TRC share (fraction).",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-factor-hhi-threshold",
+        type=float,
+        default=0.35,
+        help="Alert threshold for factor HHI concentration.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-residual-share-threshold",
+        type=float,
+        default=0.40,
+        help="Alert threshold for residual risk share (fraction).",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-min-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Alert threshold for minimum factor coverage percentage.",
+    )
     return parser
 
 
@@ -210,11 +281,21 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
     analyzer = DalioHolyGrailAnalyzer(
         dataset,
         base_currency=args.dalio_base_currency,
+        factor_returns=_load_factor_returns(args.dalio_factor_input_csv),
         return_unit=args.dalio_return_unit,
         covariance_method=args.dalio_covariance_method,
         ewma_alpha=args.dalio_ewma_alpha,
         min_pair_overlap=args.dalio_min_pair_overlap,
         min_covariance_observations=args.dalio_min_covariance_observations,
+        layer_b_window_months=args.dalio_layer_b_window_months,
+        layer_b_min_observations=args.dalio_layer_b_min_observations,
+        layer_b_require_data=args.dalio_layer_b_require_data,
+        layer_b_collinearity_cond_threshold=args.dalio_layer_b_collinearity_cond_threshold,
+        layer_b_vif_threshold=args.dalio_layer_b_vif_threshold,
+        layer_b_max_factor_trc_share=args.dalio_layer_b_max_factor_trc_share,
+        layer_b_factor_hhi_threshold=args.dalio_layer_b_factor_hhi_threshold,
+        layer_b_residual_share_threshold=args.dalio_layer_b_residual_share_threshold,
+        layer_b_min_coverage_pct=args.dalio_layer_b_min_coverage_pct,
     )
     result = analyzer.run_analysis(
         corr_threshold=args.dalio_corr_threshold,
