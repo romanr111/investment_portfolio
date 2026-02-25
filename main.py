@@ -194,9 +194,21 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Input unit for return_pct in Dalio analyzer input CSV.",
     )
     parser.add_argument(
+        "--dalio-return-type",
+        choices=["simple", "log"],
+        default="simple",
+        help="Return transformation used by Dalio analyzer.",
+    )
+    parser.add_argument(
+        "--dalio-analysis-frequency",
+        choices=["auto", "daily", "monthly"],
+        default="auto",
+        help="Analysis frequency mode for Dalio analyzer.",
+    )
+    parser.add_argument(
         "--dalio-covariance-method",
-        choices=["sample", "ewma"],
-        default="sample",
+        choices=["ledoit-wolf", "sample", "ewma"],
+        default="ledoit-wolf",
         help="Covariance method used in Dalio analyzer.",
     )
     parser.add_argument(
@@ -216,6 +228,21 @@ def _build_cli() -> argparse.ArgumentParser:
         type=int,
         default=12,
         help="Minimum observations required for covariance estimation.",
+    )
+    parser.add_argument(
+        "--dalio-min-asset-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Minimum per-asset coverage required for covariance inclusion.",
+    )
+    parser.add_argument(
+        "--dalio-covariance-window",
+        type=int,
+        default=None,
+        help=(
+            "Optional trailing observation window for covariance estimation. "
+            "Defaults to 252 for daily and full history for monthly."
+        ),
     )
     parser.add_argument(
         "--dalio-factor-input-csv",
@@ -331,10 +358,14 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
         base_currency=args.dalio_base_currency,
         factor_returns=_load_factor_returns(args.dalio_factor_input_csv),
         return_unit=args.dalio_return_unit,
+        return_type=args.dalio_return_type,
+        analysis_frequency=args.dalio_analysis_frequency,
         covariance_method=args.dalio_covariance_method,
         ewma_alpha=args.dalio_ewma_alpha,
         min_pair_overlap=args.dalio_min_pair_overlap,
         min_covariance_observations=args.dalio_min_covariance_observations,
+        min_asset_coverage_pct=args.dalio_min_asset_coverage_pct,
+        covariance_window=args.dalio_covariance_window,
         layer_b_window_months=args.dalio_layer_b_window_months,
         layer_b_min_observations=args.dalio_layer_b_min_observations,
         layer_b_require_data=args.dalio_layer_b_require_data,
