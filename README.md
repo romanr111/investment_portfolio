@@ -182,7 +182,12 @@ python3.10 main.py --skip-dalio-analysis
 - нормалізує історію в базову валюту (`--base-currency`) через `--fx` або `--fx-file`
 - агрегує дублікати `(date, asset_bucket)` в один bucket на дату
 - рахує ваги по датах (`weights_by_date`) та ключові leverage/netting метрики
-- будує матрицю доходностей і кореляційну/коваріаційну структуру (`sample` або `ewma`)
+- будує матрицю доходностей і кореляційну/коваріаційну структуру
+  (`ledoit-wolf` за замовчуванням, також доступні `sample` та `ewma`)
+- визначає частоту аналізу (`auto|daily|monthly`), де `auto` для щоденних рядів
+  застосовує вікно коваріації `252`
+- фільтрує активи для коваріації за мінімальним покриттям
+  (`--min-asset-coverage-pct`, за замовчуванням `80%`)
 - будує Layer A (статистична диверсифікація) на rolling вікнах (`12/24/36m` за замовчуванням):
   - `avg_corr`, `avg_abs_corr`, `high_corr_pair_share_pct`
   - `N_eff` (Effective Number of Bets) з власних значень кореляційної матриці
@@ -220,8 +225,10 @@ python3.10 -m analytics.dalio_holy_grail \
   --max-risk-contribution 0.25 \
   --drift-threshold 0.20 \
   --return-unit decimal \
-  --covariance-method ewma \
-  --ewma-alpha 0.06 \
+  --return-type simple \
+  --analysis-frequency auto \
+  --covariance-method ledoit-wolf \
+  --min-asset-coverage-pct 80 \
   --min-pair-overlap 24 \
   --factor-input-csv data/factor_returns.csv \
   --layer-b-window-months 36 \
@@ -293,6 +300,7 @@ python3.10 -m analytics.dalio_holy_grail \
 - `quality_checks.csv`
 - `high_correlation_pairs.csv`
 - `pairwise_confidence.csv` (overlap, coverage, `HIGH/LOW`)
+- `asset_coverage.csv` (coverage per asset + inclusion flag for covariance)
 - `tail_risk_metrics.csv`
 - `weight_drift.csv`
 - `summary.json` з `diversification_metrics` та `management_rules`
@@ -300,6 +308,14 @@ python3.10 -m analytics.dalio_holy_grail \
 ### Важливі правила/прапорці
 
 - `--return-unit decimal|percent`: формат `return_pct` задається явно (auto-detect не використовується)
+- `--return-type simple|log`: тип доходностей для ризик-розрахунків
+- `--analysis-frequency auto|daily|monthly`: частота core-risk, де `auto` обирає `daily`
+  при медіанному кроці дат `<= 3` дні
+- `--covariance-method ledoit-wolf|sample|ewma`: дефолт `ledoit-wolf`
+- `--covariance-window`: trailing window для covariance; за замовчуванням
+  `252` для daily та весь доступний ряд для monthly
+- `--min-asset-coverage-pct`: мінімальна частка непорожніх спостережень активу
+  для включення в covariance/risk contribution
 - `--allow-unmapped-factors`: без цього прапорця bucket-и без `factor_map` викликають помилку
 - `--allow-shorts`, `--max-gross-leverage`, `--min-net-to-gross`: контроль short/netting ризику
 - `--min-pair-overlap`: поріг, нижче якого парні метрики позначаються як `LOW` confidence
@@ -311,3 +327,9 @@ python3.10 -m analytics.dalio_holy_grail \
   - `high_corr_pair_share_pct > 30` при `|corr| > 0.70` → high-corr alert
   - `max_trc_share_pct > 35` → concentration alert
   - `n_rc < 4` або `neff < 4` → low-independent-bets alert
+
+Migration note:
+- Починаючи з поточної версії дефолт `--covariance-method` змінено з `sample`
+  на `ledoit-wolf` для стабільнішої оцінки ризику на шумних даних.
+- Для daily-входу Layer A/B не переводяться в денні вікна:
+  вони рахуються на month-end агрегації, щоб зберегти семантику `12/24/36m`.

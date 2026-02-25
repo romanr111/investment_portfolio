@@ -91,6 +91,7 @@ class DalioAnalysisResult:
     layer_a_metrics_rolling: pd.DataFrame
     layer_a_trc_rolling: pd.DataFrame
     layer_a_cluster_membership_rolling: pd.DataFrame
+    asset_coverage: pd.DataFrame
     covariance_matrix: pd.DataFrame
     risk_contribution_by_bucket: pd.DataFrame
     factor_exposure: pd.DataFrame
@@ -117,6 +118,7 @@ class DalioAnalysisResult:
             "layer_a_metrics_rolling": self.layer_a_metrics_rolling,
             "layer_a_trc_rolling": self.layer_a_trc_rolling,
             "layer_a_cluster_membership_rolling": self.layer_a_cluster_membership_rolling,
+            "asset_coverage": self.asset_coverage,
             "covariance_matrix": self.covariance_matrix,
             "risk_contribution_by_bucket": self.risk_contribution_by_bucket,
             "factor_exposure": self.factor_exposure,
@@ -149,7 +151,7 @@ class DalioHolyGrailAnalyzer:
         allow_shorts: bool = False,
         max_gross_leverage: float = 1.05,
         min_net_to_gross: float = 0.60,
-        covariance_method: str = "sample",
+        covariance_method: str = "ledoit-wolf",
         ewma_alpha: float = 0.06,
         min_pair_overlap: int = 24,
         layer_b_window_months: int = 36,
@@ -167,6 +169,10 @@ class DalioHolyGrailAnalyzer:
         layer_a_trc_max_share_threshold: float = 0.35,
         layer_a_min_n_rc: float = 4.0,
         layer_a_primary_window: int = 36,
+        analysis_frequency: str = "auto",
+        return_type: str = "simple",
+        min_asset_coverage_pct: float = 80.0,
+        covariance_window: Optional[int] = None,
     ):
         self.history = history.copy()
         self.base_currency = base_currency.upper()
@@ -192,9 +198,15 @@ class DalioHolyGrailAnalyzer:
         self.allow_shorts = allow_shorts
         self.max_gross_leverage = max_gross_leverage
         self.min_net_to_gross = min_net_to_gross
-        self.covariance_method = covariance_method
+        self.covariance_method = covariance_method.lower()
         self.ewma_alpha = ewma_alpha
         self.min_pair_overlap = min_pair_overlap
+        self.analysis_frequency = analysis_frequency.lower()
+        self.return_type = return_type.lower()
+        self.min_asset_coverage_pct = float(min_asset_coverage_pct)
+        self.covariance_window = (
+            int(covariance_window) if covariance_window is not None else None
+        )
         self.layer_b_window_months = int(layer_b_window_months)
         self.layer_b_min_observations = int(layer_b_min_observations)
         self.layer_b_require_data = bool(layer_b_require_data)
@@ -242,6 +254,20 @@ class DalioHolyGrailAnalyzer:
             raise ValueError("layer_a_trc_max_share_threshold must be in [0, 1].")
         if self.layer_a_min_n_rc <= 0:
             raise ValueError("layer_a_min_n_rc must be > 0.")
+        if self.analysis_frequency not in {"auto", "daily", "monthly"}:
+            raise ValueError(
+                "analysis_frequency must be one of: auto, daily, monthly."
+            )
+        if self.return_type not in {"simple", "log"}:
+            raise ValueError("return_type must be one of: simple, log.")
+        if not 0.0 <= self.min_asset_coverage_pct <= 100.0:
+            raise ValueError("min_asset_coverage_pct must be in [0, 100].")
+        if self.covariance_window is not None and self.covariance_window <= 0:
+            raise ValueError("covariance_window must be > 0 when provided.")
+        if self.covariance_method not in {"ledoit-wolf", "sample", "ewma"}:
+            raise ValueError(
+                "covariance_method must be one of: ledoit-wolf, sample, ewma."
+            )
         self.raw_duplicate_pairs_count = 0
 
     def run_analysis(
@@ -255,22 +281,38 @@ class DalioHolyGrailAnalyzer:
         self._validate_factor_mapping(normalized)
         weights_by_date = self._calculate_weights_by_date(normalized)
         returns_wide = self._build_returns_matrix(normalized)
+        analysis_frequency_effective = self._resolve_analysis_frequency(
+            returns_wide.index, self.analysis_frequency
+        )
+        asset_coverage = self._build_asset_coverage_table(returns_wide)
+        included_assets = asset_coverage.loc[
+            asset_coverage["included_for_covariance"], "asset_bucket"
+        ].tolist()
+        returns_for_covariance = returns_wide.reindex(columns=included_assets)
+        covariance_window_effective = self._resolve_covariance_window(
+            total_rows=len(returns_for_covariance.index),
+            analysis_frequency=analysis_frequency_effective,
+        )
+        covariance_input = self._apply_covariance_window(
+            returns_for_covariance, covariance_window_effective
+        )
         correlation_matrix = returns_wide.corr(
             min_periods=self.min_covariance_observations
         )
-        if self.covariance_method == "ewma":
-            covariance_matrix = self._ewma_covariance(returns_wide, self.ewma_alpha)
-        else:
-            covariance_matrix = returns_wide.cov(
-                min_periods=self.min_covariance_observations
-            )
+        covariance_matrix = self._compute_covariance_matrix(covariance_input).reindex(
+            index=returns_wide.columns,
+            columns=returns_wide.columns,
+        )
         rolling_correlation = self._rolling_pairwise_correlation(returns_wide, (12, 36))
-        layer_b_outputs = self._layer_b_analysis(returns_wide, weights_by_date)
+        layer_ab_returns, layer_ab_weights = self._returns_weights_for_layer_ab(
+            returns_wide, weights_by_date, analysis_frequency_effective
+        )
+        layer_b_outputs = self._layer_b_analysis(layer_ab_returns, layer_ab_weights)
         (
             layer_a_metrics_rolling,
             layer_a_trc_rolling,
             layer_a_cluster_membership_rolling,
-        ) = self._layer_a_rollup(returns_wide, weights_by_date)
+        ) = self._layer_a_rollup(layer_ab_returns, layer_ab_weights)
         pairwise_confidence = self._pairwise_confidence_flags(returns_wide)
         quality_checks = self._run_quality_checks(normalized, weights_by_date)
         latest_weights = self._latest_weights(weights_by_date)
@@ -279,10 +321,22 @@ class DalioHolyGrailAnalyzer:
             latest_weights, covariance_matrix
         )
         factor_exposure = self._factor_exposure(latest_weights, risk_contribution)
-        tail_risk_metrics = self._tail_risk_metrics(returns_wide, weights_by_date)
+        tail_risk_metrics = self._tail_risk_metrics(
+            returns_wide,
+            weights_by_date,
+            analysis_frequency_effective,
+        )
         stress_test_results = self._stress_tests(latest_weights, weights_by_date)
         high_corr_pairs = self._high_correlation_pairs(correlation_matrix, corr_threshold)
         weight_drift = self._weight_drift(latest_weights, target_weights, drift_threshold)
+        excluded_assets = asset_coverage.loc[
+            ~asset_coverage["included_for_covariance"], "asset_bucket"
+        ].tolist()
+        layer_ab_input_frequency = (
+            "monthly"
+            if analysis_frequency_effective == "daily"
+            else analysis_frequency_effective
+        )
         management_rules = self._management_rules_summary(
             normalized=normalized,
             weights_by_date=weights_by_date,
@@ -295,6 +349,11 @@ class DalioHolyGrailAnalyzer:
             pairwise_confidence=pairwise_confidence,
             layer_b_summary=layer_b_outputs["summary"],
             layer_a_metrics_rolling=layer_a_metrics_rolling,
+            analysis_frequency=analysis_frequency_effective,
+            covariance_method_effective=self.covariance_method,
+            covariance_window_effective=covariance_window_effective,
+            assets_excluded_low_coverage=excluded_assets,
+            layer_ab_input_frequency=layer_ab_input_frequency,
         )
 
         risk_breach_mask = risk_contribution["risk_contribution_pct"] > max_risk_contribution
@@ -319,6 +378,7 @@ class DalioHolyGrailAnalyzer:
             layer_a_metrics_rolling=layer_a_metrics_rolling,
             layer_a_trc_rolling=layer_a_trc_rolling,
             layer_a_cluster_membership_rolling=layer_a_cluster_membership_rolling,
+            asset_coverage=asset_coverage,
             covariance_matrix=covariance_matrix,
             risk_contribution_by_bucket=risk_contribution,
             factor_exposure=factor_exposure,
@@ -380,9 +440,10 @@ class DalioHolyGrailAnalyzer:
 
         aggregated = self._aggregate_bucket_history(normalized)
         computed_returns = aggregated.groupby("asset_bucket")["market_value_base"].pct_change()
-        aggregated["return_pct"] = aggregated["provided_return_pct"].combine_first(
+        simple_returns = aggregated["provided_return_pct"].combine_first(
             computed_returns
         )
+        aggregated["return_pct"] = self._apply_return_type(simple_returns)
         aggregated["factor"] = aggregated["asset_bucket"].map(self.factor_map).fillna(
             "Unmapped"
         )
@@ -483,6 +544,19 @@ class DalioHolyGrailAnalyzer:
                 )
             return numeric_return / 100.0
         return numeric_return
+
+    def _apply_return_type(self, simple_returns: pd.Series) -> pd.Series:
+        numeric_returns = pd.to_numeric(simple_returns, errors="coerce")
+        if self.return_type == "simple":
+            return numeric_returns
+        bad_values = numeric_returns.dropna() <= -1.0
+        if bad_values.any():
+            raise ValueError(
+                "return_type='log' requires simple returns > -1. "
+                "Found return_pct <= -1.0."
+            )
+        log_values = np.log1p(numeric_returns.astype(float))
+        return pd.Series(log_values, index=simple_returns.index)
 
     def _empty_factor_returns_aligned_table(self) -> pd.DataFrame:
         return pd.DataFrame(columns=["date", *LAYER_B_FACTOR_COLUMNS]).set_index("date")
@@ -1271,6 +1345,155 @@ class DalioHolyGrailAnalyzer:
         ).sort_index()
         return returns
 
+    def _resolve_analysis_frequency(
+        self, dates: pd.Index, requested_frequency: str
+    ) -> str:
+        if requested_frequency in {"daily", "monthly"}:
+            return requested_frequency
+        date_index = pd.DatetimeIndex(dates).dropna().sort_values().unique()
+        if len(date_index) < 2:
+            return "monthly"
+        day_steps = np.diff(date_index.values.astype("datetime64[D]")).astype(int)
+        positive_steps = day_steps[day_steps > 0]
+        if positive_steps.size == 0:
+            return "monthly"
+        median_step = float(np.median(positive_steps))
+        return "daily" if median_step <= 3.0 else "monthly"
+
+    def _resolve_covariance_window(
+        self, total_rows: int, analysis_frequency: str
+    ) -> int:
+        if total_rows <= 0:
+            return 0
+        if self.covariance_window is not None:
+            return min(self.covariance_window, total_rows)
+        if analysis_frequency == "daily":
+            return min(252, total_rows)
+        return total_rows
+
+    def _apply_covariance_window(
+        self, returns_wide: pd.DataFrame, covariance_window: int
+    ) -> pd.DataFrame:
+        if covariance_window <= 0:
+            return returns_wide.iloc[0:0].copy()
+        return returns_wide.tail(covariance_window)
+
+    def _build_asset_coverage_table(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        total_rows = int(len(returns_wide.index))
+        if returns_wide.empty:
+            return pd.DataFrame(
+                columns=[
+                    "asset_bucket",
+                    "observations",
+                    "coverage_pct",
+                    "included_for_covariance",
+                ]
+            )
+        observations = returns_wide.notna().sum(axis=0).astype(int)
+        if total_rows > 0:
+            coverage_pct = observations / float(total_rows) * 100.0
+        else:
+            coverage_pct = pd.Series(0.0, index=observations.index)
+        table = pd.DataFrame(
+            {
+                "asset_bucket": observations.index,
+                "observations": observations.values,
+                "coverage_pct": coverage_pct.values,
+            }
+        )
+        table["included_for_covariance"] = (
+            table["coverage_pct"] >= self.min_asset_coverage_pct
+        )
+        return table.sort_values(
+            ["included_for_covariance", "coverage_pct", "asset_bucket"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+
+    def _compute_covariance_matrix(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        if returns_wide.empty:
+            return pd.DataFrame(index=returns_wide.columns, columns=returns_wide.columns, dtype=float)
+        if self.covariance_method == "ewma":
+            return self._ewma_covariance(returns_wide, self.ewma_alpha)
+        if self.covariance_method == "sample":
+            return returns_wide.cov(min_periods=self.min_covariance_observations)
+        return self._ledoit_wolf_covariance(returns_wide)
+
+    def _empty_covariance_matrix(self, assets: list[str]) -> pd.DataFrame:
+        return pd.DataFrame(
+            math.nan,
+            index=assets,
+            columns=assets,
+            dtype=float,
+        )
+
+    def _ledoit_wolf_covariance(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        try:
+            from sklearn.covariance import LedoitWolf
+        except ImportError as exc:
+            raise ImportError(
+                "covariance_method='ledoit-wolf' requires scikit-learn. "
+                "Install scikit-learn to use this covariance method."
+            ) from exc
+        assets = list(returns_wide.columns)
+        complete_rows = returns_wide.dropna()
+        if len(complete_rows.index) < self.min_covariance_observations:
+            return self._empty_covariance_matrix(assets)
+        estimator = LedoitWolf()
+        estimator.fit(complete_rows.values.astype(float))
+        return pd.DataFrame(
+            estimator.covariance_,
+            index=assets,
+            columns=assets,
+            dtype=float,
+        )
+
+    def _returns_weights_for_layer_ab(
+        self,
+        returns_wide: pd.DataFrame,
+        weights_by_date: pd.DataFrame,
+        analysis_frequency: str,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        if analysis_frequency != "daily":
+            return returns_wide, weights_by_date
+        monthly_returns = self._resample_returns_to_monthly(returns_wide)
+        monthly_weights = self._resample_weights_to_monthly(weights_by_date)
+        return monthly_returns, monthly_weights
+
+    def _resample_returns_to_monthly(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        if returns_wide.empty:
+            return returns_wide.copy()
+
+        if self.return_type == "log":
+            monthly = returns_wide.resample("ME").sum(min_count=1)
+        else:
+            def _compound(values: pd.Series) -> float:
+                clean = values.dropna().astype(float)
+                if clean.empty:
+                    return math.nan
+                return float(np.prod(1.0 + clean.values) - 1.0)
+
+            monthly = returns_wide.resample("ME").apply(_compound)
+        return monthly.sort_index()
+
+    def _resample_weights_to_monthly(self, weights_by_date: pd.DataFrame) -> pd.DataFrame:
+        if weights_by_date.empty:
+            return weights_by_date.copy()
+        weights_wide = (
+            weights_by_date.pivot(index="date", columns="asset_bucket", values="weight")
+            .sort_index()
+            .resample("ME")
+            .last()
+        )
+        stacked_weights = weights_wide.stack()
+        monthly = (
+            stacked_weights.dropna()
+            .rename("weight")
+            .reset_index()
+            .sort_values(["date", "asset_bucket"])
+            .reset_index(drop=True)
+        )
+        return monthly
+
     def _ewma_covariance(
         self, returns_wide: pd.DataFrame, alpha: float
     ) -> pd.DataFrame:
@@ -1348,8 +1571,12 @@ class DalioHolyGrailAnalyzer:
         ).reset_index(drop=True)
 
     def _tail_risk_metrics(
-        self, returns_wide: pd.DataFrame, weights_by_date: pd.DataFrame
+        self,
+        returns_wide: pd.DataFrame,
+        weights_by_date: pd.DataFrame,
+        analysis_frequency: str,
     ) -> pd.DataFrame:
+        rolling_window_observations_1y = 252 if analysis_frequency == "daily" else 12
         weights_wide = weights_by_date.pivot(
             index="date", columns="asset_bucket", values="weight"
         ).sort_index()
@@ -1364,6 +1591,7 @@ class DalioHolyGrailAnalyzer:
                         "worst_rolling_12m_drawdown_pct": math.nan,
                         "portfolio_return_observations": 0,
                         "tail_data_coverage_pct": 0.0,
+                        "rolling_window_observations_1y": rolling_window_observations_1y,
                     }
                 ]
             )
@@ -1395,6 +1623,7 @@ class DalioHolyGrailAnalyzer:
                         "worst_rolling_12m_drawdown_pct": math.nan,
                         "portfolio_return_observations": 0,
                         "tail_data_coverage_pct": coverage_pct,
+                        "rolling_window_observations_1y": rolling_window_observations_1y,
                     }
                 ]
             )
@@ -1408,7 +1637,10 @@ class DalioHolyGrailAnalyzer:
         drawdown = cumulative / running_peak - 1.0
         max_drawdown = float(drawdown.min())
 
-        rolling_peak_12m = cumulative.rolling(window=12, min_periods=1).max()
+        rolling_peak_12m = cumulative.rolling(
+            window=rolling_window_observations_1y,
+            min_periods=1,
+        ).max()
         rolling_drawdown_12m = cumulative / rolling_peak_12m - 1.0
         worst_rolling_12m_drawdown = float(rolling_drawdown_12m.min())
 
@@ -1422,6 +1654,7 @@ class DalioHolyGrailAnalyzer:
                     * 100.0,
                     "portfolio_return_observations": int(len(portfolio_returns)),
                     "tail_data_coverage_pct": coverage_pct,
+                    "rolling_window_observations_1y": rolling_window_observations_1y,
                 }
             ]
         )
@@ -1564,6 +1797,8 @@ class DalioHolyGrailAnalyzer:
         )
         if self.covariance_method == "ewma":
             covariance = self._ewma_covariance(window_returns, self.ewma_alpha)
+        elif self.covariance_method == "ledoit-wolf":
+            covariance = self._ledoit_wolf_covariance(window_returns)
         else:
             covariance = window_returns.cov(
                 min_periods=self.min_covariance_observations
@@ -2261,6 +2496,11 @@ class DalioHolyGrailAnalyzer:
         pairwise_confidence: pd.DataFrame,
         layer_b_summary: Dict[str, object],
         layer_a_metrics_rolling: pd.DataFrame,
+        analysis_frequency: str,
+        covariance_method_effective: str,
+        covariance_window_effective: int,
+        assets_excluded_low_coverage: list[str],
+        layer_ab_input_frequency: str,
     ) -> Dict[str, object]:
         latest_date = pd.Timestamp(normalized["date"].max())
         excluded_weight_pct = (
@@ -2309,6 +2549,11 @@ class DalioHolyGrailAnalyzer:
             "min_net_to_gross_limit": self.min_net_to_gross,
             "quarterly_rebalance_due": bool(latest_date.is_quarter_end),
             "next_rebalance_date": str(latest_date + pd.offsets.QuarterEnd()),
+            "analysis_frequency": analysis_frequency,
+            "covariance_method_effective": covariance_method_effective,
+            "covariance_window_effective": covariance_window_effective,
+            "assets_excluded_low_coverage": assets_excluded_low_coverage,
+            "layer_ab_input_frequency": layer_ab_input_frequency,
         }
         management_rules.update(layer_b_summary)
         primary_window = self.layer_a_primary_window
@@ -2507,6 +2752,18 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Input unit for return_pct column.",
     )
     parser.add_argument(
+        "--return-type",
+        choices=["simple", "log"],
+        default="simple",
+        help="Return transformation used for analysis.",
+    )
+    parser.add_argument(
+        "--analysis-frequency",
+        choices=["auto", "daily", "monthly"],
+        default="auto",
+        help="Analysis frequency. 'auto' detects daily vs monthly from date spacing.",
+    )
+    parser.add_argument(
         "--allow-partial-scenarios",
         action="store_true",
         help=(
@@ -2544,8 +2801,8 @@ def _build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--covariance-method",
-        choices=["sample", "ewma"],
-        default="sample",
+        choices=["ledoit-wolf", "sample", "ewma"],
+        default="ledoit-wolf",
         help="Covariance estimator for risk contribution and volatility.",
     )
     parser.add_argument(
@@ -2559,6 +2816,21 @@ def _build_cli() -> argparse.ArgumentParser:
         type=int,
         default=24,
         help="Minimum overlapping observations for HIGH confidence pairwise stats.",
+    )
+    parser.add_argument(
+        "--min-asset-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Minimum per-asset coverage required for covariance inclusion.",
+    )
+    parser.add_argument(
+        "--covariance-window",
+        type=int,
+        default=None,
+        help=(
+            "Optional trailing observation window for covariance estimation. "
+            "Defaults to 252 for daily and full history for monthly."
+        ),
     )
     parser.add_argument(
         "--factor-input-csv",
@@ -2671,6 +2943,8 @@ def main() -> int:
         fx_history=_load_fx_history(args.fx_file),
         factor_returns=_load_factor_returns(args.factor_input_csv),
         return_unit=args.return_unit,
+        return_type=args.return_type,
+        analysis_frequency=args.analysis_frequency,
         allow_partial_scenarios=args.allow_partial_scenarios,
         allow_unmapped_factors=args.allow_unmapped_factors,
         allow_shorts=args.allow_shorts,
@@ -2679,6 +2953,8 @@ def main() -> int:
         covariance_method=args.covariance_method,
         ewma_alpha=args.ewma_alpha,
         min_pair_overlap=args.min_pair_overlap,
+        min_asset_coverage_pct=args.min_asset_coverage_pct,
+        covariance_window=args.covariance_window,
         layer_b_window_months=args.layer_b_window_months,
         layer_b_min_observations=args.layer_b_min_observations,
         layer_b_require_data=args.layer_b_require_data,
