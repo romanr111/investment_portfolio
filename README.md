@@ -231,7 +231,7 @@ python3.10 -m analytics.dalio_holy_grail \
   --layer-b-max-factor-trc-share 0.35 \
   --layer-b-factor-hhi-threshold 0.35 \
   --layer-b-residual-share-threshold 0.40 \
-  --layer-b-min-coverage-pct 80
+  --layer-b-min-coverage-pct 80 \
   --layer-a-windows 12,24,36 \
   --layer-a-high-corr-threshold 0.70 \
   --layer-a-cluster-corr-cutoff 0.70 \
