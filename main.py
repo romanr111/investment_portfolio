@@ -8,17 +8,6 @@ from pathlib import Path
 import pandas as pd
 
 from analytics.dalio_holy_grail import DalioHolyGrailAnalyzer
-from src.google_sheets.spreadsheet_structure import update_portfolio_spreadsheet
-from src.logging.portfolio_logger import (
-    log_portfolio_data,
-    log_portfolio_metadata,
-)
-from src.data_source import DataSource
-from src.allocation_calculator import AllocationCalculator
-from src.portfolio_history.unified_history import (
-    save_combined_data_snapshot_json,
-    sync_unified_history_from_google_sheets,
-)
 
 #
 # cd Documents/Development/investment_portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
@@ -129,6 +118,14 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Skip Dalio Holy Grail analysis at the end of the run.",
     )
     parser.add_argument(
+        "--dalio-only",
+        action="store_true",
+        help=(
+            "Run only Dalio Holy Grail analysis and skip live data fetch, "
+            "Google Sheets update, and history sync."
+        ),
+    )
+    parser.add_argument(
         "--dalio-input-csv",
         default=None,
         help=(
@@ -233,10 +230,71 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
     )
 
 
+def _run_history_sync_only(args: argparse.Namespace) -> None:
+    from src.portfolio_history.unified_history import (
+        sync_unified_history_from_google_sheets,
+    )
+
+    logger.debug("Syncing retrospective unified history from Google Sheets")
+    history_df = sync_unified_history_from_google_sheets(
+        credentials_path=args.credentials_path,
+        spreadsheet_name=args.spreadsheet_name,
+        output_csv_path=args.history_csv_path,
+        output_jsonl_path=args.history_jsonl_path,
+        currency=args.history_currency,
+        return_source=args.history_return_source,
+        strict_required_buckets=args.history_strict_required_buckets,
+        include_zero_positions=args.history_include_zero_positions,
+        history_frequency=args.history_frequency,
+        start_date=args.history_start_date,
+        end_date=args.history_end_date,
+    )
+    logger.info(
+        "Unified history saved: %s rows, %s dates -> %s",
+        len(history_df),
+        history_df["date"].nunique() if not history_df.empty else 0,
+        args.history_csv_path,
+    )
+
+
 def main() -> int:
     args = _build_cli().parse_args()
     logger.debug("Starting main function")
     try:
+        if args.dalio_only and args.skip_dalio_analysis:
+            raise ValueError(
+                "--dalio-only cannot be combined with --skip-dalio-analysis."
+            )
+        if args.dalio_only:
+            if not args.dalio_input_csv:
+                history_csv = Path(args.history_csv_path)
+                if not history_csv.exists():
+                    if args.skip_history_sync:
+                        raise FileNotFoundError(
+                            "Dalio standalone mode requires input CSV. "
+                            f"Missing file: {history_csv}. "
+                            "Provide --dalio-input-csv or run without --skip-history-sync."
+                        )
+                    logger.info(
+                        "Dalio input CSV not found at %s. Running history sync first.",
+                        history_csv,
+                    )
+                    _run_history_sync_only(args)
+            logger.info("Running Dalio analyzer in standalone mode")
+            _run_dalio_analysis(args)
+            return 0
+
+        from src.allocation_calculator import AllocationCalculator
+        from src.data_source import DataSource
+        from src.google_sheets.spreadsheet_structure import (
+            update_portfolio_spreadsheet,
+        )
+        from src.logging.portfolio_logger import (
+            log_portfolio_data,
+            log_portfolio_metadata,
+        )
+        from src.portfolio_history.unified_history import save_combined_data_snapshot_json
+
         logger.debug("Initializing DataSource")
         data_source = DataSource()
         logger.debug("DataSource initialization completed")
@@ -286,26 +344,7 @@ def main() -> int:
             logger.info("Skipping sheet update by flag")
 
         if not args.skip_history_sync:
-            logger.debug("Syncing retrospective unified history from Google Sheets")
-            history_df = sync_unified_history_from_google_sheets(
-                credentials_path=args.credentials_path,
-                spreadsheet_name=args.spreadsheet_name,
-                output_csv_path=args.history_csv_path,
-                output_jsonl_path=args.history_jsonl_path,
-                currency=args.history_currency,
-                return_source=args.history_return_source,
-                strict_required_buckets=args.history_strict_required_buckets,
-                include_zero_positions=args.history_include_zero_positions,
-                history_frequency=args.history_frequency,
-                start_date=args.history_start_date,
-                end_date=args.history_end_date,
-            )
-            logger.info(
-                "Unified history saved: %s rows, %s dates -> %s",
-                len(history_df),
-                history_df["date"].nunique() if not history_df.empty else 0,
-                args.history_csv_path,
-            )
+            _run_history_sync_only(args)
         else:
             logger.info("Skipping history sync by flag")
 

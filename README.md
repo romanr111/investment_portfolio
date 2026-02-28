@@ -163,6 +163,19 @@ python3.10 main.py \
 python3.10 main.py --skip-dalio-analysis
 ```
 
+Щоб запустити тільки Dalio Holy Grail analyzer (без `DataSource`, оновлення Google Sheets і sync історії):
+
+```bash
+python3.10 main.py \
+  --dalio-only \
+  --dalio-input-csv data/portfolio_history.csv \
+  --dalio-output-dir analytics/output
+```
+
+Якщо `--dalio-input-csv` не заданий, береться `--history-csv-path` (за замовчуванням `data/portfolio_history.csv`).
+Якщо цього файлу немає і не передано `--skip-history-sync`, у standalone режимі спочатку виконується лише history sync,
+після чого автоматично стартує Dalio аналіз.
+
 Примітка по `return_pct`:
 - за замовчуванням уніфікована історія пишеться з порожнім `return_pct` (`--history-return-source blank`)
 - це зроблено навмисно, щоб уникнути хибних “дохідностей” при поповненнях/виводах
