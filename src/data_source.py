@@ -1,7 +1,9 @@
 from typing import Dict
 import logging
+import json
 import time
 import traceback
+from pathlib import Path
 
 from data.filters_constants import IB_BONDS_KEY
 from src.brokers.ib import InteractiveBrokers
@@ -16,6 +18,7 @@ from data.assets_data import OTHER_BETS
 logger = logging.getLogger(__name__)
 
 FINANCIAL_FREEDOM_GOAL = 500000
+COMBINED_DATA_JSON_PATH = Path("data/combined_data.json")
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && arch -x86_64 /bin/zsh bin/run.sh root/conf.yaml
@@ -169,7 +172,7 @@ class DataSource:
 
     def get_combined_data(self) -> Dict:
         """Get combined portfolio data including all assets and calculations."""
-        return {
+        data = {
             "IB_DATA": self.ib_data,
             "CRYPTO_DATA": {
                 "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
@@ -187,6 +190,14 @@ class DataSource:
             "TOTAL_ASSETS": self.total_assets,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
         }
+        self._save_combined_data_to_json(data)
+        return data
+
+    def _save_combined_data_to_json(self, data: Dict) -> None:
+        COMBINED_DATA_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with COMBINED_DATA_JSON_PATH.open("w", encoding="utf-8") as json_file:
+            json.dump(data, json_file, indent=2, ensure_ascii=False, default=str)
+        logger.info("Combined data exported to JSON: %s", COMBINED_DATA_JSON_PATH)
 
 
 if __name__ == "__main__":
