@@ -153,12 +153,16 @@ class DataSource:
 
     def calculate_total_assets(self) -> int:
         """Calculate total portfolio assets value."""
+        # IB_Portfolio_Value already includes Net_cash, so exclude it from the
+        # standalone cash total to avoid counting the IB cash position twice.
+        non_ib_cash_total = self.cash.total_cash - self.cash.ib_cash
+
         asset_values = [
             self.ib_data["IB_Portfolio_Value"],
             self.crypto.get_total_crypto_value(),
             self.fi_data["group_weighted_interest"]["Crypto Landing"][0],
             self.fi_data["group_weighted_interest"]["p2p_lending"][0],
-            float(self.cash.total_cash),
+            float(non_ib_cash_total),
             float(OTHER_BETS),
         ]
         total = int(sum(asset_values))
