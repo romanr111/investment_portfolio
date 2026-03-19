@@ -6,7 +6,7 @@ from data.assets_data import COLD_STORAGE
 from src.crypto.base_exchange_client import ExchangeBase
 from src.crypto.binance_client import BinanceClient
 from src.crypto.okx_client import OKXFiltered
-from src.crypto.whitebit_client import WhiteBit
+from src.crypto.whitebit_client import WhiteBit, WhiteBitFallback
 
 # from src.crypto.bybit_client import BybitFiltered  # Commented out: disable Bybit
 from src.crypto.telegram_client import TelegramClient
@@ -340,7 +340,7 @@ class CryptoEndpoint:
         return
 
     def _safe_init_whitebit(self):
-        """Initialize WhiteBit with error handling."""
+        """Initialize WhiteBit with error handling and fallback to hardcoded data."""
         try:
             logger.debug("Initializing WhiteBit - start")
             start_time = time.time()
@@ -352,7 +352,25 @@ class CryptoEndpoint:
         except Exception as e:
             logger.error(f"Error initializing WhiteBit: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
-            logger.warning("Continuing without WhiteBit")
+            logger.warning("Attempting to use WhiteBit fallback with hardcoded data")
+
+            try:
+                logger.debug("Initializing WhiteBitFallback - start")
+                start_time = time.time()
+                whitebit_fallback = WhiteBitFallback()
+                self.brokers.append(whitebit_fallback)
+                logger.debug(
+                    f"WhiteBitFallback initialized in {time.time() - start_time:.2f} seconds"
+                )
+                logger.info(
+                    "WhiteBit fallback successfully initialized with hardcoded data"
+                )
+            except Exception as fallback_error:
+                logger.error(
+                    f"Error initializing WhiteBitFallback: {str(fallback_error)}"
+                )
+                logger.error(f"Stack trace: {traceback.format_exc()}")
+                logger.warning("Continuing without WhiteBit")
 
     def _safe_init_telegram(self):
         """Initialize TelegramClient with error handling."""

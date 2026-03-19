@@ -4,6 +4,7 @@ import json
 import time
 import traceback
 from pathlib import Path
+from datetime import datetime
 
 from data.filters_constants import IB_BONDS_KEY
 from src.brokers.ib import InteractiveBrokers
@@ -29,6 +30,7 @@ class DataSource:
     def __init__(self):
         try:
             start_time = time.time()
+            self._data_timestamp = time.time()
             self._initialize_data_sources()
             self._prepare_portfolio_data()
             self._calculate_stock_dividends()
@@ -39,10 +41,37 @@ class DataSource:
             logger.info(
                 f"DataSource initialized in {time.time() - start_time:.2f} seconds"
             )
+            logger.info(
+                f"Data timestamp: {datetime.fromtimestamp(self._data_timestamp).isoformat()}"
+            )
         except Exception as e:
             logger.error(f"Error in DataSource initialization: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             raise
+
+    def force_refresh(self) -> Dict:
+        """Force refresh all data sources and return fresh data.
+
+        This method re-initializes all connections and fetches fresh data from APIs.
+        Use this when you want to ensure absolutely current data.
+        """
+        logger.info("Forcing data refresh - reinitializing all data sources")
+        start_time = time.time()
+
+        # Re-initialize everything with fresh data
+        self._data_timestamp = time.time()
+        self._initialize_data_sources()
+        self._prepare_portfolio_data()
+        self._calculate_stock_dividends()
+        self._setup_fixed_income()
+        self._setup_cash()
+        self.total_assets = self.calculate_total_assets()
+        self.ff_progress = self.calculate_ff_goal_progress()
+
+        logger.info(
+            f"Force refresh completed in {time.time() - start_time:.2f} seconds"
+        )
+        return self.get_combined_data(force_refresh=True)
 
     def get_data(self) -> Dict:
         """
@@ -174,8 +203,29 @@ class DataSource:
         progress = str(goal_progress) + "%"
         return progress
 
-    def get_combined_data(self) -> Dict:
-        """Get combined portfolio data including all assets and calculations."""
+    def get_combined_data(self, force_refresh: bool = False) -> Dict:
+        """Get combined portfolio data including all assets and calculations.
+
+        Args:
+            force_refresh: If True, forces fresh data fetch even if recently updated
+
+        Returns:
+            Dict: Combined portfolio data with live values from APIs and constants
+        """
+        current_time = time.time()
+        data_age_seconds = current_time - self._data_timestamp
+
+        # Log data age for transparency
+        logger.info(
+            f"Data age: {data_age_seconds:.1f} seconds ({data_age_seconds/60:.1f} minutes)"
+        )
+
+        # Validate data freshness (warn if data is older than 5 minutes)
+        if data_age_seconds > 300:  # 5 minutes
+            logger.warning(
+                f"Data is {data_age_seconds/60:.1f} minutes old. Consider refreshing."
+            )
+
         data = {
             "IB_DATA": self.ib_data,
             "CRYPTO_DATA": {
@@ -193,6 +243,14 @@ class DataSource:
             },
             "TOTAL_ASSETS": self.total_assets,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
+            "DATA_METADATA": {
+                "timestamp": self._data_timestamp,
+                "age_seconds": data_age_seconds,
+                "source": "live_api_calls",
+                "last_updated": datetime.fromtimestamp(
+                    self._data_timestamp
+                ).isoformat(),
+            },
         }
         self._save_combined_data_to_json(data)
         return data
