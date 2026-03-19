@@ -1,0 +1,248 @@
+{
+  "IB_DATA": {
+    "Bonds": {
+      "IBCID769413574": 24998,
+      "IHYG": 3189,
+      "SPHY": 2094
+    },
+    "China Stocks": {
+      "9988": 8782,
+      "KWEB": 4717,
+      "PDD": 908
+    },
+    "Stocks": {
+      "BRK B": 6779,
+      "GOOG": 5806,
+      "NKE": 4539,
+      "BN": 3952,
+      "WHR": 3334,
+      "AMZN": 3143,
+      "COP": 3091,
+      "META": 3073,
+      "CVS": 2921,
+      "COF": 1796,
+      "CPRT": 1485,
+      "IBKR": 1188,
+      "XLE": 1171,
+      "UBER": 993,
+      "MSFT": 391
+    },
+    "Short Selling": {},
+    "REIT": {},
+    "Precious Metals": {
+      "IAU": 10065
+    },
+    "Commodities": {
+      "COMB": 4457
+    },
+    "Total Stocks Value": 58069,
+    "Net_cash": 8358,
+    "IB_Portfolio_Value": 111230
+  },
+  "CRYPTO_DATA": {
+    "Total_Crypto_Value": 4627,
+    "Crypto_Market_Values": {
+      "BTC": 3041,
+      "ETH": 1453,
+      "TON": 91,
+      "AVAX": 14,
+      "NEO": 13,
+      "EOS": 7,
+      "SC": 5,
+      "COMP": 3
+    },
+    "Token_Quantities": {
+      "BTC": 0.0427,
+      "ETH": 0.6651,
+      "0G": 0.0236,
+      "1000CAT": 9.0239,
+      "2Z": 0.256,
+      "ANIME": 3.7635,
+      "AVNT": 0.0754,
+      "BABY": 0.5593,
+      "BANANA": 0.0065,
+      "BARD": 0.0751,
+      "BERA": 0.0826,
+      "BIO": 0.6115,
+      "BMT": 0.2347,
+      "C": 0.1413,
+      "CATI": 0.5146,
+      "DOGS": 1362.39,
+      "DOLO": 0.1118,
+      "EDEN": 0.1079,
+      "ENSO": 0.0135,
+      "ERA": 0.1474,
+      "EUL": 0.004,
+      "FF": 1.0814,
+      "GPS": 2.1738,
+      "GUN": 2.1427,
+      "HAEDAL": 0.2223,
+      "HEMI": 0.7342,
+      "HMSTR": 16.71,
+      "HOLO": 0.2301,
+      "HOME": 1.432,
+      "HUMA": 1.376,
+      "HYPER": 0.156,
+      "INIT": 0.1746,
+      "KAITO": 0.1559,
+      "KERNEL": 0.2466,
+      "LA": 0.1125,
+      "LAYER": 0.3653,
+      "LINEA": 5.2725,
+      "LUNA": 0.2109,
+      "MIRA": 0.1484,
+      "MITO": 0.1115,
+      "MMT": 0.0512,
+      "MORPHO": 0.0463,
+      "MOVE": 1.9505,
+      "NEWT": 0.0957,
+      "NIL": 0.1852,
+      "NXPC": 0.2131,
+      "OPEN": 0.0762,
+      "PARTI": 0.235,
+      "PENGU": 20.8007,
+      "PLUME": 1.0803,
+      "PROVE": 0.1074,
+      "RED": 0.2257,
+      "RESOLV": 0.1524,
+      "SAHARA": 0.9101,
+      "SAPIEN": 0.0133,
+      "SCR": 0.3022,
+      "SHELL": 0.3786,
+      "SIGN": 1.5032,
+      "SOLV": 3.9346,
+      "SOMI": 0.2181,
+      "SOPH": 1.1917,
+      "SPK": 1.4577,
+      "STO": 0.1097,
+      "SXT": 7.388,
+      "THE": 0.1774,
+      "TOWNS": 2.2905,
+      "TREE": 0.0957,
+      "TURTLE": 0.075,
+      "USUAL": 1.7849,
+      "VANA": 0.0297,
+      "WAL": 0.2371,
+      "WCT": 0.2476,
+      "XPL": 0.5378,
+      "YB": 0.0737,
+      "ZBT": 0.1129,
+      "ZKC": 0.1131,
+      "AVAX": 1.5019,
+      "COMP": 0.1433,
+      "EOS": 90,
+      "NEO": 5,
+      "SC": 4343,
+      "TON": 70
+    }
+  },
+  "FIXED_INCOME_DATA": {
+    "group_weighted_interest": {
+      "Bonds": [
+        30281,
+        0.04
+      ],
+      "Crypto Landing": [
+        18295.1125,
+        0.173
+      ],
+      "p2p_lending": [
+        2295,
+        0.09
+      ]
+    },
+    "calculated_income": {
+      "Bonds": 1211,
+      "Crypto Landing": 3165,
+      "p2p_lending": 207
+    },
+    "fixed_inc_principal_and_interest": {
+      "principal": 50871.1125,
+      "interest": 0.09
+    },
+    "monthly_earnings_fixed_income": 381,
+    "yearly_earnings_fixed_income": 4583,
+    "fixed_income_full_data": {
+      "Bonds": {
+        "IBCID769413574": [
+          24998,
+          0.035
+        ],
+        "IHYG": [
+          3189,
+          0.054
+        ],
+        "SPHY": [
+          2094,
+          0.073
+        ]
+      },
+      "Crypto Landing": {
+        "binance": {
+          "USDT": [
+            139,
+            0.039
+          ]
+        },
+        "whitebit": {
+          "USDC": [
+            18156,
+            0.174
+          ],
+          "USDT": [
+            0,
+            0.0
+          ],
+          "ETH": [
+            0.1125,
+            0.174
+          ]
+        },
+        "telegram": {
+          "USDT": [
+            0,
+            0
+          ]
+        }
+      },
+      "p2p_lending": {
+        "EstateGuru": [
+          2295,
+          0.09
+        ]
+      }
+    },
+    "stocks_principal_and_interest": {
+      "total_principal": 58069,
+      "weighted_interest": 1.69
+    },
+    "stocks_monthly": 81,
+    "stocks_yearly": 981,
+    "total_monthly": 462,
+    "total_yearly": 5564
+  },
+  "CASH_DATA": {
+    "Total": "8610",
+    "Breakdown": {
+      "cash": "0",
+      "lended": "677",
+      "debt": "0",
+      "private": "-463",
+      "ib_cash": "8358",
+      "crypto_cash": "0",
+      "mono": "38",
+      "wise": "0"
+    }
+  },
+  "OTHER_ASSETS": {
+    "Other Bets": 27615
+  },
+  "TOTAL_ASSETS": 172672,
+  "FIN_FREEDOM_GOAL_PROGRESS": "34.53%",
+  "DATA_METADATA": {
+    "timestamp": 1773866469.182485,
+    "age_seconds": 156.51375198364258,
+    "source": "live_api_calls",
+    "last_updated": "2026-03-18T22:41:09.182485"
+  }
+}

@@ -108,9 +108,14 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Skip downloading retrospective unified history from Google Sheets.",
     )
     parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="Force refresh all data sources to ensure absolutely current data.",
+    )
+    parser.add_argument(
         "--skip-sheet-update",
         action="store_true",
-        help="Skip writing the latest snapshot tab to Google Sheets.",
+        help="Skip updating Google Sheets (useful for testing/debugging).",
     )
     parser.add_argument(
         "--skip-dalio-analysis",
@@ -129,8 +134,7 @@ def _build_cli() -> argparse.ArgumentParser:
         "--dalio-input-csv",
         default=None,
         help=(
-            "Optional input CSV for Dalio analyzer. "
-            "Defaults to --history-csv-path."
+            "Optional input CSV for Dalio analyzer. " "Defaults to --history-csv-path."
         ),
     )
     parser.add_argument(
@@ -293,14 +297,21 @@ def main() -> int:
             log_portfolio_data,
             log_portfolio_metadata,
         )
-        from src.portfolio_history.unified_history import save_combined_data_snapshot_json
+        from src.portfolio_history.unified_history import (
+            save_combined_data_snapshot_json,
+        )
 
         logger.debug("Initializing DataSource")
         data_source = DataSource()
         logger.debug("DataSource initialization completed")
 
-        logger.debug("Collecting combined data snapshot")
-        combined_data = data_source.get_combined_data()
+        # Force refresh if requested
+        if args.force_refresh:
+            logger.info("Force refreshing all data sources")
+            combined_data = data_source.force_refresh()
+        else:
+            logger.debug("Collecting combined data snapshot")
+            combined_data = data_source.get_combined_data()
         snapshot_file = save_combined_data_snapshot_json(
             combined_data,
             output_dir=args.snapshot_dir,

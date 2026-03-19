@@ -29,7 +29,9 @@ class AllocationCalculator:
         bonds_value = sum_as_decimal(ib_data.get("Bonds", {}).values())
         stocks_value = to_decimal(ib_data.get("Total Stocks Value", 0))
         commodities_value = sum_as_decimal(ib_data.get("Commodities", {}).values())
-        precious_metals_value = sum_as_decimal(ib_data.get("Precious Metals", {}).values())
+        precious_metals_value = sum_as_decimal(
+            ib_data.get("Precious Metals", {}).values()
+        )
         reit_value = sum_as_decimal(ib_data.get("REIT", {}).values())
 
         crypto_data = data.get("CRYPTO_DATA", {})
@@ -94,8 +96,17 @@ class AllocationCalculator:
                     break
                 if discrepancy > 0:
                     # Increase categories with the largest positive residual first
+                    # Only consider categories that have actual values (not zero)
+                    valid_candidates = [
+                        c
+                        for c in rounded_percentages.keys()
+                        if category_values.get(c, Decimal("0")) > Decimal("0")
+                    ]
+                    if not valid_candidates:
+                        break
+
                     cat = max(
-                        rounded_percentages.keys(),
+                        valid_candidates,
                         key=lambda c: (
                             raw_percentages[c] - rounded_percentages[c],
                             raw_percentages[c],
@@ -118,7 +129,9 @@ class AllocationCalculator:
                     )
                     cat = None
                     for candidate in candidates:
-                        if rounded_percentages[candidate] - quantize_unit >= Decimal("0"):
+                        if rounded_percentages[candidate] - quantize_unit >= Decimal(
+                            "0"
+                        ):
                             cat = candidate
                             break
                     if cat is None:

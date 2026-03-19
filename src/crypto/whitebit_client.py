@@ -124,6 +124,42 @@ class WhiteBit(ExchangeBase):
         return {"whitebit": positions}
 
 
+class WhiteBitFallback(WhiteBit):
+    """WhiteBit fallback client that provides hardcoded data when API connection fails."""
+
+    def __init__(self):
+        """Initialize fallback client without API validation."""
+        self.api_key = WHITEBIT_API_KEY
+        self.secret_key = WHITEBIT_API_SECRET
+        self.base_url = "https://whitebit.com"
+        # Skip parent __init__ to avoid API validation
+
+    def _validate_connection(self) -> bool:
+        """Always return True for fallback client."""
+        return True
+
+    def get_cash_balance(self) -> int:
+        """Return 0 for fallback since we can't access live cash data."""
+        return 0
+
+    def get_all_crypto_balances(self) -> Dict[str, float]:
+        """Return hardcoded crypto balances from WHITEBIT_SAVINGS."""
+        balances = {}
+        core_tokens = {"BTC", "ETH", "SOL", "BNB"}
+        excluded_stablecoins = {"USDT", "USDC"}
+
+        for position in WHITEBIT_SAVINGS:
+            ticker = position[0]
+            if ticker in core_tokens or ticker not in excluded_stablecoins:
+                try:
+                    principal = float(position[1])
+                    if principal >= self.MIN_CRYPTO_BALANCE:
+                        balances[ticker] = self._round_amount(principal)
+                except Exception:
+                    continue
+        return balances
+
+
 def main():
     """Main function demonstrating WhiteBit client functionality."""
     try:
