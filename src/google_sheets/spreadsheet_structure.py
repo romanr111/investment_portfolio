@@ -422,29 +422,18 @@ class PortfolioTableBuilder:
         # Allocations
         alloc_data = self.data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
 
-        # Get the actual asset values
+        def _to_float(value: Any) -> float:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _sum_dict_values(values: Any) -> float:
+            if not isinstance(values, dict):
+                return 0.0
+            return sum(_to_float(v) for v in values.values())
+
         ib_data = self.data.get("IB_DATA", {})
-
-        # For bonds
-        bonds = ib_data.get("Bonds", {})
-        actual_bonds_value = sum(bonds.values()) if bonds else 0
-
-        # For stocks (combining China Stocks and Stocks)
-        china_stocks = ib_data.get("China Stocks", {})
-        regular_stocks = ib_data.get("Stocks", {})
-        actual_china_stocks_value = sum(china_stocks.values()) if china_stocks else 0
-        actual_regular_stocks_value = (
-            sum(regular_stocks.values()) if regular_stocks else 0
-        )
-
-        # Calculate total stocks value directly from the stock values
-        actual_stocks_value = actual_china_stocks_value + actual_regular_stocks_value
-
-        # Optional logging for transparency
-        logger = logging.getLogger(__name__)
-        logger.debug(f"China Stocks sum: {actual_china_stocks_value}")
-        logger.debug(f"Regular Stocks sum: {actual_regular_stocks_value}")
-        logger.debug(f"Total Stocks calculated: {actual_stocks_value}")
 
         other_assets = self.data.get("OTHER_ASSETS")
         if other_assets:
@@ -460,18 +449,39 @@ class PortfolioTableBuilder:
             except Exception:
                 other_val = 0.0
 
+        actual_stocks_value = _to_float(ib_data.get("Total Stocks Value", 0))
+        if actual_stocks_value <= 0:
+            actual_stocks_value = _sum_dict_values(ib_data.get("China Stocks", {})) + (
+                _sum_dict_values(ib_data.get("Stocks", {}))
+            )
+
+        actual_values = {
+            "Bonds": _sum_dict_values(ib_data.get("Bonds", {})),
+            "Stocks": actual_stocks_value,
+            "Commodities": _sum_dict_values(ib_data.get("Commodities", {})),
+            "Precious Metals": _sum_dict_values(ib_data.get("Precious Metals", {})),
+            "Crypto Coins": _to_float(
+                self.data.get("CRYPTO_DATA", {}).get("Total_Crypto_Value", 0)
+            ),
+            "Crypto Lending": _to_float(
+                self.data.get("FIXED_INCOME_DATA", {})
+                .get("group_weighted_interest", {})
+                .get("Crypto Landing", (0,))[0]
+            ),
+            "P2P Lending": _to_float(
+                self.data.get("FIXED_INCOME_DATA", {})
+                .get("group_weighted_interest", {})
+                .get("p2p_lending", (0,))[0]
+            ),
+            "REIT": _sum_dict_values(ib_data.get("REIT", {})),
+            "Cash": _to_float(self.data.get("CASH_DATA", {}).get("Total", 0)),
+            "Other Bets": other_val,
+        }
+
         # Start writing allocation rows from row index 3, skipping small categories
         current_row_idx = 3
         for cat, pct in alloc_data.items():
-            # Use actual values for Bonds and Stocks, calculate others from percentage
-            if cat == "Bonds" and actual_bonds_value > 0:
-                val = actual_bonds_value
-            elif cat == "Stocks" and actual_stocks_value > 0:
-                val = actual_stocks_value
-            elif cat.lower() == "other bets" and other_val:
-                val = other_val
-            else:
-                val = round(total_assets * (pct / 100))
+            val = round(actual_values.get(cat, total_assets * (pct / 100)))
 
             # Skip categories with negligible size (< 1 unit or < 1%)
             if val < 1:
