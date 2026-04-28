@@ -14,12 +14,13 @@
 - 2026-04-28T19:24Z [TOOL] Confirmed `git ls-files -- data` lists only `data/README.md`.
 - 2026-04-28T19:24Z [TOOL] Confirmed private files such as `data/api_keys.py`, `data/credentials.json`, `data/assets_data.py`, and `data/combined_data.json` still exist locally and are ignored.
 - 2026-04-28T19:25Z [CODE] Staged and committed the current-tree cleanup locally.
+- 2026-04-28T19:27Z [TOOL] Pushed cleanup to `origin/master` and verified GitHub lists only `data/README.md` under `data/`.
 
 ## Now
-- 2026-04-28 [CODE] Cleanup is committed locally and ready for push plus remote verification.
+- 2026-04-28 [CODE] Local-only `data/` cleanup is complete.
 
 ## Next
-- 2026-04-28 [TOOL] Push and verify remote `master` tree.
+- 2026-04-28 [USER] Rotate any credentials or tokens that were previously exposed in Git history, if applicable.
 
 ## Open questions
 - 2026-04-28 [USER] None.
@@ -34,3 +35,4 @@
 - 2026-04-28T19:22Z [TOOL] `rsync -a data/ /Users/roman/Documents/Development/investment_portfolio_data_backup_20260428T192224Z/data/` completed with 34 files.
 - 2026-04-28T19:24Z [TOOL] `git check-ignore -v` matched `/data/**` for private data files.
 - 2026-04-28T19:25Z [TOOL] `git commit -m "Stop tracking local portfolio data"` created the local cleanup commit.
+- 2026-04-28T19:27Z [TOOL] `gh api 'repos/romanr111/investment_portfolio/contents/data?ref=master' --jq '.[].path'` returned `data/README.md`.
