@@ -1,6 +1,6 @@
 **__pycache__
 clientportal.gw/
 analytics/output/
-data/snapshots/
-data/portfolio_history.csv
-data/portfolio_history.jsonl
+/data/**
+!/data/
+!/data/README.md
