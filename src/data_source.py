@@ -9,6 +9,7 @@ from datetime import datetime
 from data.filters_constants import IB_BONDS_KEY
 from src.brokers.ib import InteractiveBrokers
 from src.brokers.ib_dividends import IBDividends
+from src.brokers.data_fetchers.index_performance_fetcher import IndexPerformanceFetcher
 from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
@@ -36,6 +37,7 @@ class DataSource:
             self._calculate_stock_dividends()
             self._setup_fixed_income()
             self._setup_cash()
+            self._fetch_index_performance()
             self.total_assets = self.calculate_total_assets()
             self.ff_progress = self.calculate_ff_goal_progress()
             logger.info(
@@ -65,6 +67,7 @@ class DataSource:
         self._calculate_stock_dividends()
         self._setup_fixed_income()
         self._setup_cash()
+        self._fetch_index_performance()
         self.total_assets = self.calculate_total_assets()
         self.ff_progress = self.calculate_ff_goal_progress()
 
@@ -85,6 +88,7 @@ class DataSource:
             Dict: A comprehensive portfolio data dictionary containing:
                 - IB_DATA: Interactive Brokers portfolio positions, values, and categories
                 - IB_PERFORMANCE: IBKR Portfolio Analyst YTD TWR (from Client Portal POST /pa/performance)
+                - INDEX_PERFORMANCE: YTD performance for major market indices (S&P 500, NASDAQ, Euro Stoxx 50, Hang Seng)
                 - CRYPTO_DATA: Cryptocurrency holdings, market values, and token quantities
                 - FIXED_INCOME_DATA: Bonds, dividends, and income-generating assets
                 - CASH_DATA: Cash balances across different accounts and platforms
@@ -104,6 +108,7 @@ class DataSource:
             self.ib = InteractiveBrokers()
             self.crypto = CryptoEndpoint()
             self.crypto_savings = self.crypto.all_crypto_savings
+            self.index_performance_fetcher = IndexPerformanceFetcher()
             logger.info(f"Crypto savings {self.crypto_savings}")
         except Exception as e:
             logger.error(f"Error in _initialize_data_sources: {str(e)}")
@@ -152,6 +157,39 @@ class DataSource:
             self.ib_data["Net_cash"],
             self.crypto.free_cash,
         )
+
+    def _fetch_index_performance(self) -> None:
+        """Fetch index performance data for major market indices."""
+        try:
+            logger.info("Fetching index performance data...")
+            self.index_performance_data = (
+                self.index_performance_fetcher.get_all_indices_performance()
+            )
+
+            # Log successful fetches
+            successful_count = sum(
+                1
+                for data in self.index_performance_data.values()
+                if data.get("success", False)
+            )
+            total_count = len(self.index_performance_data)
+
+            logger.info(
+                f"Index performance fetched: {successful_count}/{total_count} indices successful"
+            )
+
+            # Log individual results
+            for index_key, data in self.index_performance_data.items():
+                if data.get("success") and data.get("rate_of_return_pct") is not None:
+                    logger.info(f"{data['name']}: {data['rate_of_return_pct']}% YTD")
+                else:
+                    logger.warning(
+                        f"{data['name']}: Failed to fetch - {data.get('error', 'Unknown error')}"
+                    )
+
+        except Exception as e:
+            logger.error(f"Error fetching index performance: {str(e)}")
+            self.index_performance_data = {}
 
     def _update_fixed_income_with_stocks(self) -> None:
         """Update fixed income data with stock-related calculations."""
@@ -230,6 +268,7 @@ class DataSource:
         data = {
             "IB_DATA": self.ib_data,
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
+            "INDEX_PERFORMANCE": getattr(self, "index_performance_data", {}),
             "CRYPTO_DATA": {
                 "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
                 "Crypto_Market_Values": self.crypto.crypto_market_values,

@@ -399,6 +399,27 @@ class PortfolioTableBuilder:
             final_table[r].append("")
         final_table[r][c] = val
 
+    def _add_index_performance_rows(
+        self, final_table: List[List[str]], index_perf: Dict[str, Any]
+    ) -> None:
+        """Add index performance comparison rows to the table."""
+        index_configs = [
+            ("SP500", "S&P 500 YTD"),
+            ("NASDAQ", "NASDAQ YTD"),
+            ("EURO_STOXX_50", "Euro Stoxx 50 YTD"),
+            ("HANG_SENG", "Hang Seng YTD"),
+        ]
+
+        for row_offset, (key, label) in enumerate(index_configs, start=2):
+            data = index_perf.get(key, {})
+            pct = data.get("rate_of_return_pct")
+
+            self._set_cell(final_table, row_offset, 6, label)
+            if pct is not None:
+                self._set_cell(final_table, row_offset, 7, f"{pct:.2f}%")
+            else:
+                self._set_cell(final_table, row_offset, 7, data.get("error") or "N/A")
+
     def build_central_columns(self, left_table: List[List[str]]) -> List[List[str]]:
         """Build complete table including right columns."""
         final_table = left_table[:]
@@ -421,16 +442,21 @@ class PortfolioTableBuilder:
                 ib_perf.get("error") or "N/A",
             )
 
+        # Index Performance Comparison
+        self._add_index_performance_rows(
+            final_table, self.data.get("INDEX_PERFORMANCE", {})
+        )
+
         # Net worth (TOTAL_ASSETS already includes OTHER_BETS)
         total_assets = self.data.get("TOTAL_ASSETS", 0)
-        self._set_cell(final_table, 2, 6, "Net worth")
+        self._set_cell(final_table, 6, 6, "Net worth")
         self._set_cell(
             final_table,
-            2,
+            6,
             7,
             DataFormatter.format_currency(total_assets),
         )
-        self._set_cell(final_table, 2, 8, "%")
+        self._set_cell(final_table, 6, 8, "%")
 
         # Allocations
         alloc_data = self.data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
