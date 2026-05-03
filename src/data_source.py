@@ -19,7 +19,7 @@ from data.assets_data import OTHER_BETS
 logger = logging.getLogger(__name__)
 
 FINANCIAL_FREEDOM_GOAL = 500000
-COMBINED_DATA_JSON_PATH = Path("data/combined_data.json")
+COMBINED_DATA_JSON_PATH = Path("data/final_data.json")
 
 #
 # cd Documents/Development/Portfolio/clientportal.gw  && arch -x86_64 /bin/zsh bin/run.sh root/conf.yaml
@@ -84,6 +84,7 @@ class DataSource:
         Returns:
             Dict: A comprehensive portfolio data dictionary containing:
                 - IB_DATA: Interactive Brokers portfolio positions, values, and categories
+                - IB_PERFORMANCE: IBKR Portfolio Analyst YTD TWR (from Client Portal POST /pa/performance)
                 - CRYPTO_DATA: Cryptocurrency holdings, market values, and token quantities
                 - FIXED_INCOME_DATA: Bonds, dividends, and income-generating assets
                 - CASH_DATA: Cash balances across different accounts and platforms
@@ -228,6 +229,7 @@ class DataSource:
 
         data = {
             "IB_DATA": self.ib_data,
+            "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
             "CRYPTO_DATA": {
                 "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
                 "Crypto_Market_Values": self.crypto.crypto_market_values,

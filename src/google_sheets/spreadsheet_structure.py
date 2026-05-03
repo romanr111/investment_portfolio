@@ -408,6 +408,19 @@ class PortfolioTableBuilder:
         self._set_cell(final_table, 0, 6, "FIRE Goal")
         self._set_cell(final_table, 0, 7, freedom)
 
+        ib_perf = self.data.get("IB_PERFORMANCE") or {}
+        pct = ib_perf.get("rate_of_return_pct")
+        self._set_cell(final_table, 1, 6, "IB YTD return (TWR)")
+        if pct is not None:
+            self._set_cell(final_table, 1, 7, f"{pct:.2f}%")
+        else:
+            self._set_cell(
+                final_table,
+                1,
+                7,
+                ib_perf.get("error") or "N/A",
+            )
+
         # Net worth (TOTAL_ASSETS already includes OTHER_BETS)
         total_assets = self.data.get("TOTAL_ASSETS", 0)
         self._set_cell(final_table, 2, 6, "Net worth")

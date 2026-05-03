@@ -5,8 +5,19 @@ import time
 
 from data.filters_constants import *
 
-from data.endpoints import POSITIONS_API, SUMMARY_API
-from src.helpers import calculate_total_mkt_value, convert, perform_request, sort_dict
+from data.endpoints import (
+    IB_ACCOUNT_ID,
+    PERFORMANCE_API,
+    POSITIONS_API,
+    SUMMARY_API,
+)
+from src.helpers import (
+    calculate_total_mkt_value,
+    convert,
+    perform_post_request,
+    perform_request,
+    sort_dict,
+)
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -16,11 +27,55 @@ logger = logging.getLogger(__name__)
 #
 
 
+def _parse_pa_ytd_performance(response):
+    """Extract cumulative YTD TWR % from POST /pa/performance JSON (see IBKR CP API)."""
+    out = {"rate_of_return_pct": None, "measure": None, "error": None}
+    if response is None:
+        out["error"] = "no_response"
+        return out
+    rc = response.get("rc")
+    if rc is not None and rc != 0:
+        out["error"] = f"rc={rc}"
+        return out
+
+    out["measure"] = response.get("pm")
+    cps = response.get("cps") or {}
+    series = cps.get("data") or []
+    entry = None
+    for item in series:
+        if item.get("id") == IB_ACCOUNT_ID:
+            entry = item
+            break
+    if entry is None and series:
+        entry = series[0]
+    if entry is None:
+        out["error"] = "no_cps_data"
+        return out
+
+    returns = entry.get("returns") or []
+    if not returns:
+        out["error"] = "no_returns"
+        return out
+
+    try:
+        last = float(returns[-1])
+        out["rate_of_return_pct"] = round(last * 100.0, 4)
+    except (TypeError, ValueError):
+        out["error"] = "bad_return_value"
+    return out
+
+
 class InteractiveBrokers:
     def __init__(self):
         self._portfolio_positions = None
         self._enhanced_stock_data = None
         self.data_loader = DataLoader()
+        self.performance_ytd = {
+            "period": "YTD",
+            "rate_of_return_pct": None,
+            "measure": None,
+            "error": "not_fetched",
+        }
 
         try:
             self.summary = self.data_loader.perform_request(SUMMARY_API)
@@ -35,6 +90,29 @@ class InteractiveBrokers:
                 raise SystemExit("Interactive Brokers login required")
             else:
                 self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
+                perf_raw = perform_post_request(
+                    PERFORMANCE_API,
+                    {"acctIds": [IB_ACCOUNT_ID], "period": "YTD"},
+                    verify=False,
+                )
+                parsed = _parse_pa_ytd_performance(perf_raw)
+                self.performance_ytd = {
+                    "period": "YTD",
+                    "rate_of_return_pct": parsed["rate_of_return_pct"],
+                    "measure": parsed["measure"],
+                    "error": parsed["error"],
+                }
+                if parsed["error"]:
+                    logger.warning(
+                        "IB Portfolio Analyst YTD performance unavailable: %s",
+                        parsed["error"],
+                    )
+                else:
+                    logger.info(
+                        "IB YTD return (%s): %s%%",
+                        parsed["measure"] or "?",
+                        parsed["rate_of_return_pct"],
+                    )
 
         except Exception as e:
             print(f"\n=== IB Connection Error ===")
