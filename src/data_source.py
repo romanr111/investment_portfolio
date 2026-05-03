@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Any
 import logging
 import json
 import time
@@ -265,6 +265,8 @@ class DataSource:
                 f"Data is {data_age_seconds/60:.1f} minutes old. Consider refreshing."
             )
 
+        asset_allocation = self._calculate_asset_allocation()
+
         data = {
             "IB_DATA": self.ib_data,
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
@@ -284,6 +286,7 @@ class DataSource:
             },
             "TOTAL_ASSETS": self.total_assets,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
+            "ASSET_ALLOCATION": asset_allocation,
             "DATA_METADATA": {
                 "timestamp": self._data_timestamp,
                 "age_seconds": data_age_seconds,
@@ -295,6 +298,75 @@ class DataSource:
         }
         self._save_combined_data_to_json(data)
         return data
+
+    def _calculate_asset_allocation(self) -> Dict[str, Any]:
+        """Calculate asset allocation data with values and percentages."""
+        calculator = AllocationCalculator(
+            {
+                "IB_DATA": self.ib_data,
+                "CRYPTO_DATA": {
+                    "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
+                },
+                "FIXED_INCOME_DATA": self.fi_data,
+                "CASH_DATA": {
+                    "Total": self.cash.total_cash,
+                },
+                "OTHER_ASSETS": {
+                    "Other Bets": int(OTHER_BETS),
+                },
+                "TOTAL_ASSETS": self.total_assets,
+            }
+        )
+        allocation_data = calculator.get_sorted_sector_allocations()
+
+        # Build asset allocation structure with values and percentages
+        asset_allocation = {"net_worth": self.total_assets, "allocations": {}}
+
+        # Calculate actual values for each category
+        def _to_float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _sum_dict_values(values):
+            if not isinstance(values, dict):
+                return 0.0
+            return sum(_to_float(v) for v in values.values())
+
+        actual_values = {
+            "Bonds": _sum_dict_values(self.ib_data.get("Bonds", {})),
+            "Stocks": _to_float(self.ib_data.get("Total Stocks Value", 0)),
+            "Commodities": _sum_dict_values(self.ib_data.get("Commodities", {})),
+            "Precious Metals": _sum_dict_values(
+                self.ib_data.get("Precious Metals", {})
+            ),
+            "Crypto Coins": _to_float(self.crypto.get_total_crypto_value()),
+            "Crypto Lending": _to_float(
+                self.fi_data.get("group_weighted_interest", {}).get(
+                    "Crypto Landing", (0,)
+                )[0]
+            ),
+            "P2P Lending": _to_float(
+                self.fi_data.get("group_weighted_interest", {}).get(
+                    "p2p_lending", (0,)
+                )[0]
+            ),
+            "REIT": _sum_dict_values(self.ib_data.get("REIT", {})),
+            "Cash": _to_float(self.cash.total_cash),
+            "Other Bets": _to_float(OTHER_BETS),
+        }
+
+        # Build allocations with both value and percentage
+        allocation_breakdown = allocation_data.get("allocation_breakdown", {})
+        for category, percentage in allocation_breakdown.items():
+            if category in actual_values and actual_values[category] > 0:
+                asset_allocation["allocations"][category] = {
+                    "value": actual_values[category],
+                    "percentage": percentage,
+                }
+
+        return asset_allocation
 
     def _save_combined_data_to_json(self, data: Dict) -> None:
         COMBINED_DATA_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)

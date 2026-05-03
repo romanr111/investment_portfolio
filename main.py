@@ -293,6 +293,7 @@ def main() -> int:
         from src.google_sheets.spreadsheet_structure import (
             update_portfolio_spreadsheet,
         )
+        from src.allocation_writer import write_allocation_from_data
         from src.logging.portfolio_logger import (
             log_portfolio_data,
             log_portfolio_metadata,
@@ -353,6 +354,14 @@ def main() -> int:
             logger.debug("Portfolio sheet update completed")
         else:
             logger.info("Skipping sheet update by flag")
+
+        # Generate allocation markdown table
+        logger.debug("Generating asset allocation markdown table")
+        allocation_success = write_allocation_from_data(data)
+        if allocation_success:
+            logger.info("Asset allocation table generated successfully")
+        else:
+            logger.warning("Failed to generate asset allocation table")
 
         if not args.skip_history_sync:
             _run_history_sync_only(args)
