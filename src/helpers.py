@@ -1,5 +1,7 @@
 import logging
 import requests
+import json
+from pathlib import Path
 
 
 def sort_dict(dict):
@@ -23,6 +25,32 @@ def convert(from_currency, to_currency, amount):
     return amount
 
 
+
+def get_ib_session():
+    """Get IB Client Portal Gateway session with authentication cookies."""
+    logger = logging.getLogger(__name__)
+    session = requests.Session()
+    session.verify = False
+    
+    # Load session data from JSON file if available
+    session_file = Path("data/ib_session.json")
+    if session_file.exists():
+        try:
+            with open(session_file, 'r') as f:
+                session_data = json.load(f)
+            
+            for name, value in session_data.items():
+                if value:  # Only set non-empty cookies
+                    session.cookies.set(name, value, domain='localhost')
+                    logger.info(f"Set session cookie: {name}")
+            
+            logger.info("IB session loaded from JSON")
+            
+        except Exception as e:
+            logger.warning(f"Failed to load session from {session_file}: {e}")
+    
+    return session
+
 def perform_request(api, param="", header={}, verify=True):
     """
     Perform an HTTP GET request with enhanced error handling and logging.
@@ -39,7 +67,11 @@ def perform_request(api, param="", header={}, verify=True):
     url = api + param
     logger = logging.getLogger(__name__)
 
-    try:
+    # Use session for IB API requests
+    if "localhost:5000" in url:
+        session = get_ib_session()
+        response = session.get(url, headers=header, verify=verify, timeout=10)
+    else:
         response = requests.get(url, headers=header, verify=verify, timeout=10)
         response.raise_for_status()
 
@@ -78,7 +110,13 @@ def perform_post_request(url, json_body, header=None, verify=True, timeout=30):
         header["Content-Type"] = "application/json"
     logger = logging.getLogger(__name__)
 
-    try:
+    # Use session for IB API requests
+    if "localhost:5000" in url:
+        session = get_ib_session()
+        response = session.post(
+            url, headers=header, json=json_body, verify=verify, timeout=timeout
+        )
+    else:
         response = requests.post(
             url, headers=header, json=json_body, verify=verify, timeout=timeout
         )

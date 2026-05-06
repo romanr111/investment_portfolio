@@ -9,7 +9,6 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class AllocationWriter:
             logger.error(f"Error reading allocation data: {str(e)}")
             return None
     
-    def write_allocation_table(self, output_path: str = "data/asset_allocation.md") -> bool:
+    def write_allocation_table(self, output_path: str = "portfolio_yic_reports/asset_allocation.md") -> bool:
         """
         Write allocation data to a markdown table.
         
@@ -85,53 +84,24 @@ class AllocationWriter:
             return False
     
     def _generate_markdown_table(self, allocation_data: Dict[str, Any]) -> str:
-        """
-        Generate markdown table content from allocation data.
-        
-        Args:
-            allocation_data: Asset allocation data dictionary
-            
-        Returns:
-            Markdown formatted table string
-        """
-        net_worth = allocation_data.get("net_worth", 0)
         allocations = allocation_data.get("allocations", {})
-        
-        # Header with timestamp
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         lines = [
-            f"# Asset Allocation",
-            f"",
-            f"Generated on: {timestamp}",
-            f"Net Worth: ${net_worth:,.0f}",
-            f"",
             f"| Category | Allocation |",
             f"|----------|------------|"
         ]
-        
-        # Sort allocations by percentage (descending)
+
         sorted_allocations = sorted(
-            allocations.items(), 
-            key=lambda x: x[1].get("percentage", 0), 
+            allocations.items(),
+            key=lambda x: x[1].get("percentage", 0),
             reverse=True
         )
-        
-        # Add allocation rows
+
         for category, data in sorted_allocations:
             percentage = data.get("percentage", 0)
-            # Format percentage to 1 decimal place
             percentage_str = f"{percentage:.1f}%"
             lines.append(f"| {category} | {percentage_str} |")
-        
-        # Add summary section
-        lines.extend([
-            f"",
-            f"## Summary",
-            f"",
-            f"Total categories: {len(allocations)}",
-            f"Net worth: ${net_worth:,.0f}",
-        ])
-        
+
         return "\n".join(lines)
     
     def get_allocation_summary(self) -> Optional[Dict[str, Any]]:
@@ -168,7 +138,7 @@ class AllocationWriter:
         }
 
 
-def write_allocation_from_data(data: Dict[str, Any], output_path: str = "data/asset_allocation.md") -> bool:
+def write_allocation_from_data(data: Dict[str, Any], output_path: str = "portfolio_yic_reports/asset_allocation.md") -> bool:
     """
     Convenience function to write allocation table from existing data dictionary.
     
