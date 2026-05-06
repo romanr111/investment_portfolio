@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Dict
 
 from src.cash_fixed_income import mono
-from data.assets_data import CASH, LENDED, DEBT, PRIVAT
+from data.assets_data import CASH, LENDED, MY_DEBT, PRIVAT
 
 
 @dataclass
@@ -20,7 +20,7 @@ class CashPortfolio:
     # Static values (with defaults)
     cash: Decimal = Decimal(str(CASH))
     lended: Decimal = Decimal(str(LENDED))
-    debt: Decimal = Decimal(str(DEBT))
+    debt: Decimal = Decimal(str(MY_DEBT))
     private: Decimal = Decimal(str(PRIVAT))
 
     def __post_init__(self):

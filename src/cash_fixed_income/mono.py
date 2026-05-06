@@ -13,7 +13,9 @@ class Mono:
             api=MONO_API,
             header=MONO_PERSONAL_TOKEN,
         )
-        self.accounts = self.account_info.get("accounts", [])
+        self.accounts = (
+            self.account_info.get("accounts", []) if self.account_info else []
+        )
 
     def get_balance_for_currency(self, currency_code):
         balance = 0

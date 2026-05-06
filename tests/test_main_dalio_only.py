@@ -106,6 +106,20 @@ class MainDalioOnlyModeTests(unittest.TestCase):
             run_history_sync.assert_not_called()
             run_dalio.assert_not_called()
 
+    def test_portfolio_sync_defaults_skip_history_and_dalio(self) -> None:
+        args = main._build_cli().parse_args([])
+
+        self.assertTrue(args.skip_history_sync)
+        self.assertTrue(args.skip_dalio_analysis)
+
+    def test_history_and_dalio_can_be_enabled_explicitly(self) -> None:
+        args = main._build_cli().parse_args(
+            ["--run-history-sync", "--run-dalio-analysis"]
+        )
+
+        self.assertFalse(args.skip_history_sync)
+        self.assertFalse(args.skip_dalio_analysis)
+
 
 if __name__ == "__main__":
     unittest.main()

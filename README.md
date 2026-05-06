@@ -133,23 +133,30 @@ python3.10 -m pip install -r requirements.txt
 - збереження `DataSource.get_combined_data()` у JSON snapshot:
   - `data/snapshots/combined_data_<date>_<timestamp>.json`
   - `data/snapshots/combined_data_latest.json`
-- синхронізація історії з датованих вкладок Google Sheets (формат назви вкладки: `31 Dec 2025`)
+- опційна синхронізація історії з датованих вкладок Google Sheets (формат назви вкладки: `31 Dec 2025`)
   у уніфіковані файли:
   - `data/portfolio_history.csv`
   - `data/portfolio_history.jsonl`
-- запуск Dalio Holy Grail аналізатора в кінці пайплайну, з результатом у CLI
+- опційний запуск Dalio Holy Grail аналізатора в кінці пайплайну, з результатом у CLI
   та збереженням таблиць у `analytics/output`
 
 Базовий запуск:
 
 ```bash
-python3.10 main.py
+python -m src.portfolio_sync
 ```
+
+`src.portfolio_sync` автоматично створює локальний `.venv`, встановлює `requirements.txt`, читає локальний `data/ib_flex_env.sh` якщо він існує, і перезапускає пайплайн через `.venv/bin/python`.
+
+Interactive Brokers дані беруться через IB Gateway / `ib_insync`, а YTD TWR береться з IBKR Flex Web Service. Перед запуском потрібні одноразово налаштовані `IB_GATEWAY_HOST`, `IB_GATEWAY_PORT`, `IB_FLEX_TOKEN`, `IB_FLEX_QUERY_ID_YTD_PERFORMANCE` та `IB_ACCOUNT_ID`; їх можна тримати в ignored файлі `data/ib_flex_env.sh`.
+
+За замовчуванням команда оновлює live portfolio + Google Sheets, але не запускає retrospective history sync і Dalio analysis.
 
 Корисні прапорці:
 
 ```bash
-python3.10 main.py \
+python -m src.portfolio_sync \
+  --run-history-sync \
   --history-start-date 2024-01-01 \
   --history-end-date 2026-12-31 \
   --history-frequency monthly \
@@ -157,23 +164,24 @@ python3.10 main.py \
   --history-strict-required-buckets
 ```
 
-Щоб пропустити фінальний Dalio прогін:
+Щоб запустити фінальний Dalio прогін:
 
 ```bash
-python3.10 main.py --skip-dalio-analysis
+python -m src.portfolio_sync --run-dalio-analysis
 ```
 
 Щоб запустити тільки Dalio Holy Grail analyzer (без `DataSource`, оновлення Google Sheets і sync історії):
 
 ```bash
-python3.10 main.py \
+python -m src.portfolio_sync \
   --dalio-only \
+  --run-dalio-analysis \
   --dalio-input-csv data/portfolio_history.csv \
   --dalio-output-dir analytics/output
 ```
 
 Якщо `--dalio-input-csv` не заданий, береться `--history-csv-path` (за замовчуванням `data/portfolio_history.csv`).
-Якщо цього файлу немає і не передано `--skip-history-sync`, у standalone режимі спочатку виконується лише history sync,
+Якщо цього файлу немає і передано `--run-history-sync`, у standalone режимі спочатку виконується лише history sync,
 після чого автоматично стартує Dalio аналіз.
 
 Примітка по `return_pct`:

@@ -72,7 +72,7 @@ class SpreadsheetFormatter:
         }
         self.worksheet.spreadsheet.batch_update({"requests": [format_request]})
         self.logger.info(
-            f"Applied bold and font size {font_size} formatting to range R{start_row+1}:C{start_col+1} to R{end_row}:C{end_col}"
+            f"Applied bold and font size {font_size} formatting to range R{start_row+1}C{start_col+1}:R{end_row}C{end_col}"
         )
 
     def set_column_width(self, column_index: int, width: int) -> None:
@@ -95,11 +95,13 @@ class SpreadsheetFormatter:
     def expand_columns_for_portfolio(
         self, col_d_width: int = 200, col_k_width: int = 180
     ) -> None:
-        """Expand both column D and column K for better fit (default widths: D=200, K=180)."""
+        """Expand columns A, B, D, and K for better fit (default widths: A=150, B=150, D=200, K=180)."""
+        self.set_column_width(0, 150)  # Column A
+        self.set_column_width(1, 150)  # Column B
         self.set_column_width(3, col_d_width)  # Column D
         self.set_column_width(10, col_k_width)  # Column K
         self.logger.info(
-            f"Expanded columns D and K to {col_d_width} and {col_k_width} pixels respectively."
+            f"Expanded columns A, B, D, and K to 150, 150, {col_d_width}, and {col_k_width} pixels respectively."
         )
 
     def apply_bold_to_cell(self, row: int, col: int) -> None:

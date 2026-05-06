@@ -404,41 +404,49 @@ class PortfolioTableBuilder:
     ) -> None:
         """Add index performance comparison rows to the table."""
         index_configs = [
-            ("SP500", "S&P 500 YTD"),
-            ("NASDAQ", "NASDAQ YTD"),
-            ("EURO_STOXX_50", "Euro Stoxx 50 YTD"),
-            ("HANG_SENG", "Hang Seng YTD"),
+            ("SP500", "S&P 500"),
+            ("NASDAQ", "NASDAQ"),
+            ("EURO_STOXX_50", "Euro Stoxx 50"),
+            ("HANG_SENG", "Hang Seng"),
         ]
 
-        for row_offset, (key, label) in enumerate(index_configs, start=2):
+        for row_offset, (key, label) in enumerate(index_configs, start=4):
             data = index_perf.get(key, {})
             pct = data.get("rate_of_return_pct")
 
-            self._set_cell(final_table, row_offset, 6, label)
+            self._set_cell(final_table, row_offset, 0, label)
             if pct is not None:
-                self._set_cell(final_table, row_offset, 7, f"{pct:.2f}%")
+                self._set_cell(final_table, row_offset, 1, f"{pct:.2f}%")
             else:
-                self._set_cell(final_table, row_offset, 7, data.get("error") or "N/A")
+                self._set_cell(final_table, row_offset, 1, data.get("error") or "N/A")
 
     def build_central_columns(self, left_table: List[List[str]]) -> List[List[str]]:
         """Build complete table including right columns."""
         final_table = left_table[:]
 
-        # Financial Freedom (G/H/I)
+        # Financial Freedom (A/B) - top left
         freedom = self.data.get("FIN_FREEDOM_GOAL_PROGRESS", "")
-        self._set_cell(final_table, 0, 6, "FIRE Goal")
-        self._set_cell(final_table, 0, 7, freedom)
+        self._set_cell(final_table, 0, 0, "FIRE Goal")
+        self._set_cell(final_table, 0, 1, freedom)
+
+        # Blank row
+        self._set_cell(final_table, 1, 0, "")
+        self._set_cell(final_table, 1, 1, "")
+
+        # Performance section (A/B)
+        self._set_cell(final_table, 2, 0, "Performance")
+        self._set_cell(final_table, 2, 1, "")
 
         ib_perf = self.data.get("IB_PERFORMANCE") or {}
         pct = ib_perf.get("rate_of_return_pct")
-        self._set_cell(final_table, 1, 6, "IB YTD return (TWR)")
+        self._set_cell(final_table, 3, 0, "IB")
         if pct is not None:
-            self._set_cell(final_table, 1, 7, f"{pct:.2f}%")
+            self._set_cell(final_table, 3, 1, f"{pct:.2f}%")
         else:
             self._set_cell(
                 final_table,
+                3,
                 1,
-                7,
                 ib_perf.get("error") or "N/A",
             )
 
@@ -449,14 +457,14 @@ class PortfolioTableBuilder:
 
         # Net worth (TOTAL_ASSETS already includes OTHER_BETS)
         total_assets = self.data.get("TOTAL_ASSETS", 0)
-        self._set_cell(final_table, 6, 6, "Net worth")
+        self._set_cell(final_table, 2, 6, "Net worth")
         self._set_cell(
             final_table,
-            6,
+            2,
             7,
             DataFormatter.format_currency(total_assets),
         )
-        self._set_cell(final_table, 6, 8, "%")
+        self._set_cell(final_table, 2, 8, "%")
 
         # Allocations
         alloc_data = self.data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
@@ -546,7 +554,7 @@ class PortfolioTableBuilder:
         gwi = fid.get("group_weighted_interest", {})
         fipi = fid.get("fixed_inc_principal_and_interest", {})
 
-        self._set_cell(final_table, 2, 10, "FIXED_INCOME_DATA")
+        self._set_cell(final_table, 2, 10, "Fixed Income % of NW")
         row_gwi = 3
 
         if fipi:
@@ -616,6 +624,10 @@ class PortfolioUpdater:
         portfolio_formatter.expand_columns_for_portfolio(
             col_d_width=200, col_k_width=180
         )
+        # Apply bold+large font to Performance title (row 2, cols 0-1)
+        portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 0, 1, font_size=14)
+        # Apply bold+large font to FIRE Goal (row 0, cols 0-1)
+        portfolio_formatter.apply_bold_and_large_font_to_range(0, 1, 0, 1, font_size=14)
         # Apply bold+large font to Net Worth cells G3:I3 (row 2, cols 6-9)
         portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 6, 9, font_size=14)
         # Apply bold to FIXED_INCOME_DATA cell K3 (row 2, col 10)
@@ -664,7 +676,7 @@ class PortfolioUpdater:
 
         Cells (1-based indices):
         - Net worth value at H3
-        - FIXED_INCOME_DATA header at K3; percentage should go to L3
+        - Fixed Income header at K3; percentage should go to L3
         - Fixed income total value string at L4 (formatted like '88345 @ 7.6%')
         """
         # 1-based indices for clarity

@@ -5,122 +5,71 @@ import time
 
 from data.filters_constants import *
 
-from data.endpoints import (
-    IB_ACCOUNT_ID,
-    PERFORMANCE_API,
-    POSITIONS_API,
-    SUMMARY_API,
+from src.brokers.ib_flex_performance import IBFlexPerformanceFetcher
+from src.brokers.ib_gateway_portfolio import (
+    IBGatewayPortfolioLoader,
+    IBGatewayUnavailable,
 )
 from src.helpers import (
     calculate_total_mkt_value,
     convert,
-    perform_post_request,
-    perform_request,
     sort_dict,
 )
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
-#
-# cd Documents/Development/Portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
-#
-
-
-def _parse_pa_ytd_performance(response):
-    """Extract cumulative YTD TWR % from POST /pa/performance JSON (see IBKR CP API)."""
-    out = {"rate_of_return_pct": None, "measure": None, "error": None}
-    if response is None:
-        out["error"] = "no_response"
-        return out
-    rc = response.get("rc")
-    if rc is not None and rc != 0:
-        out["error"] = f"rc={rc}"
-        return out
-
-    out["measure"] = response.get("pm")
-    cps = response.get("cps") or {}
-    series = cps.get("data") or []
-    entry = None
-    for item in series:
-        if item.get("id") == IB_ACCOUNT_ID:
-            entry = item
-            break
-    if entry is None and series:
-        entry = series[0]
-    if entry is None:
-        out["error"] = "no_cps_data"
-        return out
-
-    returns = entry.get("returns") or []
-    if not returns:
-        out["error"] = "no_returns"
-        return out
-
-    try:
-        last = float(returns[-1])
-        out["rate_of_return_pct"] = round(last * 100.0, 4)
-    except (TypeError, ValueError):
-        out["error"] = "bad_return_value"
-    return out
-
-
 class InteractiveBrokers:
-    def __init__(self):
+    def __init__(self, gateway_loader=None, performance_fetcher=None):
         self._portfolio_positions = None
         self._enhanced_stock_data = None
-        self.data_loader = DataLoader()
+        self.gateway_loader = gateway_loader or IBGatewayPortfolioLoader()
+        self.performance_fetcher = performance_fetcher or IBFlexPerformanceFetcher()
         self.performance_ytd = {
             "period": "YTD",
             "rate_of_return_pct": None,
-            "measure": None,
+            "measure": "TWR",
+            "source": "ib_flex_activity_statement",
             "error": "not_fetched",
         }
 
         try:
-            self.summary = self.data_loader.perform_request(SUMMARY_API)
-            self.all_portfolio_info = self.data_loader.perform_request(POSITIONS_API)
+            self.summary, self.all_portfolio_info = (
+                self.gateway_loader.fetch_portfolio_snapshot()
+            )
 
             if self.summary is None or self.all_portfolio_info is None:
-                print("\n=== IB Login Required ===")
-                print("Please login to Interactive Brokers Client Portal Gateway")
-                print("Run: cd clientportal.gw && bin/run.sh root/conf.yaml")
+                print("\n=== IB Gateway Data Error ===")
+                print("IB Gateway returned incomplete account data.")
+                print("Client Portal Gateway is no longer supported.")
                 print("Then restart this application.")
                 print("========================\n")
-                raise SystemExit("Interactive Brokers login required")
+                raise SystemExit("Interactive Brokers Gateway data unavailable")
             else:
                 self._cash_balance = round(self.summary["totalcashvalue"]["amount"])
-                perf_raw = perform_post_request(
-                    PERFORMANCE_API,
-                    {"acctIds": [IB_ACCOUNT_ID], "period": "YTD"},
-                    verify=False,
-                )
-                parsed = _parse_pa_ytd_performance(perf_raw)
-                self.performance_ytd = {
-                    "period": "YTD",
-                    "rate_of_return_pct": parsed["rate_of_return_pct"],
-                    "measure": parsed["measure"],
-                    "error": parsed["error"],
-                }
-                if parsed["error"]:
+                self.performance_ytd = self.performance_fetcher.fetch_ytd_twr()
+                if self.performance_ytd.get("error"):
                     logger.warning(
-                        "IB Portfolio Analyst YTD performance unavailable: %s",
-                        parsed["error"],
+                        "IB Flex YTD performance unavailable: %s",
+                        self.performance_ytd["error"],
                     )
                 else:
                     logger.info(
                         "IB YTD return (%s): %s%%",
-                        parsed["measure"] or "?",
-                        parsed["rate_of_return_pct"],
+                        self.performance_ytd.get("measure") or "?",
+                        self.performance_ytd.get("rate_of_return_pct"),
                     )
 
+        except IBGatewayUnavailable as e:
+            print("\n=== IB Gateway Connection Error ===")
+            print(str(e))
+            print("==========================\n")
+            raise SystemExit("Interactive Brokers Gateway connection failed")
         except Exception as e:
             print(f"\n=== IB Connection Error ===")
             print(f"Error connecting to Interactive Brokers: {str(e)}")
-            print(
-                "Please ensure IB Client Portal Gateway is running and you are logged in."
-            )
-            print("Run: cd clientportal.gw && bin/run.sh root/conf.yaml")
+            print("Please ensure IB Gateway API is running and enabled.")
+            print("Client Portal Gateway is no longer supported.")
             print("==========================\n")
             raise SystemExit("Interactive Brokers connection failed")
 
@@ -394,12 +343,6 @@ class InteractiveBrokers:
             stock["contractDesc"]: round(stock["position"])
             for stock in self.all_portfolio_info
         }
-
-
-class DataLoader:
-    @staticmethod
-    def perform_request(api_endpoint):
-        return perform_request(api_endpoint, verify=False)
 
 
 class REITLoader:
