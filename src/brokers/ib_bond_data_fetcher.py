@@ -2,6 +2,7 @@
 from datetime import datetime
 import math
 import logging
+import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -57,11 +58,7 @@ class IBConnectionPool:
         # Try to find an existing available connection
         for client_id, ib in cls._connections.items():
             if not ib.isConnected():
-                try:
-                    ib.connect(host, port, clientId=client_id, readonly=True)
-                    return client_id, ib
-                except Exception:
-                    continue
+                return client_id, ib
 
         # Create new connection if none available
         client_id = cls.get_next_client_id()
@@ -136,19 +133,14 @@ class MarketDataFetcher:
             yield self.ib
         finally:
             if self.ib and self.ib.isConnected():
+                self._cancel_market_data_subscriptions()
                 self.ib.disconnect()
 
     def _connect_with_retry(self) -> bool:
         """Establishes connection to IB with retry logic"""
         for attempt in range(MAX_RETRIES):
             try:
-                self.ib.connect(
-                    self.host,
-                    self.port,
-                    clientId=self.client_id,
-                    readonly=True,
-                    timeout=AUTH_TIMEOUT,
-                )
+                self._connect_for_market_data()
                 # Wait for connection to fully establish
                 self.ib.sleep(1)
 
@@ -182,6 +174,39 @@ class MarketDataFetcher:
                     f"Failed to connect after {MAX_RETRIES} attempts: {str(e)}"
                 )
         return False
+
+    def _connect_for_market_data(self) -> None:
+        if os.getenv("IB_GATEWAY_SYNC_CONNECT") == "1":
+            self.ib.connect(
+                self.host,
+                self.port,
+                clientId=self.client_id,
+                readonly=True,
+                timeout=AUTH_TIMEOUT,
+            )
+            return
+
+        self.ib.wrapper.clientId = self.client_id
+        self.ib.client.connect(
+            self.host,
+            self.port,
+            self.client_id,
+            timeout=AUTH_TIMEOUT,
+        )
+        account_id = os.getenv("IB_ACCOUNT_ID", "")
+        self.ib.client.reqAccountUpdates(True, account_id)
+        self.ib.client.reqPositions()
+
+    def _cancel_market_data_subscriptions(self) -> None:
+        try:
+            account_id = os.getenv("IB_ACCOUNT_ID", "")
+            self.ib.client.reqAccountUpdates(False, account_id)
+        except Exception:
+            self.logger.debug("Unable to cancel IB account updates", exc_info=True)
+        try:
+            self.ib.client.cancelPositions()
+        except Exception:
+            self.logger.debug("Unable to cancel IB positions request", exc_info=True)
 
     def get_contract_details(self, conid: int) -> Optional[Contract]:
         """Retrieves and qualifies a T-Bill contract using data dynamically fetched from IB."""
@@ -715,7 +740,9 @@ class IBBondsClient:
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("No active IB connection")
 
-        positions = self.ib.reqPositions()
+        positions = self.ib.positions()
+        if not positions and os.getenv("IB_GATEWAY_USE_REQ_POSITIONS_FALLBACK") == "1":
+            positions = self.ib.reqPositions()
 
         position_data = next(
             (pos for pos in positions if pos.contract.conId == conid), None

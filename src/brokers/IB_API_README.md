@@ -1,210 +1,93 @@
-# Interactive Brokers API Integration
+# Interactive Brokers Data Sources
 
-This document provides a detailed guide for integrating with Interactive Brokers (IB) API services for retrieving transaction data, positions, and account summaries.
+The portfolio runtime uses two Interactive Brokers data sources:
 
-## Table of Contents
+- IB Gateway / TWS API through `ib_insync` for live account state.
+- IBKR Flex Web Service for account-level YTD TWR / NAV performance.
 
-1. [Overview](#overview)
-2. [API Options](#api-options)
-3. [Authentication Methods](#authentication-methods)
-4. [Usage Examples](#usage-examples)
-5. [Troubleshooting](#troubleshooting)
-6. [FAQ](#faq)
+The local Client Portal Gateway is deprecated for this project. Runtime code should not call:
 
-## Overview
-
-Our system integrates with Interactive Brokers using several API options, providing a robust and fault-tolerant approach to retrieving financial data. The implementation follows a cascading approach, attempting multiple APIs in sequence based on availability and authentication status.
-
-### Key Files
-
-- `src/brokers/ib.py` - Basic account data retrieval (positions, summaries)
-- `src/brokers/ib_transactions.py` - Transaction history retrieval
-- `setup_ib_flex_credentials.py` - Utility for setting up Flex Query credentials
-
-## API Options
-
-### 1. Client Portal API
-
-- **Endpoint Base**: `https://localhost:5050/v1/api/`
-- **Authentication**: Browser-based login through Client Portal Gateway
-- **Key Endpoints**:
-  - Portfolio data: `/portfolio/{accountId}/positions`
-  - Account summary: `/portfolio/{accountId}/summary`
-  - Ledger data: `/portfolio/{accountId}/ledger`
-  - Allocation data: `/portfolio/{accountId}/allocation`
-
-The Client Portal API requires the IB Client Portal Gateway to be running locally. This interface is suitable for basic account data retrieval.
-
-### 2. Account Management Web API
-
-- **Endpoint Base**: `https://api.ibkr.com/gw/api/v1/`
-- **Authentication**: OAuth 2.0
-- **Key Endpoints**:
-  - Instructions/Transactions: `/instructions/query`
-
-The Account Management Web API provides comprehensive transaction history but requires proper OAuth 2.0 authentication setup. This is the recommended approach for production environments needing detailed transaction data.
-
-### 3. Flex Query API
-
-- **Endpoint Base**: 
-  - Request: `https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest`
-  - Retrieve: `https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.GetStatement`
-- **Authentication**: Flex Query ID and Token
-- **Data Format**: XML
-
-The Flex Query API provides the most comprehensive and detailed transaction data in XML format. It's ideal for historical data analysis and reconciliation processes.
-
-## Authentication Methods
-
-### Client Portal Gateway Authentication
-
-The Client Portal Gateway provides a lightweight authentication method:
-
-1. Start the Gateway: `cd path/to/clientportal.gw && bin/run.sh root/conf.yaml`
-2. Complete browser-based authentication when prompted
-3. The session will remain authenticated for API calls
-
-### OAuth 2.0 Authentication
-
-For the Account Management Web API, OAuth 2.0 authentication is required:
-
-1. Register your application with Interactive Brokers:
-   - Go to https://www.interactivebrokers.com/
-   - Navigate to Settings > API Settings > OAuth
-   - Register a new application and obtain client_id and client_secret
-
-2. Implement OAuth 2.0 flow:
-   - Authorization Code Flow for server-side applications
-   - Use the authorization URL: `https://api.ibkr.com/v1/oauth/authorize`
-   - Get tokens from: `https://api.ibkr.com/v1/oauth/token`
-   - Include necessary scopes for transaction data access
-
-3. Use the access token in your API requests:
-   ```python
-   headers = {
-       "Content-Type": "application/json",
-       "Authorization": f"Bearer {access_token}"
-   }
-   ```
-
-For more information, refer to the [IBKR Web API documentation](https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/).
-
-### Flex Query Authentication
-
-The Flex Query API uses a token-based authentication:
-
-1. Generate a Flex Query ID:
-   - Log into the IBKR Account Management
-   - Go to Reports > Flex Queries
-   - Create a new Flex Query with desired specifications
-
-2. Generate a Flex Web Service token:
-   - In Account Management, go to Reports > Settings > Flex Web Service
-   - Create a new token
-
-3. Use the `setup_ib_flex_credentials.py` utility to store these credentials
-
-## Usage Examples
-
-### Basic Position Data Retrieval
-
-```python
-from src.brokers.ib import IBDataSource
-
-# Initialize the data source
-ib_source = IBDataSource(account_id="YOUR_ACCOUNT_ID")
-
-# Get positions
-positions = ib_source.get_positions()
-print(f"Found {len(positions)} positions")
+```text
+/portfolio/{accountId}/positions/0
+/portfolio/{accountId}/summary
+/pa/performance
 ```
 
-### Transaction History Retrieval
+## Runtime Command
 
-```python
-from src.brokers.ib_transactions import IBTransactionDataSource
-import datetime
+Use the one-shot runner:
 
-# Initialize with standard Client Portal API access
-transaction_source = IBTransactionDataSource(account_id="YOUR_ACCOUNT_ID")
-
-# Initialize with Flex Query credentials
-flex_transaction_source = IBTransactionDataSource(
-    account_id="YOUR_ACCOUNT_ID",
-    flex_query_id="YOUR_FLEX_QUERY_ID",
-    token="YOUR_FLEX_TOKEN"
-)
-
-# Initialize with OAuth for Account Management Web API
-oauth_transaction_source = IBTransactionDataSource.from_oauth_credentials(
-    client_id="YOUR_CLIENT_ID",
-    client_secret="YOUR_CLIENT_SECRET",
-    account_id="YOUR_ACCOUNT_ID"
-)
-
-# Define date range
-start_date = datetime.date(2023, 1, 1)
-end_date = datetime.date(2023, 3, 31)
-
-# Get transactions
-transactions = transaction_source.get_transactions(start_date, end_date)
-print(f"Found {len(transactions)} transactions")
+```bash
+python -m src.portfolio_sync
 ```
 
-## Troubleshooting
+The runner automatically creates/uses the local `.venv`, installs `requirements.txt` when needed, loads `data/ib_flex_env.sh` when present, and re-executes the portfolio pipeline inside the venv.
 
-### Common Issues
+This delegates to the existing portfolio pipeline after the IB adapters fetch:
 
-1. **Authentication Errors**:
-   - For Client Portal API: Ensure the Gateway is running and you've completed browser authentication
-   - For OAuth: Check token validity and refresh if expired
-   - For Flex Query: Verify token and query ID are correct
+1. Account summary from IB Gateway.
+2. Positions from IB Gateway.
+3. YTD TWR from the IBKR Flex Web Service.
 
-2. **"404 Not Found" Errors**:
-   - Some endpoints may not be available for your account type
-   - Our implementation gracefully handles this by trying alternative endpoints
+By default this command updates the live portfolio and Google Sheets, while skipping retrospective history sync and Dalio analysis. Use `--run-history-sync` and `--run-dalio-analysis` to enable those slower secondary steps.
 
-3. **No Transactions Found**:
-   - Check date range is correct
-   - Verify that account has transactions in the specified period
-   - Try using Flex Query API for historical transactions
+## IB Gateway Setup
 
-### Gateway Issues
+IB Gateway or TWS must already be running and API access must be enabled.
 
-If the Client Portal Gateway isn't connecting:
+Default connection:
 
-1. Check if it's running: `ps aux | grep clientportal`
-2. Restart the Gateway if needed
-3. Check logs in the Gateway directory
-4. Ensure proper network connectivity to localhost:5050
+```text
+IB_GATEWAY_HOST=127.0.0.1
+IB_GATEWAY_PORT=4001
+IB_GATEWAY_CLIENT_ID=1101
+```
 
-## FAQ
+If the Gateway socket is unavailable, the app fails with a clear message that IB Gateway is required and Client Portal Gateway is no longer supported.
 
-### Which API should I use?
+## Flex Web Service Setup
 
-- **For basic account data**: Client Portal API is simplest
-- **For comprehensive transaction history**: Use Flex Query API or Account Management Web API
-- **For production environments**: Implement OAuth 2.0 with Account Management Web API
+Create an Activity Flex Query configured for Year to Date XML output with the Change in NAV section and TWR field enabled.
 
-### How secure are my credentials?
+Required environment:
 
-- OAuth tokens should be stored securely and refreshed regularly
-- Flex Query tokens have limited access to specific reports only
-- Consider using environment variables or a secure credential store
+```text
+IB_FLEX_TOKEN
+IB_FLEX_QUERY_ID_YTD_PERFORMANCE
+IB_ACCOUNT_ID
+```
 
-### Can I get real-time data?
+The Flex fetcher performs the normal two-step flow:
 
-- These APIs primarily provide snapshot/historical data
-- For real-time data, consider IB's WebSocket API or Trader Workstation API
+1. `SendRequest` to start report generation.
+2. Poll `GetStatement` until the XML statement is ready.
+3. Parse Change in NAV / TWR into the existing normalized shape.
 
-### Do I need to maintain multiple authentication methods?
+Expected result:
 
-- We recommend implementing at least two methods for redundancy
-- Our implementation automatically tries multiple endpoints if one fails
+```python
+{
+    "period": "YTD",
+    "rate_of_return_pct": 12.34,
+    "measure": "TWR",
+    "source": "ib_flex_activity_statement",
+    "error": None,
+}
+```
 
----
+If Flex credentials are missing or the report is unavailable, the portfolio run continues with `rate_of_return_pct=None` and an explicit error in `IB_PERFORMANCE`.
 
-For additional information, please refer to:
-- [Interactive Brokers API Documentation](https://www.interactivebrokers.com/en/index.php?f=5039)
-- [Client Portal API Guide](https://www.interactivebrokers.com/campus/ibkr-api-page/client-portal-api/)
-- [Account Management Web API](https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/) 
+## Key Files
+
+- `src/brokers/ib.py` - public IB portfolio orchestrator.
+- `src/brokers/ib_gateway_portfolio.py` - positions and account summary via IB Gateway.
+- `src/brokers/ib_flex_performance.py` - YTD TWR via Flex Web Service.
+- `src/brokers/ib_models.py` - normalized internal result shapes.
+- `src/portfolio_sync.py` - one-shot module entry point.
+
+## Notes
+
+- `ib.portfolio()` is the preferred position source because it includes market value, average cost, market price, and P&L.
+- `reqPositions()` / `positions()` are fallback sources only because they may not include market value or P&L.
+- Bond contracts are normalized as `IBCID{conId}` so the existing categorizer remains compatible.
+- The bond data fetcher can keep its current Gateway connection behavior; future cleanup can share a common Gateway connection pool.

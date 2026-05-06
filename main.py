@@ -9,10 +9,6 @@ import pandas as pd
 
 from analytics.dalio_holy_grail import DalioHolyGrailAnalyzer
 
-#
-# cd Documents/Development/investment_portfolio/clientportal.gw  && bin/run.sh root/conf.yaml
-#
-
 CREDENTIALS_PATH = "data/credentials.json"
 SPREADSHEET_NAME = "portfolio_automated"
 SNAPSHOT_DIR = "data/snapshots"
@@ -104,8 +100,16 @@ def _build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--skip-history-sync",
+        dest="skip_history_sync",
         action="store_true",
+        default=True,
         help="Skip downloading retrospective unified history from Google Sheets.",
+    )
+    parser.add_argument(
+        "--run-history-sync",
+        dest="skip_history_sync",
+        action="store_false",
+        help="Download retrospective unified history from Google Sheets.",
     )
     parser.add_argument(
         "--force-refresh",
@@ -119,8 +123,16 @@ def _build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--skip-dalio-analysis",
+        dest="skip_dalio_analysis",
         action="store_true",
+        default=True,
         help="Skip Dalio Holy Grail analysis at the end of the run.",
+    )
+    parser.add_argument(
+        "--run-dalio-analysis",
+        dest="skip_dalio_analysis",
+        action="store_false",
+        help="Run Dalio Holy Grail analysis at the end of the run.",
     )
     parser.add_argument(
         "--dalio-only",
@@ -277,7 +289,7 @@ def main() -> int:
                         raise FileNotFoundError(
                             "Dalio standalone mode requires input CSV. "
                             f"Missing file: {history_csv}. "
-                            "Provide --dalio-input-csv or run without --skip-history-sync."
+                            "Provide --dalio-input-csv or pass --run-history-sync."
                         )
                     logger.info(
                         "Dalio input CSV not found at %s. Running history sync first.",

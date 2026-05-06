@@ -22,10 +22,6 @@ logger = logging.getLogger(__name__)
 FINANCIAL_FREEDOM_GOAL = 500000
 COMBINED_DATA_JSON_PATH = Path("data/final_data.json")
 
-#
-# cd Documents/Development/Portfolio/clientportal.gw  && arch -x86_64 /bin/zsh bin/run.sh root/conf.yaml
-#
-
 
 class DataSource:
     def __init__(self):
@@ -87,7 +83,7 @@ class DataSource:
         Returns:
             Dict: A comprehensive portfolio data dictionary containing:
                 - IB_DATA: Interactive Brokers portfolio positions, values, and categories
-                - IB_PERFORMANCE: IBKR Portfolio Analyst YTD TWR (from Client Portal POST /pa/performance)
+                - IB_PERFORMANCE: IBKR YTD TWR from Flex Web Service Activity Statement
                 - INDEX_PERFORMANCE: YTD performance for major market indices (S&P 500, NASDAQ, Euro Stoxx 50, Hang Seng)
                 - CRYPTO_DATA: Cryptocurrency holdings, market values, and token quantities
                 - FIXED_INCOME_DATA: Bonds, dividends, and income-generating assets

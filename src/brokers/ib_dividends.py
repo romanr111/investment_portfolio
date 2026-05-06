@@ -1,5 +1,6 @@
 import json
 import logging
+import signal
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import lru_cache
@@ -176,10 +177,14 @@ class BondProcessor(AssetProcessor):
     """Processes bond-specific assets."""
 
     TAX_DISCOUNT = 0.85  # 15% USA tax
+    FETCH_TIMEOUT_SECONDS = 30
 
     def __init__(self, bond_data_client: IBBondsClient):
         self.bond_client = bond_data_client
         self.bond_data: Dict[str, Tuple[Any, float]] = {}
+
+    def _handle_fetch_timeout(self, _signum, _frame):
+        raise TimeoutError("IB bond data fetch timed out")
 
     def calculate_tax_multiplier(self, symbol: str) -> float:
         """Calculate tax multiplier based on asset type and location.
@@ -206,11 +211,24 @@ class BondProcessor(AssetProcessor):
 
     def fetch_bond_data(self, bond_ids: List[str]) -> None:
         """Fetches data for a list of bond IDs."""
+        if not bond_ids:
+            self.bond_data = {}
+            return
+
+        previous_handler = signal.getsignal(signal.SIGALRM)
         try:
+            signal.signal(signal.SIGALRM, self._handle_fetch_timeout)
+            signal.alarm(self.FETCH_TIMEOUT_SECONDS)
             self.bond_data = self.bond_client.get_bond_main_info(bond_ids)
+        except TimeoutError as e:
+            logger.error(f"Error fetching bond data: {e}")
+            self.bond_data = {}
         except Exception as e:
             logger.error(f"Error fetching bond data: {e}")
             self.bond_data = {}
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous_handler)
 
     def can_process(self, symbol: str) -> bool:
         """Determines if symbol is a bond (starts with 'IBCID')."""
