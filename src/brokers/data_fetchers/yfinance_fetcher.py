@@ -85,18 +85,6 @@ class YFinanceFetcher:
             if not dividend_yield and dividend_rate and current_price > 0:
                 dividend_yield = float(dividend_rate) / current_price
 
-            # If we still don't have yield, try the forward dividend endpoint
-            if not dividend_yield:
-                try:
-                    symbol = ticker.ticker
-                    logger.debug(f"Trying forward dividend API for {symbol}")
-                    dividend_yield, dividend_rate = forward_dividend(symbol)
-                    logger.debug(
-                        f"Got forward data for {symbol}: yield={dividend_yield}, rate={dividend_rate}"
-                    )
-                except Exception as e:
-                    logger.debug(f"Error getting forward dividend for {symbol}: {e}")
-
             # Get historical dividend data
             latest_dividend = 0.0
             latest_dividend_date = None

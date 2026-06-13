@@ -4,3 +4,4 @@ analytics/output/
 /data/**
 !/data/
 !/data/README.md
+.codegraph/
