@@ -4,10 +4,14 @@ import logging
 import sys
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
-from analytics.dalio_holy_grail import DalioHolyGrailAnalyzer
+from analytics.dalio_holy_grail import (
+    DalioHolyGrailAnalyzer,
+    format_holy_grail_cli_lines,
+)
 
 CREDENTIALS_PATH = "data/credentials.json"
 SPREADSHEET_NAME = "portfolio_automated"
@@ -23,6 +27,30 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _load_factor_returns(path: Optional[str]) -> Optional[pd.DataFrame]:
+    if not path:
+        return None
+    factor_path = Path(path)
+    if not factor_path.exists():
+        raise FileNotFoundError(f"Layer B factor CSV not found: {factor_path}")
+    return pd.read_csv(factor_path)
+
+
+def _parse_layer_a_windows(raw_windows: str) -> tuple[int, ...]:
+    windows = []
+    for token in raw_windows.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        windows.append(int(token))
+    if not windows:
+        raise ValueError("Layer A windows must contain at least one integer.")
+    positive_unique = sorted({window for window in windows if window > 0})
+    if not positive_unique:
+        raise ValueError("Layer A windows must be positive integers.")
+    return tuple(positive_unique)
 
 
 def _build_cli() -> argparse.ArgumentParser:
@@ -184,9 +212,21 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Input unit for return_pct in Dalio analyzer input CSV.",
     )
     parser.add_argument(
+        "--dalio-return-type",
+        choices=["simple", "log"],
+        default="simple",
+        help="Return transformation used by Dalio analyzer.",
+    )
+    parser.add_argument(
+        "--dalio-analysis-frequency",
+        choices=["auto", "daily", "monthly"],
+        default="auto",
+        help="Analysis frequency mode for Dalio analyzer.",
+    )
+    parser.add_argument(
         "--dalio-covariance-method",
-        choices=["sample", "ewma"],
-        default="sample",
+        choices=["ledoit-wolf", "sample", "ewma"],
+        default="ledoit-wolf",
         help="Covariance method used in Dalio analyzer.",
     )
     parser.add_argument(
@@ -207,6 +247,117 @@ def _build_cli() -> argparse.ArgumentParser:
         default=12,
         help="Minimum observations required for covariance estimation.",
     )
+    parser.add_argument(
+        "--dalio-min-asset-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Minimum per-asset coverage required for covariance inclusion.",
+    )
+    parser.add_argument(
+        "--dalio-covariance-window",
+        type=int,
+        default=None,
+        help=(
+            "Optional trailing observation window for covariance estimation. "
+            "Defaults to 252 for daily and full history for monthly."
+        ),
+    )
+    parser.add_argument(
+        "--dalio-factor-input-csv",
+        default=None,
+        help=(
+            "Optional wide CSV with Layer B factor returns. "
+            "Required columns: date,growth,inflation,real_rates,credit_liquidity."
+        ),
+    )
+    parser.add_argument(
+        "--dalio-layer-b-window-months",
+        type=int,
+        default=36,
+        help="Rolling window size (months) for Layer B factor modeling.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-min-observations",
+        type=int,
+        default=24,
+        help="Minimum aligned observations needed for Layer B OLS.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-require-data",
+        action="store_true",
+        help="Require factor input CSV and fail if Layer B cannot run.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-collinearity-cond-threshold",
+        type=float,
+        default=30.0,
+        help="Condition number threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-vif-threshold",
+        type=float,
+        default=10.0,
+        help="VIF threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-max-factor-trc-share",
+        type=float,
+        default=0.35,
+        help="Alert threshold for max factor TRC share (fraction).",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-factor-hhi-threshold",
+        type=float,
+        default=0.35,
+        help="Alert threshold for factor HHI concentration.",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-residual-share-threshold",
+        type=float,
+        default=0.40,
+        help="Alert threshold for residual risk share (fraction).",
+    )
+    parser.add_argument(
+        "--dalio-layer-b-min-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Alert threshold for minimum factor coverage percentage.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-windows",
+        default="12,24,36",
+        help="Comma-separated rolling windows (months) for Layer A metrics.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-high-corr-threshold",
+        type=float,
+        default=0.70,
+        help="Pair-level absolute correlation threshold used in Layer A metrics.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-cluster-corr-cutoff",
+        type=float,
+        default=0.70,
+        help="Correlation cutoff for NumPy HAC clustering in Layer A.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-trc-max-share",
+        type=float,
+        default=0.35,
+        help="Maximum allowed absolute TRC share (fraction) before Layer A alert.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-min-n-rc",
+        type=float,
+        default=4.0,
+        help="Minimum effective number of risk contributors before Layer A alert.",
+    )
+    parser.add_argument(
+        "--dalio-layer-a-primary-window",
+        type=int,
+        default=36,
+        help="Primary Layer A rolling window used for summary alerts.",
+    )
     return parser
 
 
@@ -223,11 +374,31 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
     analyzer = DalioHolyGrailAnalyzer(
         dataset,
         base_currency=args.dalio_base_currency,
+        factor_returns=_load_factor_returns(args.dalio_factor_input_csv),
         return_unit=args.dalio_return_unit,
+        return_type=args.dalio_return_type,
+        analysis_frequency=args.dalio_analysis_frequency,
         covariance_method=args.dalio_covariance_method,
         ewma_alpha=args.dalio_ewma_alpha,
         min_pair_overlap=args.dalio_min_pair_overlap,
         min_covariance_observations=args.dalio_min_covariance_observations,
+        min_asset_coverage_pct=args.dalio_min_asset_coverage_pct,
+        covariance_window=args.dalio_covariance_window,
+        layer_b_window_months=args.dalio_layer_b_window_months,
+        layer_b_min_observations=args.dalio_layer_b_min_observations,
+        layer_b_require_data=args.dalio_layer_b_require_data,
+        layer_b_collinearity_cond_threshold=args.dalio_layer_b_collinearity_cond_threshold,
+        layer_b_vif_threshold=args.dalio_layer_b_vif_threshold,
+        layer_b_max_factor_trc_share=args.dalio_layer_b_max_factor_trc_share,
+        layer_b_factor_hhi_threshold=args.dalio_layer_b_factor_hhi_threshold,
+        layer_b_residual_share_threshold=args.dalio_layer_b_residual_share_threshold,
+        layer_b_min_coverage_pct=args.dalio_layer_b_min_coverage_pct,
+        layer_a_windows=_parse_layer_a_windows(args.dalio_layer_a_windows),
+        layer_a_high_corr_threshold=args.dalio_layer_a_high_corr_threshold,
+        layer_a_cluster_corr_cutoff=args.dalio_layer_a_cluster_corr_cutoff,
+        layer_a_trc_max_share_threshold=args.dalio_layer_a_trc_max_share,
+        layer_a_min_n_rc=args.dalio_layer_a_min_n_rc,
+        layer_a_primary_window=args.dalio_layer_a_primary_window,
     )
     result = analyzer.run_analysis(
         corr_threshold=args.dalio_corr_threshold,
@@ -239,6 +410,8 @@ def _run_dalio_analysis(args: argparse.Namespace) -> None:
     print("Dalio analysis complete.")
     print("Diversification metrics:", result.diversification_metrics)
     print("Management rules:", result.management_rules)
+    for line in format_holy_grail_cli_lines(result.holy_grail_verdict, max_red_flags=3):
+        print(line)
     logger.info(
         "Dalio analysis complete. input=%s output_dir=%s",
         input_path,

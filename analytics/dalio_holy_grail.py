@@ -9,6 +9,20 @@ from typing import Dict, Mapping, Optional
 import numpy as np
 import pandas as pd
 
+LAYER_B_FACTOR_COLUMNS: tuple[str, ...] = (
+    "growth",
+    "inflation",
+    "real_rates",
+    "credit_liquidity",
+)
+
+HOLY_GRAIL_COMPONENT_WEIGHTS: Dict[str, float] = {
+    "independence": 35.0,
+    "balance": 35.0,
+    "robustness": 20.0,
+    "macro": 10.0,
+}
+
 
 DEFAULT_FACTOR_MAP: Dict[str, str] = {
     "Stocks": "Growth/Risk-On",
@@ -76,6 +90,15 @@ class DalioAnalysisResult:
     weights_by_date: pd.DataFrame
     correlation_matrix: pd.DataFrame
     rolling_correlation: pd.DataFrame
+    factor_returns_aligned: pd.DataFrame
+    factor_betas_by_bucket_rolling: pd.DataFrame
+    factor_model_quality_rolling: pd.DataFrame
+    factor_risk_contribution_rolling: pd.DataFrame
+    factor_residual_risk_rolling: pd.DataFrame
+    layer_a_metrics_rolling: pd.DataFrame
+    layer_a_trc_rolling: pd.DataFrame
+    layer_a_cluster_membership_rolling: pd.DataFrame
+    asset_coverage: pd.DataFrame
     covariance_matrix: pd.DataFrame
     risk_contribution_by_bucket: pd.DataFrame
     factor_exposure: pd.DataFrame
@@ -85,8 +108,12 @@ class DalioAnalysisResult:
     pairwise_confidence: pd.DataFrame
     tail_risk_metrics: pd.DataFrame
     weight_drift: pd.DataFrame
+    holy_grail_scorecard: pd.DataFrame
+    holy_grail_robustness: pd.DataFrame
+    holy_grail_red_flags: pd.DataFrame
     diversification_metrics: Dict[str, float]
     management_rules: Dict[str, object]
+    holy_grail_verdict: Dict[str, object]
 
     def to_tables(self) -> Dict[str, pd.DataFrame]:
         return {
@@ -94,6 +121,15 @@ class DalioAnalysisResult:
             "weights_by_date": self.weights_by_date,
             "correlation_matrix": self.correlation_matrix,
             "rolling_correlation": self.rolling_correlation,
+            "factor_returns_aligned": self.factor_returns_aligned,
+            "factor_betas_by_bucket_rolling": self.factor_betas_by_bucket_rolling,
+            "factor_model_quality_rolling": self.factor_model_quality_rolling,
+            "factor_risk_contribution_rolling": self.factor_risk_contribution_rolling,
+            "factor_residual_risk_rolling": self.factor_residual_risk_rolling,
+            "layer_a_metrics_rolling": self.layer_a_metrics_rolling,
+            "layer_a_trc_rolling": self.layer_a_trc_rolling,
+            "layer_a_cluster_membership_rolling": self.layer_a_cluster_membership_rolling,
+            "asset_coverage": self.asset_coverage,
             "covariance_matrix": self.covariance_matrix,
             "risk_contribution_by_bucket": self.risk_contribution_by_bucket,
             "factor_exposure": self.factor_exposure,
@@ -103,6 +139,9 @@ class DalioAnalysisResult:
             "pairwise_confidence": self.pairwise_confidence,
             "tail_risk_metrics": self.tail_risk_metrics,
             "weight_drift": self.weight_drift,
+            "holy_grail_scorecard": self.holy_grail_scorecard,
+            "holy_grail_robustness": self.holy_grail_robustness,
+            "holy_grail_red_flags": self.holy_grail_red_flags,
         }
 
 
@@ -115,6 +154,7 @@ class DalioHolyGrailAnalyzer:
         base_currency: str = "USD",
         fx_rates: Optional[Mapping[str, float]] = None,
         fx_history: Optional[pd.DataFrame] = None,
+        factor_returns: Optional[pd.DataFrame] = None,
         factor_map: Optional[Mapping[str, str]] = None,
         scenario_shocks: Optional[Mapping[str, Mapping[str, float]]] = None,
         min_history_months: int = 36,
@@ -125,9 +165,28 @@ class DalioHolyGrailAnalyzer:
         allow_shorts: bool = False,
         max_gross_leverage: float = 1.05,
         min_net_to_gross: float = 0.60,
-        covariance_method: str = "sample",
+        covariance_method: str = "ledoit-wolf",
         ewma_alpha: float = 0.06,
         min_pair_overlap: int = 24,
+        layer_b_window_months: int = 36,
+        layer_b_min_observations: int = 24,
+        layer_b_require_data: bool = False,
+        layer_b_collinearity_cond_threshold: float = 30.0,
+        layer_b_vif_threshold: float = 10.0,
+        layer_b_max_factor_trc_share: float = 0.35,
+        layer_b_factor_hhi_threshold: float = 0.35,
+        layer_b_residual_share_threshold: float = 0.40,
+        layer_b_min_coverage_pct: float = 80.0,
+        layer_a_windows: tuple[int, ...] = (12, 24, 36),
+        layer_a_high_corr_threshold: float = 0.70,
+        layer_a_cluster_corr_cutoff: float = 0.70,
+        layer_a_trc_max_share_threshold: float = 0.35,
+        layer_a_min_n_rc: float = 4.0,
+        layer_a_primary_window: int = 36,
+        analysis_frequency: str = "auto",
+        return_type: str = "simple",
+        min_asset_coverage_pct: float = 80.0,
+        covariance_window: Optional[int] = None,
     ):
         self.history = history.copy()
         self.base_currency = base_currency.upper()
@@ -135,6 +194,9 @@ class DalioHolyGrailAnalyzer:
         if fx_rates:
             self.fx_rates.update({k.upper(): float(v) for k, v in fx_rates.items()})
         self.fx_history = fx_history.copy() if fx_history is not None else None
+        self.factor_returns = (
+            factor_returns.copy() if factor_returns is not None else None
+        )
         self.factor_map = dict(DEFAULT_FACTOR_MAP)
         if factor_map:
             self.factor_map.update(factor_map)
@@ -150,9 +212,76 @@ class DalioHolyGrailAnalyzer:
         self.allow_shorts = allow_shorts
         self.max_gross_leverage = max_gross_leverage
         self.min_net_to_gross = min_net_to_gross
-        self.covariance_method = covariance_method
+        self.covariance_method = covariance_method.lower()
         self.ewma_alpha = ewma_alpha
         self.min_pair_overlap = min_pair_overlap
+        self.analysis_frequency = analysis_frequency.lower()
+        self.return_type = return_type.lower()
+        self.min_asset_coverage_pct = float(min_asset_coverage_pct)
+        self.covariance_window = (
+            int(covariance_window) if covariance_window is not None else None
+        )
+        self.layer_b_window_months = int(layer_b_window_months)
+        self.layer_b_min_observations = int(layer_b_min_observations)
+        self.layer_b_require_data = bool(layer_b_require_data)
+        self.layer_b_collinearity_cond_threshold = float(
+            layer_b_collinearity_cond_threshold
+        )
+        self.layer_b_vif_threshold = float(layer_b_vif_threshold)
+        self.layer_b_max_factor_trc_share = float(layer_b_max_factor_trc_share)
+        self.layer_b_factor_hhi_threshold = float(layer_b_factor_hhi_threshold)
+        self.layer_b_residual_share_threshold = float(layer_b_residual_share_threshold)
+        self.layer_b_min_coverage_pct = float(layer_b_min_coverage_pct)
+        if self.layer_b_window_months <= 0:
+            raise ValueError("layer_b_window_months must be > 0.")
+        if self.layer_b_min_observations <= 1:
+            raise ValueError("layer_b_min_observations must be > 1.")
+        if self.layer_b_collinearity_cond_threshold <= 0:
+            raise ValueError("layer_b_collinearity_cond_threshold must be > 0.")
+        if self.layer_b_vif_threshold <= 0:
+            raise ValueError("layer_b_vif_threshold must be > 0.")
+        if not 0.0 <= self.layer_b_max_factor_trc_share <= 1.0:
+            raise ValueError("layer_b_max_factor_trc_share must be in [0, 1].")
+        if not 0.0 <= self.layer_b_factor_hhi_threshold <= 1.0:
+            raise ValueError("layer_b_factor_hhi_threshold must be in [0, 1].")
+        if not 0.0 <= self.layer_b_residual_share_threshold <= 1.0:
+            raise ValueError("layer_b_residual_share_threshold must be in [0, 1].")
+        if not 0.0 <= self.layer_b_min_coverage_pct <= 100.0:
+            raise ValueError("layer_b_min_coverage_pct must be in [0, 100].")
+        self.layer_a_windows = self._normalize_layer_a_windows(layer_a_windows)
+        self.layer_a_high_corr_threshold = float(layer_a_high_corr_threshold)
+        self.layer_a_cluster_corr_cutoff = float(layer_a_cluster_corr_cutoff)
+        self.layer_a_trc_max_share_threshold = float(layer_a_trc_max_share_threshold)
+        self.layer_a_min_n_rc = float(layer_a_min_n_rc)
+        self.layer_a_primary_window = int(layer_a_primary_window)
+        if self.layer_a_primary_window not in self.layer_a_windows:
+            raise ValueError(
+                "layer_a_primary_window must be one of layer_a_windows: {}".format(
+                    ", ".join(str(value) for value in self.layer_a_windows)
+                )
+            )
+        if not 0.0 < self.layer_a_high_corr_threshold <= 1.0:
+            raise ValueError("layer_a_high_corr_threshold must be in (0, 1].")
+        if not 0.0 < self.layer_a_cluster_corr_cutoff <= 1.0:
+            raise ValueError("layer_a_cluster_corr_cutoff must be in (0, 1].")
+        if not 0.0 <= self.layer_a_trc_max_share_threshold <= 1.0:
+            raise ValueError("layer_a_trc_max_share_threshold must be in [0, 1].")
+        if self.layer_a_min_n_rc <= 0:
+            raise ValueError("layer_a_min_n_rc must be > 0.")
+        if self.analysis_frequency not in {"auto", "daily", "monthly"}:
+            raise ValueError(
+                "analysis_frequency must be one of: auto, daily, monthly."
+            )
+        if self.return_type not in {"simple", "log"}:
+            raise ValueError("return_type must be one of: simple, log.")
+        if not 0.0 <= self.min_asset_coverage_pct <= 100.0:
+            raise ValueError("min_asset_coverage_pct must be in [0, 100].")
+        if self.covariance_window is not None and self.covariance_window <= 0:
+            raise ValueError("covariance_window must be > 0 when provided.")
+        if self.covariance_method not in {"ledoit-wolf", "sample", "ewma"}:
+            raise ValueError(
+                "covariance_method must be one of: ledoit-wolf, sample, ewma."
+            )
         self.raw_duplicate_pairs_count = 0
 
     def run_analysis(
@@ -166,16 +295,38 @@ class DalioHolyGrailAnalyzer:
         self._validate_factor_mapping(normalized)
         weights_by_date = self._calculate_weights_by_date(normalized)
         returns_wide = self._build_returns_matrix(normalized)
+        analysis_frequency_effective = self._resolve_analysis_frequency(
+            returns_wide.index, self.analysis_frequency
+        )
+        asset_coverage = self._build_asset_coverage_table(returns_wide)
+        included_assets = asset_coverage.loc[
+            asset_coverage["included_for_covariance"], "asset_bucket"
+        ].tolist()
+        returns_for_covariance = returns_wide.reindex(columns=included_assets)
+        covariance_window_effective = self._resolve_covariance_window(
+            total_rows=len(returns_for_covariance.index),
+            analysis_frequency=analysis_frequency_effective,
+        )
+        covariance_input = self._apply_covariance_window(
+            returns_for_covariance, covariance_window_effective
+        )
         correlation_matrix = returns_wide.corr(
             min_periods=self.min_covariance_observations
         )
-        if self.covariance_method == "ewma":
-            covariance_matrix = self._ewma_covariance(returns_wide, self.ewma_alpha)
-        else:
-            covariance_matrix = returns_wide.cov(
-                min_periods=self.min_covariance_observations
-            )
+        covariance_matrix = self._compute_covariance_matrix(covariance_input).reindex(
+            index=returns_wide.columns,
+            columns=returns_wide.columns,
+        )
         rolling_correlation = self._rolling_pairwise_correlation(returns_wide, (12, 36))
+        layer_ab_returns, layer_ab_weights = self._returns_weights_for_layer_ab(
+            returns_wide, weights_by_date, analysis_frequency_effective
+        )
+        layer_b_outputs = self._layer_b_analysis(layer_ab_returns, layer_ab_weights)
+        (
+            layer_a_metrics_rolling,
+            layer_a_trc_rolling,
+            layer_a_cluster_membership_rolling,
+        ) = self._layer_a_rollup(layer_ab_returns, layer_ab_weights)
         pairwise_confidence = self._pairwise_confidence_flags(returns_wide)
         quality_checks = self._run_quality_checks(normalized, weights_by_date)
         latest_weights = self._latest_weights(weights_by_date)
@@ -184,10 +335,22 @@ class DalioHolyGrailAnalyzer:
             latest_weights, covariance_matrix
         )
         factor_exposure = self._factor_exposure(latest_weights, risk_contribution)
-        tail_risk_metrics = self._tail_risk_metrics(returns_wide, weights_by_date)
+        tail_risk_metrics = self._tail_risk_metrics(
+            returns_wide,
+            weights_by_date,
+            analysis_frequency_effective,
+        )
         stress_test_results = self._stress_tests(latest_weights, weights_by_date)
         high_corr_pairs = self._high_correlation_pairs(correlation_matrix, corr_threshold)
         weight_drift = self._weight_drift(latest_weights, target_weights, drift_threshold)
+        excluded_assets = asset_coverage.loc[
+            ~asset_coverage["included_for_covariance"], "asset_bucket"
+        ].tolist()
+        layer_ab_input_frequency = (
+            "monthly"
+            if analysis_frequency_effective == "daily"
+            else analysis_frequency_effective
+        )
         management_rules = self._management_rules_summary(
             normalized=normalized,
             weights_by_date=weights_by_date,
@@ -198,6 +361,29 @@ class DalioHolyGrailAnalyzer:
             corr_threshold=corr_threshold,
             drift_threshold=drift_threshold,
             pairwise_confidence=pairwise_confidence,
+            layer_b_summary=layer_b_outputs["summary"],
+            layer_a_metrics_rolling=layer_a_metrics_rolling,
+            analysis_frequency=analysis_frequency_effective,
+            covariance_method_effective=self.covariance_method,
+            covariance_window_effective=covariance_window_effective,
+            assets_excluded_low_coverage=excluded_assets,
+            layer_ab_input_frequency=layer_ab_input_frequency,
+        )
+        (
+            holy_grail_verdict,
+            holy_grail_scorecard,
+            holy_grail_robustness,
+            holy_grail_red_flags,
+        ) = self._holy_grail_verdict(
+            layer_a_metrics_rolling=layer_a_metrics_rolling,
+            layer_a_trc_rolling=layer_a_trc_rolling,
+            factor_risk_contribution_rolling=layer_b_outputs[
+                "factor_risk_contribution_rolling"
+            ],
+            factor_residual_risk_rolling=layer_b_outputs[
+                "factor_residual_risk_rolling"
+            ],
+            layer_b_enabled=bool(layer_b_outputs["summary"].get("layer_b_enabled", False)),
         )
 
         risk_breach_mask = risk_contribution["risk_contribution_pct"] > max_risk_contribution
@@ -208,6 +394,21 @@ class DalioHolyGrailAnalyzer:
             weights_by_date=weights_by_date,
             correlation_matrix=correlation_matrix,
             rolling_correlation=rolling_correlation,
+            factor_returns_aligned=layer_b_outputs["factor_returns_aligned"],
+            factor_betas_by_bucket_rolling=layer_b_outputs[
+                "factor_betas_by_bucket_rolling"
+            ],
+            factor_model_quality_rolling=layer_b_outputs["factor_model_quality_rolling"],
+            factor_risk_contribution_rolling=layer_b_outputs[
+                "factor_risk_contribution_rolling"
+            ],
+            factor_residual_risk_rolling=layer_b_outputs[
+                "factor_residual_risk_rolling"
+            ],
+            layer_a_metrics_rolling=layer_a_metrics_rolling,
+            layer_a_trc_rolling=layer_a_trc_rolling,
+            layer_a_cluster_membership_rolling=layer_a_cluster_membership_rolling,
+            asset_coverage=asset_coverage,
             covariance_matrix=covariance_matrix,
             risk_contribution_by_bucket=risk_contribution,
             factor_exposure=factor_exposure,
@@ -217,8 +418,12 @@ class DalioHolyGrailAnalyzer:
             pairwise_confidence=pairwise_confidence,
             tail_risk_metrics=tail_risk_metrics,
             weight_drift=weight_drift,
+            holy_grail_scorecard=holy_grail_scorecard,
+            holy_grail_robustness=holy_grail_robustness,
+            holy_grail_red_flags=holy_grail_red_flags,
             diversification_metrics=diversification_metrics,
             management_rules=management_rules,
+            holy_grail_verdict=holy_grail_verdict,
         )
 
     def save_result_tables(self, result: DalioAnalysisResult, output_dir: str) -> None:
@@ -230,6 +435,7 @@ class DalioHolyGrailAnalyzer:
         summary = {
             "diversification_metrics": result.diversification_metrics,
             "management_rules": result.management_rules,
+            "holy_grail_verdict": result.holy_grail_verdict,
         }
         with open(out_path / "summary.json", "w", encoding="utf-8") as summary_file:
             json.dump(summary, summary_file, indent=2, ensure_ascii=True, default=str)
@@ -269,9 +475,10 @@ class DalioHolyGrailAnalyzer:
 
         aggregated = self._aggregate_bucket_history(normalized)
         computed_returns = aggregated.groupby("asset_bucket")["market_value_base"].pct_change()
-        aggregated["return_pct"] = aggregated["provided_return_pct"].combine_first(
+        simple_returns = aggregated["provided_return_pct"].combine_first(
             computed_returns
         )
+        aggregated["return_pct"] = self._apply_return_type(simple_returns)
         aggregated["factor"] = aggregated["asset_bucket"].map(self.factor_map).fillna(
             "Unmapped"
         )
@@ -372,6 +579,702 @@ class DalioHolyGrailAnalyzer:
                 )
             return numeric_return / 100.0
         return numeric_return
+
+    def _apply_return_type(self, simple_returns: pd.Series) -> pd.Series:
+        numeric_returns = pd.to_numeric(simple_returns, errors="coerce")
+        if self.return_type == "simple":
+            return numeric_returns
+        bad_values = numeric_returns.dropna() <= -1.0
+        if bad_values.any():
+            raise ValueError(
+                "return_type='log' requires simple returns > -1. "
+                "Found return_pct <= -1.0."
+            )
+        log_values = np.log1p(numeric_returns.astype(float))
+        return pd.Series(log_values, index=simple_returns.index)
+
+    def _empty_factor_returns_aligned_table(self) -> pd.DataFrame:
+        return pd.DataFrame(columns=["date", *LAYER_B_FACTOR_COLUMNS]).set_index("date")
+
+    def _empty_factor_betas_table(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "window_months",
+                "asset_bucket",
+                "alpha",
+                "beta_growth",
+                "beta_inflation",
+                "beta_real_rates",
+                "beta_credit_liquidity",
+                "r2",
+                "adj_r2",
+            ]
+        )
+
+    def _empty_factor_quality_table(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "window_months",
+                "asset_bucket",
+                "condition_number",
+                "max_vif",
+                "quality_flag",
+                "observations",
+            ]
+        )
+
+    def _empty_factor_risk_contribution_table(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "window_months",
+                "factor",
+                "trc",
+                "trc_share_signed",
+                "trc_share_abs",
+                "max_share_pct",
+                "factor_hhi",
+                "factor_n_rc",
+                "factor_gini",
+            ]
+        )
+
+    def _empty_factor_residual_risk_table(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "window_months",
+                "portfolio_var",
+                "factor_var",
+                "residual_var",
+                "factor_risk_share_pct",
+                "residual_risk_share_pct",
+                "factor_coverage_pct",
+            ]
+        )
+
+    def _default_layer_b_summary(
+        self,
+        enabled: bool,
+        deprecation_notice: str = "",
+        strict_required: bool = False,
+    ) -> Dict[str, object]:
+        return {
+            "layer_b_enabled": enabled,
+            "layer_b_strict_required": strict_required,
+            "layer_b_deprecation_notice": deprecation_notice,
+            "layer_b_latest_factor_hhi": math.nan,
+            "layer_b_latest_max_factor_trc_share_pct": math.nan,
+            "layer_b_latest_residual_risk_share_pct": math.nan,
+            "layer_b_latest_factor_coverage_pct": math.nan,
+            "layer_b_alert_factor_concentration": False,
+            "layer_b_alert_high_residual": False,
+            "layer_b_alert_low_coverage": False,
+            "layer_b_alert_collinearity": False,
+            "layer_b_breach_rate_last_12_obs_pct": math.nan,
+        }
+
+    def _prepare_factor_returns(self, factor_returns: pd.DataFrame) -> pd.DataFrame:
+        required_columns = {"date", *LAYER_B_FACTOR_COLUMNS}
+        missing = sorted(required_columns.difference(factor_returns.columns))
+        if missing:
+            raise ValueError(
+                "Factor input is missing required columns: {}".format(
+                    ", ".join(missing)
+                )
+            )
+
+        prepared = factor_returns.copy()
+        prepared["date"] = pd.to_datetime(prepared["date"], errors="coerce")
+        if prepared["date"].isna().any():
+            raise ValueError("Factor input has unparsable date values.")
+        if prepared["date"].duplicated().any():
+            duplicates = (
+                prepared.loc[prepared["date"].duplicated(), "date"]
+                .dt.strftime("%Y-%m-%d")
+                .tolist()
+            )
+            raise ValueError(
+                "Factor input has duplicated dates: {}.".format(", ".join(duplicates))
+            )
+
+        for column in LAYER_B_FACTOR_COLUMNS:
+            prepared[column] = pd.to_numeric(prepared[column], errors="coerce")
+            if prepared[column].isna().any():
+                raise ValueError(
+                    "Factor input has non-numeric values in '{}'.".format(column)
+                )
+
+        prepared = prepared[["date", *LAYER_B_FACTOR_COLUMNS]].sort_values("date")
+        return prepared.set_index("date")
+
+    def _layer_b_analysis(
+        self, returns_wide: pd.DataFrame, weights_by_date: pd.DataFrame
+    ) -> Dict[str, object]:
+        empty_outputs = {
+            "factor_returns_aligned": self._empty_factor_returns_aligned_table(),
+            "factor_betas_by_bucket_rolling": self._empty_factor_betas_table(),
+            "factor_model_quality_rolling": self._empty_factor_quality_table(),
+            "factor_risk_contribution_rolling": self._empty_factor_risk_contribution_table(),
+            "factor_residual_risk_rolling": self._empty_factor_residual_risk_table(),
+            "summary": self._default_layer_b_summary(
+                enabled=False,
+                deprecation_notice=(
+                    "Layer B deprecation notice: factor_input_csv is missing. "
+                    "This will become required in a future major version."
+                ),
+                strict_required=self.layer_b_require_data,
+            ),
+        }
+        if self.factor_returns is None:
+            if self.layer_b_require_data:
+                raise ValueError(
+                    "Layer B factor input is required. Provide factor returns with columns: "
+                    "date,growth,inflation,real_rates,credit_liquidity."
+                )
+            return empty_outputs
+
+        prepared_factor_returns = self._prepare_factor_returns(self.factor_returns)
+        aligned_dates = returns_wide.index.intersection(prepared_factor_returns.index)
+        factor_returns_aligned = prepared_factor_returns.loc[aligned_dates].sort_index()
+        if factor_returns_aligned.empty:
+            message = (
+                "No aligned dates between portfolio returns and factor returns after inner join."
+            )
+            if self.layer_b_require_data:
+                raise ValueError(message)
+            empty_outputs["summary"] = self._default_layer_b_summary(
+                enabled=False,
+                deprecation_notice=message,
+                strict_required=self.layer_b_require_data,
+            )
+            return empty_outputs
+
+        if (
+            self.layer_b_require_data
+            and len(factor_returns_aligned) < self.layer_b_min_observations
+        ):
+            raise ValueError(
+                "Aligned factor rows ({}) are below layer_b_min_observations ({}).".format(
+                    len(factor_returns_aligned), self.layer_b_min_observations
+                )
+            )
+
+        (
+            factor_betas,
+            factor_quality,
+            factor_risk_contribution,
+            factor_residual_risk,
+        ) = self._rolling_factor_model(
+            returns_wide=returns_wide,
+            weights_by_date=weights_by_date,
+            factor_returns_aligned=factor_returns_aligned,
+        )
+        summary = self._layer_b_alert_summary(
+            factor_risk_contribution=factor_risk_contribution,
+            factor_residual_risk=factor_residual_risk,
+            factor_model_quality=factor_quality,
+        )
+
+        return {
+            "factor_returns_aligned": factor_returns_aligned,
+            "factor_betas_by_bucket_rolling": factor_betas,
+            "factor_model_quality_rolling": factor_quality,
+            "factor_risk_contribution_rolling": factor_risk_contribution,
+            "factor_residual_risk_rolling": factor_residual_risk,
+            "summary": summary,
+        }
+
+    def _rolling_factor_model(
+        self,
+        returns_wide: pd.DataFrame,
+        weights_by_date: pd.DataFrame,
+        factor_returns_aligned: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        factor_columns = list(LAYER_B_FACTOR_COLUMNS)
+        dates = list(returns_wide.index.sort_values())
+        weights_wide = (
+            weights_by_date.pivot(index="date", columns="asset_bucket", values="weight")
+            .sort_index()
+            .reindex(returns_wide.index)
+            .fillna(0.0)
+        )
+
+        betas_rows = []
+        quality_rows = []
+        factor_rc_rows = []
+        point_rows = []
+
+        for date_value in dates:
+            window_factors = factor_returns_aligned.loc[:date_value].tail(
+                self.layer_b_window_months
+            )
+            factor_coverage_pct = (
+                float(len(window_factors)) / float(self.layer_b_window_months) * 100.0
+            )
+            weights_date = (
+                weights_wide.loc[date_value]
+                .reindex(returns_wide.columns)
+                .fillna(0.0)
+                .astype(float)
+            )
+
+            betas_for_date: Dict[str, np.ndarray] = {}
+            alphas_for_date: Dict[str, float] = {}
+            for bucket in returns_wide.columns:
+                bucket_joined = (
+                    pd.concat(
+                        [returns_wide[[bucket]], factor_returns_aligned], axis=1, join="inner"
+                    )
+                    .dropna()
+                    .loc[:date_value]
+                    .tail(self.layer_b_window_months)
+                )
+                observations = int(len(bucket_joined))
+                if observations < self.layer_b_min_observations:
+                    betas_rows.append(
+                        {
+                            "date": date_value,
+                            "window_months": self.layer_b_window_months,
+                            "asset_bucket": bucket,
+                            "alpha": math.nan,
+                            "beta_growth": math.nan,
+                            "beta_inflation": math.nan,
+                            "beta_real_rates": math.nan,
+                            "beta_credit_liquidity": math.nan,
+                            "r2": math.nan,
+                            "adj_r2": math.nan,
+                        }
+                    )
+                    quality_rows.append(
+                        {
+                            "date": date_value,
+                            "window_months": self.layer_b_window_months,
+                            "asset_bucket": bucket,
+                            "condition_number": math.nan,
+                            "max_vif": math.nan,
+                            "quality_flag": True,
+                            "observations": observations,
+                        }
+                    )
+                    continue
+
+                y = bucket_joined[bucket].values.astype(float)
+                x_factors = bucket_joined[factor_columns].values.astype(float)
+                x_design = np.column_stack([np.ones(len(x_factors)), x_factors])
+                coeffs, _, _, _ = np.linalg.lstsq(x_design, y, rcond=None)
+                alpha = float(coeffs[0])
+                betas = coeffs[1:].astype(float)
+                predictions = x_design @ coeffs
+                residuals = y - predictions
+                sse = float((residuals**2).sum())
+                sst = float(((y - y.mean()) ** 2).sum())
+                r2 = 1.0 - (sse / sst) if sst > 0 else math.nan
+                factor_count = x_factors.shape[1]
+                if observations > factor_count + 1 and not pd.isna(r2):
+                    adj_r2 = 1.0 - (1.0 - r2) * (observations - 1) / (
+                        observations - factor_count - 1
+                    )
+                else:
+                    adj_r2 = math.nan
+
+                condition_number = (
+                    float(np.linalg.cond(x_factors))
+                    if x_factors.shape[0] > 0
+                    else math.nan
+                )
+                max_vif = self._compute_max_vif(x_factors)
+                collinearity_flag = (
+                    condition_number > self.layer_b_collinearity_cond_threshold
+                    or max_vif > self.layer_b_vif_threshold
+                )
+
+                betas_for_date[bucket] = betas
+                alphas_for_date[bucket] = alpha
+                betas_rows.append(
+                    {
+                        "date": date_value,
+                        "window_months": self.layer_b_window_months,
+                        "asset_bucket": bucket,
+                        "alpha": alpha,
+                        "beta_growth": float(betas[0]),
+                        "beta_inflation": float(betas[1]),
+                        "beta_real_rates": float(betas[2]),
+                        "beta_credit_liquidity": float(betas[3]),
+                        "r2": float(r2) if not pd.isna(r2) else math.nan,
+                        "adj_r2": float(adj_r2) if not pd.isna(adj_r2) else math.nan,
+                    }
+                )
+                quality_rows.append(
+                    {
+                        "date": date_value,
+                        "window_months": self.layer_b_window_months,
+                        "asset_bucket": bucket,
+                        "condition_number": condition_number,
+                        "max_vif": max_vif,
+                        "quality_flag": bool(collinearity_flag),
+                        "observations": observations,
+                    }
+                )
+
+            factor_metrics = self._factor_metrics_for_date(
+                date_value=date_value,
+                window_factors=window_factors,
+                weights_date=weights_date,
+                returns_date=returns_wide.loc[date_value],
+                betas_for_date=betas_for_date,
+                alphas_for_date=alphas_for_date,
+                factor_returns_aligned=factor_returns_aligned,
+            )
+            factor_rc_rows.extend(factor_metrics["factor_rows"])
+            point_rows.append(
+                {
+                    "date": date_value,
+                    "portfolio_return": factor_metrics["portfolio_return"],
+                    "residual_return": factor_metrics["residual_return"],
+                    "factor_coverage_pct": factor_coverage_pct,
+                }
+            )
+
+        factor_betas = pd.DataFrame(betas_rows).sort_values(
+            ["date", "asset_bucket"]
+        ).reset_index(drop=True)
+        factor_quality = pd.DataFrame(quality_rows).sort_values(
+            ["date", "asset_bucket"]
+        ).reset_index(drop=True)
+        factor_risk_contribution = pd.DataFrame(factor_rc_rows).sort_values(
+            ["date", "factor"]
+        ).reset_index(drop=True)
+
+        points = pd.DataFrame(point_rows).sort_values("date").reset_index(drop=True)
+        residual_rows = []
+        for date_value in points["date"].tolist():
+            window_points = points.loc[points["date"] <= date_value].tail(
+                self.layer_b_window_months
+            )
+            valid = window_points.dropna(subset=["portfolio_return", "residual_return"])
+            if len(valid) >= self.layer_b_min_observations:
+                portfolio_var = float(valid["portfolio_return"].var(ddof=1))
+                residual_var = float(valid["residual_return"].var(ddof=1))
+                portfolio_var = max(portfolio_var, 0.0)
+                residual_var = max(residual_var, 0.0)
+                factor_var = max(portfolio_var - residual_var, 0.0)
+                factor_risk_share_pct = (
+                    factor_var / portfolio_var * 100.0 if portfolio_var > 0 else math.nan
+                )
+                residual_risk_share_pct = (
+                    residual_var / portfolio_var * 100.0
+                    if portfolio_var > 0
+                    else math.nan
+                )
+            else:
+                portfolio_var = math.nan
+                factor_var = math.nan
+                residual_var = math.nan
+                factor_risk_share_pct = math.nan
+                residual_risk_share_pct = math.nan
+            coverage = float(
+                points.loc[points["date"] == date_value, "factor_coverage_pct"].iloc[0]
+            )
+            residual_rows.append(
+                {
+                    "date": date_value,
+                    "window_months": self.layer_b_window_months,
+                    "portfolio_var": portfolio_var,
+                    "factor_var": factor_var,
+                    "residual_var": residual_var,
+                    "factor_risk_share_pct": factor_risk_share_pct,
+                    "residual_risk_share_pct": residual_risk_share_pct,
+                    "factor_coverage_pct": coverage,
+                }
+            )
+
+        factor_residual = pd.DataFrame(residual_rows).sort_values("date").reset_index(drop=True)
+        return factor_betas, factor_quality, factor_risk_contribution, factor_residual
+
+    def _factor_metrics_for_date(
+        self,
+        date_value: pd.Timestamp,
+        window_factors: pd.DataFrame,
+        weights_date: pd.Series,
+        returns_date: pd.Series,
+        betas_for_date: Dict[str, np.ndarray],
+        alphas_for_date: Dict[str, float],
+        factor_returns_aligned: pd.DataFrame,
+    ) -> Dict[str, object]:
+        factor_columns = list(LAYER_B_FACTOR_COLUMNS)
+        active_assets = [
+            asset for asset in weights_date.index if abs(float(weights_date.loc[asset])) > 1e-12
+        ]
+        known_assets = [asset for asset in active_assets if asset in betas_for_date]
+
+        exposure_vector = np.full(len(factor_columns), math.nan, dtype=float)
+        alpha_portfolio = math.nan
+        if known_assets:
+            known_weights = weights_date.loc[known_assets].astype(float).values
+            betas_matrix = np.vstack([betas_for_date[asset] for asset in known_assets])
+            exposure_vector = known_weights @ betas_matrix
+            alpha_portfolio = float(
+                np.sum([known_weights[idx] * alphas_for_date[asset] for idx, asset in enumerate(known_assets)])
+            )
+
+        trc = np.full(len(factor_columns), math.nan, dtype=float)
+        trc_share_signed = np.full(len(factor_columns), math.nan, dtype=float)
+        trc_share_abs = np.full(len(factor_columns), math.nan, dtype=float)
+        max_share_pct = math.nan
+        factor_hhi = math.nan
+        factor_n_rc = math.nan
+        factor_gini = math.nan
+        factor_volatility = math.nan
+
+        if (
+            len(window_factors) >= self.layer_b_min_observations
+            and np.isfinite(exposure_vector).all()
+        ):
+            factor_cov = window_factors[factor_columns].cov().values.astype(float)
+            factor_variance = float(exposure_vector @ factor_cov @ exposure_vector)
+            factor_variance = max(factor_variance, 0.0)
+            factor_volatility = math.sqrt(factor_variance)
+            if factor_volatility > 0:
+                marginal = (factor_cov @ exposure_vector) / factor_volatility
+                trc = exposure_vector * marginal
+                trc_share_signed = trc / factor_volatility
+                abs_total = float(np.abs(trc).sum())
+                if abs_total > 0:
+                    trc_share_abs = np.abs(trc) / abs_total
+                    max_share_pct = float(np.max(trc_share_abs)) * 100.0
+                    factor_hhi = float((trc_share_abs**2).sum())
+                    factor_n_rc = 1.0 / factor_hhi if factor_hhi > 0 else math.nan
+                    factor_gini = self._gini_from_array(trc_share_abs)
+            else:
+                trc = np.zeros(len(factor_columns), dtype=float)
+                trc_share_signed = np.zeros(len(factor_columns), dtype=float)
+
+        factor_rows = []
+        for idx, factor_name in enumerate(factor_columns):
+            factor_rows.append(
+                {
+                    "date": date_value,
+                    "window_months": self.layer_b_window_months,
+                    "factor": factor_name,
+                    "trc": float(trc[idx]) if np.isfinite(trc[idx]) else math.nan,
+                    "trc_share_signed": (
+                        float(trc_share_signed[idx])
+                        if np.isfinite(trc_share_signed[idx])
+                        else math.nan
+                    ),
+                    "trc_share_abs": (
+                        float(trc_share_abs[idx])
+                        if np.isfinite(trc_share_abs[idx])
+                        else math.nan
+                    ),
+                    "max_share_pct": max_share_pct,
+                    "factor_hhi": factor_hhi,
+                    "factor_n_rc": factor_n_rc,
+                    "factor_gini": factor_gini,
+                }
+            )
+
+        portfolio_return = self._portfolio_return_for_date(returns_date, weights_date)
+        predicted_factor_return = math.nan
+        residual_return = math.nan
+        if (
+            date_value in factor_returns_aligned.index
+            and np.isfinite(exposure_vector).all()
+            and np.isfinite(alpha_portfolio)
+            and not pd.isna(portfolio_return)
+        ):
+            factor_today = factor_returns_aligned.loc[date_value, factor_columns].values.astype(float)
+            predicted_factor_return = float(alpha_portfolio + exposure_vector @ factor_today)
+            residual_return = float(portfolio_return - predicted_factor_return)
+
+        return {
+            "factor_rows": factor_rows,
+            "portfolio_return": portfolio_return,
+            "residual_return": residual_return,
+        }
+
+    def _portfolio_return_for_date(
+        self, returns_date: pd.Series, weights_date: pd.Series
+    ) -> float:
+        available = returns_date.dropna()
+        if available.empty:
+            return math.nan
+        aligned_weights = weights_date.reindex(available.index).fillna(0.0).astype(float)
+        return float((available.astype(float) * aligned_weights).sum())
+
+    def _compute_max_vif(self, factors_matrix: np.ndarray) -> float:
+        if factors_matrix.ndim != 2 or factors_matrix.shape[1] <= 1:
+            return 1.0
+        max_vif = 1.0
+        for idx in range(factors_matrix.shape[1]):
+            target = factors_matrix[:, idx]
+            other_idx = [col for col in range(factors_matrix.shape[1]) if col != idx]
+            predictors = factors_matrix[:, other_idx]
+            x_design = np.column_stack([np.ones(len(predictors)), predictors])
+            coeffs, _, _, _ = np.linalg.lstsq(x_design, target, rcond=None)
+            predicted = x_design @ coeffs
+            sse = float(((target - predicted) ** 2).sum())
+            sst = float(((target - target.mean()) ** 2).sum())
+            if sst <= 0:
+                continue
+            r2 = 1.0 - (sse / sst)
+            r2 = min(max(r2, 0.0), 0.999999)
+            vif = 1.0 / (1.0 - r2)
+            max_vif = max(max_vif, float(vif))
+        return max_vif
+
+    def _gini_from_array(self, values: np.ndarray) -> float:
+        clean = np.asarray(values, dtype=float)
+        clean = clean[np.isfinite(clean)]
+        if clean.size == 0:
+            return math.nan
+        clean = clean[clean >= 0.0]
+        if clean.size == 0:
+            return math.nan
+        total = float(clean.sum())
+        if total <= 0:
+            return math.nan
+        sorted_values = np.sort(clean)
+        n = sorted_values.size
+        index = np.arange(1, n + 1, dtype=float)
+        gini = (2.0 * float((index * sorted_values).sum()) / (n * total)) - (
+            (n + 1.0) / n
+        )
+        return max(min(float(gini), 1.0), 0.0)
+
+    def _layer_b_alert_summary(
+        self,
+        factor_risk_contribution: pd.DataFrame,
+        factor_residual_risk: pd.DataFrame,
+        factor_model_quality: pd.DataFrame,
+    ) -> Dict[str, object]:
+        summary = self._default_layer_b_summary(
+            enabled=True,
+            deprecation_notice="",
+            strict_required=self.layer_b_require_data,
+        )
+        if factor_residual_risk.empty:
+            return summary
+
+        latest_date = pd.Timestamp(factor_residual_risk["date"].max())
+        latest_residual = factor_residual_risk.loc[
+            factor_residual_risk["date"] == latest_date
+        ].iloc[0]
+        latest_factor = factor_risk_contribution.loc[
+            factor_risk_contribution["date"] == latest_date
+        ]
+        latest_hhi_values = latest_factor["factor_hhi"].dropna()
+        latest_max_share_values = latest_factor["max_share_pct"].dropna()
+        latest_factor_hhi = (
+            float(latest_hhi_values.iloc[0])
+            if not latest_hhi_values.empty
+            else math.nan
+        )
+        latest_max_share = (
+            float(latest_max_share_values.iloc[0])
+            if not latest_max_share_values.empty
+            else math.nan
+        )
+        latest_residual_share = float(latest_residual["residual_risk_share_pct"])
+        latest_coverage = float(latest_residual["factor_coverage_pct"])
+        latest_collinearity = False
+        latest_quality = factor_model_quality.loc[
+            factor_model_quality["date"] == latest_date
+        ]
+        if not latest_quality.empty:
+            latest_collinearity = bool(
+                (
+                    latest_quality["condition_number"] > self.layer_b_collinearity_cond_threshold
+                ).fillna(False).any()
+                or (latest_quality["max_vif"] > self.layer_b_vif_threshold)
+                .fillna(False)
+                .any()
+            )
+
+        alert_factor_concentration = (
+            (not pd.isna(latest_max_share) and latest_max_share > self.layer_b_max_factor_trc_share * 100.0)
+            or (
+                not pd.isna(latest_factor_hhi)
+                and latest_factor_hhi > self.layer_b_factor_hhi_threshold
+            )
+        )
+        alert_high_residual = (
+            not pd.isna(latest_residual_share)
+            and latest_residual_share > self.layer_b_residual_share_threshold * 100.0
+        )
+        alert_low_coverage = (
+            not pd.isna(latest_coverage)
+            and latest_coverage < self.layer_b_min_coverage_pct
+        )
+
+        factor_by_date = (
+            factor_risk_contribution.groupby("date", as_index=False)[
+                ["max_share_pct", "factor_hhi"]
+            ]
+            .max()
+            .rename(columns={"max_share_pct": "max_factor_share_pct"})
+        )
+        residual_by_date = factor_residual_risk[
+            ["date", "residual_risk_share_pct", "factor_coverage_pct"]
+        ]
+        collinearity_by_date = (
+            factor_model_quality.assign(
+                collinearity_flag=(
+                    (factor_model_quality["condition_number"] > self.layer_b_collinearity_cond_threshold)
+                    | (factor_model_quality["max_vif"] > self.layer_b_vif_threshold)
+                ).fillna(False)
+            )
+            .groupby("date", as_index=False)["collinearity_flag"]
+            .max()
+        )
+        joined = factor_by_date.merge(residual_by_date, on="date", how="outer").merge(
+            collinearity_by_date, on="date", how="left"
+        )
+        joined["collinearity_flag"] = joined["collinearity_flag"].fillna(False)
+        joined = joined.sort_values("date").tail(12)
+        if joined.empty:
+            breach_rate = math.nan
+        else:
+            any_breach = (
+                (joined["max_factor_share_pct"] > self.layer_b_max_factor_trc_share * 100.0)
+                | (joined["factor_hhi"] > self.layer_b_factor_hhi_threshold)
+                | (
+                    joined["residual_risk_share_pct"]
+                    > self.layer_b_residual_share_threshold * 100.0
+                )
+                | (joined["factor_coverage_pct"] < self.layer_b_min_coverage_pct)
+                | joined["collinearity_flag"]
+            )
+            breach_rate = float(any_breach.fillna(False).mean() * 100.0)
+
+        summary.update(
+            {
+                "layer_b_latest_factor_hhi": latest_factor_hhi,
+                "layer_b_latest_max_factor_trc_share_pct": latest_max_share,
+                "layer_b_latest_residual_risk_share_pct": latest_residual_share,
+                "layer_b_latest_factor_coverage_pct": latest_coverage,
+                "layer_b_alert_factor_concentration": bool(alert_factor_concentration),
+                "layer_b_alert_high_residual": bool(alert_high_residual),
+                "layer_b_alert_low_coverage": bool(alert_low_coverage),
+                "layer_b_alert_collinearity": bool(latest_collinearity),
+                "layer_b_breach_rate_last_12_obs_pct": breach_rate,
+            }
+        )
+        return summary
+    def _normalize_layer_a_windows(self, raw_windows: tuple[int, ...]) -> tuple[int, ...]:
+        unique_windows = sorted(
+            {
+                int(window)
+                for window in raw_windows
+                if int(window) > 0
+            }
+        )
+        if not unique_windows:
+            raise ValueError("layer_a_windows must contain positive integers.")
+        return tuple(unique_windows)
 
     def _validate_factor_mapping(self, normalized: pd.DataFrame) -> None:
         unmapped = sorted(
@@ -477,6 +1380,155 @@ class DalioHolyGrailAnalyzer:
         ).sort_index()
         return returns
 
+    def _resolve_analysis_frequency(
+        self, dates: pd.Index, requested_frequency: str
+    ) -> str:
+        if requested_frequency in {"daily", "monthly"}:
+            return requested_frequency
+        date_index = pd.DatetimeIndex(dates).dropna().sort_values().unique()
+        if len(date_index) < 2:
+            return "monthly"
+        day_steps = np.diff(date_index.values.astype("datetime64[D]")).astype(int)
+        positive_steps = day_steps[day_steps > 0]
+        if positive_steps.size == 0:
+            return "monthly"
+        median_step = float(np.median(positive_steps))
+        return "daily" if median_step <= 3.0 else "monthly"
+
+    def _resolve_covariance_window(
+        self, total_rows: int, analysis_frequency: str
+    ) -> int:
+        if total_rows <= 0:
+            return 0
+        if self.covariance_window is not None:
+            return min(self.covariance_window, total_rows)
+        if analysis_frequency == "daily":
+            return min(252, total_rows)
+        return total_rows
+
+    def _apply_covariance_window(
+        self, returns_wide: pd.DataFrame, covariance_window: int
+    ) -> pd.DataFrame:
+        if covariance_window <= 0:
+            return returns_wide.iloc[0:0].copy()
+        return returns_wide.tail(covariance_window)
+
+    def _build_asset_coverage_table(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        total_rows = int(len(returns_wide.index))
+        if returns_wide.empty:
+            return pd.DataFrame(
+                columns=[
+                    "asset_bucket",
+                    "observations",
+                    "coverage_pct",
+                    "included_for_covariance",
+                ]
+            )
+        observations = returns_wide.notna().sum(axis=0).astype(int)
+        if total_rows > 0:
+            coverage_pct = observations / float(total_rows) * 100.0
+        else:
+            coverage_pct = pd.Series(0.0, index=observations.index)
+        table = pd.DataFrame(
+            {
+                "asset_bucket": observations.index,
+                "observations": observations.values,
+                "coverage_pct": coverage_pct.values,
+            }
+        )
+        table["included_for_covariance"] = (
+            table["coverage_pct"] >= self.min_asset_coverage_pct
+        )
+        return table.sort_values(
+            ["included_for_covariance", "coverage_pct", "asset_bucket"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+
+    def _compute_covariance_matrix(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        if returns_wide.empty:
+            return pd.DataFrame(index=returns_wide.columns, columns=returns_wide.columns, dtype=float)
+        if self.covariance_method == "ewma":
+            return self._ewma_covariance(returns_wide, self.ewma_alpha)
+        if self.covariance_method == "sample":
+            return returns_wide.cov(min_periods=self.min_covariance_observations)
+        return self._ledoit_wolf_covariance(returns_wide)
+
+    def _empty_covariance_matrix(self, assets: list[str]) -> pd.DataFrame:
+        return pd.DataFrame(
+            math.nan,
+            index=assets,
+            columns=assets,
+            dtype=float,
+        )
+
+    def _ledoit_wolf_covariance(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        try:
+            from sklearn.covariance import LedoitWolf
+        except ImportError as exc:
+            raise ImportError(
+                "covariance_method='ledoit-wolf' requires scikit-learn. "
+                "Install scikit-learn to use this covariance method."
+            ) from exc
+        assets = list(returns_wide.columns)
+        complete_rows = returns_wide.dropna()
+        if len(complete_rows.index) < self.min_covariance_observations:
+            return self._empty_covariance_matrix(assets)
+        estimator = LedoitWolf()
+        estimator.fit(complete_rows.values.astype(float))
+        return pd.DataFrame(
+            estimator.covariance_,
+            index=assets,
+            columns=assets,
+            dtype=float,
+        )
+
+    def _returns_weights_for_layer_ab(
+        self,
+        returns_wide: pd.DataFrame,
+        weights_by_date: pd.DataFrame,
+        analysis_frequency: str,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        if analysis_frequency != "daily":
+            return returns_wide, weights_by_date
+        monthly_returns = self._resample_returns_to_monthly(returns_wide)
+        monthly_weights = self._resample_weights_to_monthly(weights_by_date)
+        return monthly_returns, monthly_weights
+
+    def _resample_returns_to_monthly(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
+        if returns_wide.empty:
+            return returns_wide.copy()
+
+        if self.return_type == "log":
+            monthly = returns_wide.resample("ME").sum(min_count=1)
+        else:
+            def _compound(values: pd.Series) -> float:
+                clean = values.dropna().astype(float)
+                if clean.empty:
+                    return math.nan
+                return float(np.prod(1.0 + clean.values) - 1.0)
+
+            monthly = returns_wide.resample("ME").apply(_compound)
+        return monthly.sort_index()
+
+    def _resample_weights_to_monthly(self, weights_by_date: pd.DataFrame) -> pd.DataFrame:
+        if weights_by_date.empty:
+            return weights_by_date.copy()
+        weights_wide = (
+            weights_by_date.pivot(index="date", columns="asset_bucket", values="weight")
+            .sort_index()
+            .resample("ME")
+            .last()
+        )
+        stacked_weights = weights_wide.stack()
+        monthly = (
+            stacked_weights.dropna()
+            .rename("weight")
+            .reset_index()
+            .sort_values(["date", "asset_bucket"])
+            .reset_index(drop=True)
+        )
+        return monthly
+
     def _ewma_covariance(
         self, returns_wide: pd.DataFrame, alpha: float
     ) -> pd.DataFrame:
@@ -554,8 +1606,12 @@ class DalioHolyGrailAnalyzer:
         ).reset_index(drop=True)
 
     def _tail_risk_metrics(
-        self, returns_wide: pd.DataFrame, weights_by_date: pd.DataFrame
+        self,
+        returns_wide: pd.DataFrame,
+        weights_by_date: pd.DataFrame,
+        analysis_frequency: str,
     ) -> pd.DataFrame:
+        rolling_window_observations_1y = 252 if analysis_frequency == "daily" else 12
         weights_wide = weights_by_date.pivot(
             index="date", columns="asset_bucket", values="weight"
         ).sort_index()
@@ -570,6 +1626,7 @@ class DalioHolyGrailAnalyzer:
                         "worst_rolling_12m_drawdown_pct": math.nan,
                         "portfolio_return_observations": 0,
                         "tail_data_coverage_pct": 0.0,
+                        "rolling_window_observations_1y": rolling_window_observations_1y,
                     }
                 ]
             )
@@ -601,6 +1658,7 @@ class DalioHolyGrailAnalyzer:
                         "worst_rolling_12m_drawdown_pct": math.nan,
                         "portfolio_return_observations": 0,
                         "tail_data_coverage_pct": coverage_pct,
+                        "rolling_window_observations_1y": rolling_window_observations_1y,
                     }
                 ]
             )
@@ -614,7 +1672,10 @@ class DalioHolyGrailAnalyzer:
         drawdown = cumulative / running_peak - 1.0
         max_drawdown = float(drawdown.min())
 
-        rolling_peak_12m = cumulative.rolling(window=12, min_periods=1).max()
+        rolling_peak_12m = cumulative.rolling(
+            window=rolling_window_observations_1y,
+            min_periods=1,
+        ).max()
         rolling_drawdown_12m = cumulative / rolling_peak_12m - 1.0
         worst_rolling_12m_drawdown = float(rolling_drawdown_12m.min())
 
@@ -628,6 +1689,7 @@ class DalioHolyGrailAnalyzer:
                     * 100.0,
                     "portfolio_return_observations": int(len(portfolio_returns)),
                     "tail_data_coverage_pct": coverage_pct,
+                    "rolling_window_observations_1y": rolling_window_observations_1y,
                 }
             ]
         )
@@ -658,6 +1720,389 @@ class DalioHolyGrailAnalyzer:
         return pd.DataFrame(records).sort_values(
             ["date", "asset_left", "asset_right"]
         ).reset_index(drop=True)
+
+    def _layer_a_rollup(
+        self, returns_wide: pd.DataFrame, weights_by_date: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        metrics_rows = []
+        trc_rows = []
+        cluster_rows = []
+
+        weights_wide = (
+            weights_by_date.pivot(index="date", columns="asset_bucket", values="weight")
+            .sort_index()
+            .reindex(returns_wide.index)
+            .fillna(0.0)
+        )
+
+        for date_value in returns_wide.index:
+            current_weights = (
+                weights_wide.loc[date_value]
+                .reindex(returns_wide.columns)
+                .fillna(0.0)
+                .astype(float)
+            )
+            active_assets = [
+                asset
+                for asset, weight in current_weights.items()
+                if abs(float(weight)) > 1e-12
+            ]
+            for window in self.layer_a_windows:
+                window_returns = returns_wide.loc[:date_value].tail(window)
+                (
+                    metrics_row,
+                    window_trc_rows,
+                    window_cluster_rows,
+                ) = self._layer_a_window_metrics(
+                    date_value=date_value,
+                    window=window,
+                    window_returns=window_returns,
+                    current_weights=current_weights,
+                    active_assets=active_assets,
+                )
+                metrics_rows.append(metrics_row)
+                trc_rows.extend(window_trc_rows)
+                cluster_rows.extend(window_cluster_rows)
+
+        if metrics_rows:
+            metrics = pd.DataFrame(metrics_rows).sort_values(
+                ["date", "window_months"]
+            ).reset_index(drop=True)
+        else:
+            metrics = pd.DataFrame(
+                columns=[
+                    "date",
+                    "window_months",
+                    "asset_count",
+                    "observation_count",
+                    "covariance_coverage_pct",
+                    "avg_corr",
+                    "avg_abs_corr",
+                    "high_corr_pair_share_pct",
+                    "cluster_count",
+                    "neff",
+                    "portfolio_volatility",
+                    "max_trc_share_pct",
+                    "risk_hhi",
+                    "n_rc",
+                    "risk_gini",
+                    "diversification_ratio",
+                ]
+            )
+
+        if trc_rows:
+            trc = pd.DataFrame(trc_rows).sort_values(
+                ["date", "window_months", "asset_bucket"]
+            ).reset_index(drop=True)
+        else:
+            trc = pd.DataFrame(
+                columns=[
+                    "date",
+                    "window_months",
+                    "asset_bucket",
+                    "weight",
+                    "trc",
+                    "trc_share_signed",
+                    "trc_share_abs",
+                    "covariance_included",
+                ]
+            )
+
+        if cluster_rows:
+            clusters = pd.DataFrame(cluster_rows).sort_values(
+                ["date", "window_months", "asset_bucket"]
+            ).reset_index(drop=True)
+        else:
+            clusters = pd.DataFrame(
+                columns=["date", "window_months", "asset_bucket", "cluster_id"]
+            )
+        return metrics, trc, clusters
+
+    def _layer_a_window_metrics(
+        self,
+        date_value: pd.Timestamp,
+        window: int,
+        window_returns: pd.DataFrame,
+        current_weights: pd.Series,
+        active_assets: list[str],
+    ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]]]:
+        observation_count = int(len(window_returns))
+        correlation = window_returns.corr(
+            min_periods=self.min_covariance_observations
+        )
+        if self.covariance_method == "ewma":
+            covariance = self._ewma_covariance(window_returns, self.ewma_alpha)
+        elif self.covariance_method == "ledoit-wolf":
+            covariance = self._ledoit_wolf_covariance(window_returns)
+        else:
+            covariance = window_returns.cov(
+                min_periods=self.min_covariance_observations
+            )
+
+        corr_assets = [asset for asset in active_assets if asset in correlation]
+        corr_subset = (
+            correlation.loc[corr_assets, corr_assets]
+            if corr_assets
+            else pd.DataFrame(dtype=float)
+        )
+        if corr_subset.empty:
+            corr_complete = corr_subset
+        else:
+            valid_corr_mask = ~(corr_subset.isna().any(axis=0) | corr_subset.isna().any(axis=1))
+            valid_corr_assets = corr_subset.index[valid_corr_mask].tolist()
+            corr_complete = corr_subset.loc[valid_corr_assets, valid_corr_assets]
+
+        pair_values = []
+        pair_count = 0
+        if not corr_complete.empty:
+            corr_columns = list(corr_complete.columns)
+            for left_idx, left_asset in enumerate(corr_columns):
+                for right_asset in corr_columns[left_idx + 1 :]:
+                    corr_value = corr_complete.loc[left_asset, right_asset]
+                    if pd.isna(corr_value):
+                        continue
+                    pair_values.append(float(corr_value))
+            pair_count = len(pair_values)
+        avg_corr = float(np.mean(pair_values)) if pair_values else math.nan
+        avg_abs_corr = float(np.mean(np.abs(pair_values))) if pair_values else math.nan
+        high_corr_pair_share_pct = (
+            float(
+                100.0
+                * sum(
+                    abs(value) > self.layer_a_high_corr_threshold
+                    for value in pair_values
+                )
+                / pair_count
+            )
+            if pair_count > 0
+            else math.nan
+        )
+        neff = self._effective_bets_from_correlation(corr_complete)
+        cluster_membership = self._hac_clusters_from_correlation(
+            corr_complete, self.layer_a_cluster_corr_cutoff
+        )
+        cluster_count = int(cluster_membership.nunique()) if not cluster_membership.empty else 0
+
+        cluster_rows = [
+            {
+                "date": date_value,
+                "window_months": window,
+                "asset_bucket": asset,
+                "cluster_id": (
+                    int(cluster_membership.loc[asset])
+                    if asset in cluster_membership.index
+                    else math.nan
+                ),
+            }
+            for asset in active_assets
+        ]
+
+        cov_assets = [asset for asset in active_assets if asset in covariance]
+        cov_subset = (
+            covariance.loc[cov_assets, cov_assets]
+            if cov_assets
+            else pd.DataFrame(dtype=float)
+        )
+        if cov_subset.empty:
+            valid_cov_assets: list[str] = []
+        else:
+            valid_cov_mask = ~(cov_subset.isna().any(axis=0) | cov_subset.isna().any(axis=1))
+            valid_cov_assets = cov_subset.index[valid_cov_mask].tolist()
+
+        active_abs_weight = (
+            float(current_weights.loc[active_assets].abs().sum()) if active_assets else 0.0
+        )
+        included_abs_weight = (
+            float(current_weights.loc[valid_cov_assets].abs().sum()) if valid_cov_assets else 0.0
+        )
+        coverage_pct = (
+            included_abs_weight / active_abs_weight * 100.0
+            if active_abs_weight > 0
+            else 0.0
+        )
+
+        trc_lookup: Dict[str, float] = {}
+        trc_signed_lookup: Dict[str, float] = {}
+        trc_abs_lookup: Dict[str, float] = {}
+        portfolio_volatility = math.nan
+        max_trc_share_pct = math.nan
+        risk_hhi = math.nan
+        n_rc = math.nan
+        risk_gini = math.nan
+        diversification_ratio = math.nan
+
+        if valid_cov_assets:
+            valid_weights = current_weights.loc[valid_cov_assets].astype(float)
+            valid_covariance = cov_subset.loc[valid_cov_assets, valid_cov_assets].astype(float)
+            weight_vector = valid_weights.values
+            cov_values = valid_covariance.values
+            portfolio_variance = float(weight_vector @ cov_values @ weight_vector)
+            portfolio_variance = max(portfolio_variance, 0.0)
+            portfolio_volatility = math.sqrt(portfolio_variance)
+
+            if portfolio_volatility > 0:
+                marginal_contribution = (cov_values @ weight_vector) / portfolio_volatility
+                trc_values = weight_vector * marginal_contribution
+                trc_share_signed = trc_values / portfolio_volatility
+                trc_abs_total = float(np.abs(trc_values).sum())
+                if trc_abs_total > 0:
+                    trc_share_abs = np.abs(trc_values) / trc_abs_total
+                    max_trc_share_pct = float(np.max(trc_share_abs)) * 100.0
+                    risk_hhi = float((trc_share_abs**2).sum())
+                    n_rc = (1.0 / risk_hhi) if risk_hhi > 0 else math.nan
+                    risk_gini = self._gini_from_distribution(trc_share_abs)
+                else:
+                    trc_share_abs = np.repeat(math.nan, len(trc_values))
+
+                asset_volatility = np.sqrt(np.clip(np.diag(cov_values), a_min=0.0, a_max=None))
+                diversification_ratio = float(
+                    (np.abs(weight_vector) * asset_volatility).sum() / portfolio_volatility
+                )
+            else:
+                trc_values = np.zeros(len(valid_cov_assets), dtype=float)
+                trc_share_signed = np.zeros(len(valid_cov_assets), dtype=float)
+                trc_share_abs = np.repeat(math.nan, len(valid_cov_assets))
+
+            for index, asset in enumerate(valid_cov_assets):
+                trc_lookup[asset] = float(trc_values[index])
+                trc_signed_lookup[asset] = float(trc_share_signed[index])
+                trc_abs_lookup[asset] = float(trc_share_abs[index])
+
+        trc_rows = [
+            {
+                "date": date_value,
+                "window_months": window,
+                "asset_bucket": asset,
+                "weight": float(current_weights.loc[asset]),
+                "trc": trc_lookup.get(asset, math.nan),
+                "trc_share_signed": trc_signed_lookup.get(asset, math.nan),
+                "trc_share_abs": trc_abs_lookup.get(asset, math.nan),
+                "covariance_included": asset in valid_cov_assets,
+            }
+            for asset in active_assets
+        ]
+
+        metrics_row = {
+            "date": date_value,
+            "window_months": window,
+            "asset_count": int(len(active_assets)),
+            "observation_count": observation_count,
+            "covariance_coverage_pct": coverage_pct,
+            "avg_corr": avg_corr,
+            "avg_abs_corr": avg_abs_corr,
+            "high_corr_pair_share_pct": high_corr_pair_share_pct,
+            "cluster_count": cluster_count,
+            "neff": neff,
+            "portfolio_volatility": portfolio_volatility,
+            "max_trc_share_pct": max_trc_share_pct,
+            "risk_hhi": risk_hhi,
+            "n_rc": n_rc,
+            "risk_gini": risk_gini,
+            "diversification_ratio": diversification_ratio,
+        }
+        return metrics_row, trc_rows, cluster_rows
+
+    def _effective_bets_from_correlation(self, correlation: pd.DataFrame) -> float:
+        if correlation.empty:
+            return math.nan
+        corr_values = correlation.values.astype(float)
+        try:
+            eigenvalues = np.linalg.eigvalsh(corr_values)
+        except np.linalg.LinAlgError:
+            return math.nan
+        clipped = np.clip(eigenvalues, a_min=0.0, a_max=None)
+        eigen_sum = float(clipped.sum())
+        if eigen_sum <= 0:
+            return math.nan
+        probabilities = clipped / eigen_sum
+        probabilities = probabilities[probabilities > 0]
+        if probabilities.size == 0:
+            return math.nan
+        entropy = float(-(probabilities * np.log(probabilities)).sum())
+        return float(np.exp(entropy))
+
+    def _hac_clusters_from_correlation(
+        self, correlation: pd.DataFrame, corr_cutoff: float
+    ) -> pd.Series:
+        if correlation.empty:
+            return pd.Series(dtype=int)
+
+        assets = list(correlation.index)
+        if len(assets) == 1:
+            return pd.Series({assets[0]: 1}, dtype=int)
+
+        corr_values = correlation.abs().clip(lower=0.0, upper=1.0).values.astype(float)
+        distance_matrix = 1.0 - corr_values
+        np.fill_diagonal(distance_matrix, 0.0)
+        distance_cutoff = 1.0 - corr_cutoff
+
+        clusters: Dict[int, set[int]] = {idx: {idx} for idx in range(len(assets))}
+        next_cluster_id = len(assets)
+        while True:
+            candidate_pair: Optional[tuple[int, int]] = None
+            candidate_distance = math.inf
+            cluster_ids = sorted(clusters.keys())
+            for left_idx, left_cluster_id in enumerate(cluster_ids):
+                for right_cluster_id in cluster_ids[left_idx + 1 :]:
+                    distance_value = self._average_linkage_distance(
+                        distance_matrix,
+                        clusters[left_cluster_id],
+                        clusters[right_cluster_id],
+                    )
+                    if distance_value < candidate_distance:
+                        candidate_distance = distance_value
+                        candidate_pair = (left_cluster_id, right_cluster_id)
+
+            if candidate_pair is None or candidate_distance > distance_cutoff:
+                break
+
+            left_cluster_id, right_cluster_id = candidate_pair
+            merged_cluster = clusters[left_cluster_id] | clusters[right_cluster_id]
+            del clusters[left_cluster_id]
+            del clusters[right_cluster_id]
+            clusters[next_cluster_id] = merged_cluster
+            next_cluster_id += 1
+
+        assignments: Dict[str, int] = {}
+        ordered_clusters = sorted(clusters.values(), key=lambda values: min(values))
+        for cluster_label, member_indices in enumerate(ordered_clusters, start=1):
+            for member_idx in sorted(member_indices):
+                assignments[assets[member_idx]] = cluster_label
+        return pd.Series(assignments, dtype=int)
+
+    def _average_linkage_distance(
+        self,
+        distance_matrix: np.ndarray,
+        left_members: set[int],
+        right_members: set[int],
+    ) -> float:
+        left_indices = np.array(sorted(left_members), dtype=int)
+        right_indices = np.array(sorted(right_members), dtype=int)
+        if left_indices.size == 0 or right_indices.size == 0:
+            return math.inf
+        pair_distances = distance_matrix[np.ix_(left_indices, right_indices)]
+        if pair_distances.size == 0:
+            return math.inf
+        return float(pair_distances.mean())
+
+    def _gini_from_distribution(self, values: np.ndarray) -> float:
+        clean_values = np.asarray(values, dtype=float)
+        clean_values = clean_values[np.isfinite(clean_values)]
+        if clean_values.size == 0:
+            return math.nan
+        if (clean_values < 0).any():
+            return math.nan
+        total = float(clean_values.sum())
+        if total <= 0:
+            return math.nan
+
+        sorted_values = np.sort(clean_values)
+        n = sorted_values.size
+        index = np.arange(1, n + 1, dtype=float)
+        gini = (2.0 * float((index * sorted_values).sum()) / (n * total)) - (
+            (n + 1.0) / n
+        )
+        return max(min(float(gini), 1.0), 0.0)
 
     def _run_quality_checks(
         self, normalized: pd.DataFrame, weights_by_date: pd.DataFrame
@@ -1084,6 +2529,13 @@ class DalioHolyGrailAnalyzer:
         corr_threshold: float,
         drift_threshold: float,
         pairwise_confidence: pd.DataFrame,
+        layer_b_summary: Dict[str, object],
+        layer_a_metrics_rolling: pd.DataFrame,
+        analysis_frequency: str,
+        covariance_method_effective: str,
+        covariance_window_effective: int,
+        assets_excluded_low_coverage: list[str],
+        layer_ab_input_frequency: str,
     ) -> Dict[str, object]:
         latest_date = pd.Timestamp(normalized["date"].max())
         excluded_weight_pct = (
@@ -1113,7 +2565,7 @@ class DalioHolyGrailAnalyzer:
         min_net_to_gross = (
             float(weights_by_date["net_to_gross"].min()) if not weights_by_date.empty else math.nan
         )
-        return {
+        management_rules = {
             "corr_threshold": corr_threshold,
             "corr_breach_count": int(len(high_corr_pairs)),
             "max_risk_contribution": max_risk_contribution,
@@ -1132,7 +2584,755 @@ class DalioHolyGrailAnalyzer:
             "min_net_to_gross_limit": self.min_net_to_gross,
             "quarterly_rebalance_due": bool(latest_date.is_quarter_end),
             "next_rebalance_date": str(latest_date + pd.offsets.QuarterEnd()),
+            "analysis_frequency": analysis_frequency,
+            "covariance_method_effective": covariance_method_effective,
+            "covariance_window_effective": covariance_window_effective,
+            "assets_excluded_low_coverage": assets_excluded_low_coverage,
+            "layer_ab_input_frequency": layer_ab_input_frequency,
         }
+        management_rules.update(layer_b_summary)
+        primary_window = self.layer_a_primary_window
+        primary_rows = layer_a_metrics_rolling.loc[
+            layer_a_metrics_rolling["window_months"] == primary_window
+        ].sort_values("date")
+        management_rules["layer_a_primary_window_months"] = primary_window
+
+        latest_primary = primary_rows.iloc[-1] if not primary_rows.empty else None
+        management_rules["layer_a_latest_avg_abs_corr"] = (
+            float(latest_primary["avg_abs_corr"]) if latest_primary is not None else math.nan
+        )
+        management_rules["layer_a_latest_high_corr_pair_share_pct"] = (
+            float(latest_primary["high_corr_pair_share_pct"])
+            if latest_primary is not None
+            else math.nan
+        )
+        management_rules["layer_a_latest_cluster_count"] = (
+            int(latest_primary["cluster_count"]) if latest_primary is not None else math.nan
+        )
+        management_rules["layer_a_latest_neff"] = (
+            float(latest_primary["neff"]) if latest_primary is not None else math.nan
+        )
+        management_rules["layer_a_latest_max_trc_share_pct"] = (
+            float(latest_primary["max_trc_share_pct"])
+            if latest_primary is not None
+            else math.nan
+        )
+        management_rules["layer_a_latest_n_rc"] = (
+            float(latest_primary["n_rc"]) if latest_primary is not None else math.nan
+        )
+        management_rules["layer_a_latest_diversification_ratio"] = (
+            float(latest_primary["diversification_ratio"])
+            if latest_primary is not None
+            else math.nan
+        )
+
+        layer_a_alert_high_corr = False
+        layer_a_alert_risk_concentration = False
+        layer_a_alert_low_independent_bets = False
+        if latest_primary is not None:
+            high_corr_value = float(latest_primary["high_corr_pair_share_pct"])
+            max_trc_value = float(latest_primary["max_trc_share_pct"])
+            n_rc_value = float(latest_primary["n_rc"])
+            neff_value = float(latest_primary["neff"])
+            layer_a_alert_high_corr = (
+                not pd.isna(high_corr_value)
+                and high_corr_value > 30.0
+            )
+            layer_a_alert_risk_concentration = (
+                not pd.isna(max_trc_value)
+                and max_trc_value > self.layer_a_trc_max_share_threshold * 100.0
+            )
+            layer_a_alert_low_independent_bets = (
+                (not pd.isna(n_rc_value) and n_rc_value < self.layer_a_min_n_rc)
+                or (not pd.isna(neff_value) and neff_value < self.layer_a_min_n_rc)
+            )
+
+        management_rules["layer_a_alert_high_corr"] = layer_a_alert_high_corr
+        management_rules["layer_a_alert_risk_concentration"] = layer_a_alert_risk_concentration
+        management_rules["layer_a_alert_low_independent_bets"] = layer_a_alert_low_independent_bets
+
+        primary_tail = primary_rows.tail(12)
+        if primary_tail.empty:
+            breach_rate = math.nan
+        else:
+            breach_flags = (
+                (
+                    primary_tail["high_corr_pair_share_pct"] > 30.0
+                )
+                | (
+                    primary_tail["max_trc_share_pct"]
+                    > self.layer_a_trc_max_share_threshold * 100.0
+                )
+                | (
+                    primary_tail["n_rc"] < self.layer_a_min_n_rc
+                )
+            )
+            breach_rate = float(breach_flags.mean() * 100.0)
+        management_rules["layer_a_breach_rate_last_12_obs_pct"] = breach_rate
+        return management_rules
+
+    def _score_high(self, value: float, floor: float, target: float) -> float:
+        if pd.isna(value):
+            return math.nan
+        if target <= floor:
+            raise ValueError("score_high target must be greater than floor.")
+        normalized = (float(value) - floor) / (target - floor)
+        clipped = float(np.clip(normalized, 0.0, 1.0))
+        return clipped * 100.0
+
+    def _score_low(self, value: float, good: float, bad: float) -> float:
+        if pd.isna(value):
+            return math.nan
+        if bad <= good:
+            raise ValueError("score_low bad must be greater than good.")
+        normalized = (bad - float(value)) / (bad - good)
+        clipped = float(np.clip(normalized, 0.0, 1.0))
+        return clipped * 100.0
+
+    def _weighted_metric_score(
+        self, metric_scores: Dict[str, float], metric_weights: Dict[str, float]
+    ) -> float:
+        weighted_sum = 0.0
+        available_weight = 0.0
+        for metric_name, metric_weight in metric_weights.items():
+            score_value = metric_scores.get(metric_name, math.nan)
+            if pd.isna(score_value):
+                continue
+            weighted_sum += float(score_value) * float(metric_weight)
+            available_weight += float(metric_weight)
+        if available_weight <= 0:
+            return math.nan
+        return weighted_sum / available_weight
+
+    def _robustness_distribution(
+        self, primary_rows: pd.DataFrame
+    ) -> tuple[Dict[str, Dict[str, float]], pd.DataFrame]:
+        tracked_metrics = [
+            "neff",
+            "avg_abs_corr",
+            "high_corr_pair_share_pct",
+            "max_trc_share_pct",
+            "n_rc",
+            "risk_gini",
+        ]
+        records: list[dict[str, object]] = []
+        stats: Dict[str, Dict[str, float]] = {}
+        for metric_name in tracked_metrics:
+            series = (
+                pd.to_numeric(primary_rows.get(metric_name), errors="coerce")
+                .dropna()
+                .astype(float)
+            )
+            if series.empty:
+                p10 = math.nan
+                median = math.nan
+                p90 = math.nan
+            else:
+                p10 = float(series.quantile(0.10))
+                median = float(series.median())
+                p90 = float(series.quantile(0.90))
+            stats[metric_name] = {"p10": p10, "median": median, "p90": p90}
+            records.append(
+                {
+                    "metric": metric_name,
+                    "p10": p10,
+                    "median": median,
+                    "p90": p90,
+                    "window_months": self.layer_a_primary_window,
+                }
+            )
+        return stats, pd.DataFrame(records)
+
+    def _build_red_flags(
+        self,
+        latest_primary: Optional[pd.Series],
+        primary_rows: pd.DataFrame,
+        layer_a_trc_rolling: pd.DataFrame,
+        robustness_stats: Dict[str, Dict[str, float]],
+        macro_metrics: Dict[str, float],
+        layer_b_enabled: bool,
+    ) -> list[dict[str, object]]:
+        flags: list[dict[str, object]] = []
+
+        def _append_flag(
+            code: str,
+            severity: str,
+            message: str,
+            value: object,
+            threshold: object,
+            context: Dict[str, object],
+        ) -> None:
+            flags.append(
+                {
+                    "code": code,
+                    "severity": severity,
+                    "message": message,
+                    "value": value,
+                    "threshold": threshold,
+                    "context": json.dumps(
+                        context, ensure_ascii=True, sort_keys=True, default=str
+                    ),
+                }
+            )
+
+        latest_date: Optional[pd.Timestamp] = None
+        if latest_primary is not None and "date" in latest_primary.index:
+            latest_date = pd.Timestamp(latest_primary["date"])
+
+        if latest_primary is not None:
+            max_trc_share_pct = float(latest_primary.get("max_trc_share_pct", math.nan))
+            if not pd.isna(max_trc_share_pct) and max_trc_share_pct > 35.0:
+                top_bucket = "unknown"
+                top_bucket_share_pct = math.nan
+                if latest_date is not None:
+                    latest_trc = layer_a_trc_rolling.loc[
+                        (layer_a_trc_rolling["date"] == latest_date)
+                        & (
+                            layer_a_trc_rolling["window_months"]
+                            == self.layer_a_primary_window
+                        )
+                    ].dropna(subset=["trc_share_abs"])
+                    if not latest_trc.empty:
+                        idx = latest_trc["trc_share_abs"].idxmax()
+                        top_bucket = str(latest_trc.loc[idx, "asset_bucket"])
+                        top_bucket_share_pct = float(
+                            latest_trc.loc[idx, "trc_share_abs"]
+                        ) * 100.0
+                _append_flag(
+                    code="RISK_CONCENTRATION_ASSET",
+                    severity="HIGH",
+                    message=(
+                        "Most portfolio risk is concentrated in '{}' (max TRC share "
+                        "{:.2f}%).".format(top_bucket, max_trc_share_pct)
+                    ),
+                    value=max_trc_share_pct,
+                    threshold=35.0,
+                    context={
+                        "asset_bucket": top_bucket,
+                        "asset_trc_share_pct": top_bucket_share_pct,
+                        "window_months": self.layer_a_primary_window,
+                    },
+                )
+
+            neff_value = float(latest_primary.get("neff", math.nan))
+            n_rc_value = float(latest_primary.get("n_rc", math.nan))
+            if (
+                (not pd.isna(neff_value) and neff_value < 4.0)
+                or (not pd.isna(n_rc_value) and n_rc_value < 4.0)
+            ):
+                low_independent_value = min(
+                    value
+                    for value in [neff_value, n_rc_value]
+                    if not pd.isna(value)
+                )
+                _append_flag(
+                    code="LOW_INDEPENDENT_BETS",
+                    severity="HIGH",
+                    message=(
+                        "Effective independent bets are low (neff={:.2f}, n_rc={:.2f})."
+                    ).format(neff_value, n_rc_value),
+                    value=low_independent_value,
+                    threshold=4.0,
+                    context={"neff": neff_value, "n_rc": n_rc_value},
+                )
+
+        volatility_rows = primary_rows.dropna(
+            subset=["portfolio_volatility", "avg_abs_corr"]
+        )
+        if not volatility_rows.empty:
+            top_count = max(1, int(math.ceil(len(volatility_rows) * 0.10)))
+            stress_rows = volatility_rows.nlargest(top_count, "portfolio_volatility")
+            stress_median_corr = float(stress_rows["avg_abs_corr"].median())
+            overall_median_corr = float(volatility_rows["avg_abs_corr"].median())
+            delta_corr = stress_median_corr - overall_median_corr
+            if stress_median_corr >= 0.75 and delta_corr >= 0.15:
+                _append_flag(
+                    code="CORR_COLLAPSE_IN_STRESS",
+                    severity="MEDIUM",
+                    message=(
+                        "Correlations collapse in stress windows (stress median "
+                        "avg_abs_corr={:.2f}, overall median={:.2f})."
+                    ).format(stress_median_corr, overall_median_corr),
+                    value=stress_median_corr,
+                    threshold=">=0.75 and delta>=0.15",
+                    context={
+                        "stress_median_avg_abs_corr": stress_median_corr,
+                        "overall_median_avg_abs_corr": overall_median_corr,
+                        "delta_avg_abs_corr": delta_corr,
+                        "stress_window_count": top_count,
+                    },
+                )
+
+        p10_neff = robustness_stats.get("neff", {}).get("p10", math.nan)
+        p90_max_trc = robustness_stats.get("max_trc_share_pct", {}).get("p90", math.nan)
+        p90_high_corr = robustness_stats.get("high_corr_pair_share_pct", {}).get(
+            "p90", math.nan
+        )
+        if (
+            (not pd.isna(p10_neff) and p10_neff < 3.0)
+            or (not pd.isna(p90_max_trc) and p90_max_trc > 45.0)
+            or (not pd.isna(p90_high_corr) and p90_high_corr > 60.0)
+        ):
+            _append_flag(
+                code="UNSTABLE_ROLLING_PROFILE",
+                severity="MEDIUM",
+                message=(
+                    "Rolling profile is unstable: p10(neff)={:.2f}, "
+                    "p90(max_trc_share_pct)={:.2f}, "
+                    "p90(high_corr_pair_share_pct)={:.2f}."
+                ).format(p10_neff, p90_max_trc, p90_high_corr),
+                value=p90_max_trc if not pd.isna(p90_max_trc) else p10_neff,
+                threshold="p10(neff)<3 or p90(max_trc)>45 or p90(high_corr)>60",
+                context={
+                    "p10_neff": p10_neff,
+                    "p90_max_trc_share_pct": p90_max_trc,
+                    "p90_high_corr_pair_share_pct": p90_high_corr,
+                },
+            )
+
+        if layer_b_enabled:
+            max_factor_share = float(
+                macro_metrics.get("max_factor_trc_share_pct", math.nan)
+            )
+            factor_hhi = float(macro_metrics.get("factor_hhi", math.nan))
+            residual_share = float(
+                macro_metrics.get("residual_risk_share_pct", math.nan)
+            )
+            factor_coverage = float(macro_metrics.get("factor_coverage_pct", math.nan))
+            if (
+                (not pd.isna(max_factor_share) and max_factor_share > 35.0)
+                or (not pd.isna(factor_hhi) and factor_hhi > 0.35)
+            ):
+                _append_flag(
+                    code="FACTOR_CONCENTRATION",
+                    severity="HIGH",
+                    message=(
+                        "Factor risk is concentrated (max_factor_trc_share_pct={:.2f}, "
+                        "factor_hhi={:.3f})."
+                    ).format(max_factor_share, factor_hhi),
+                    value=max_factor_share if not pd.isna(max_factor_share) else factor_hhi,
+                    threshold="max_factor_trc_share_pct>35 or factor_hhi>0.35",
+                    context={
+                        "max_factor_trc_share_pct": max_factor_share,
+                        "factor_hhi": factor_hhi,
+                    },
+                )
+            if (
+                (not pd.isna(factor_coverage) and factor_coverage < 80.0)
+                or (not pd.isna(residual_share) and residual_share > 40.0)
+            ):
+                _append_flag(
+                    code="LOW_FACTOR_COVERAGE_OR_HIGH_RESIDUAL",
+                    severity="HIGH",
+                    message=(
+                        "Layer B quality warning (factor_coverage_pct={:.2f}, "
+                        "residual_risk_share_pct={:.2f})."
+                    ).format(factor_coverage, residual_share),
+                    value=residual_share if not pd.isna(residual_share) else factor_coverage,
+                    threshold="factor_coverage_pct<80 or residual_risk_share_pct>40",
+                    context={
+                        "factor_coverage_pct": factor_coverage,
+                        "residual_risk_share_pct": residual_share,
+                    },
+                )
+        return flags
+
+    def _holy_grail_class(self, score: float) -> str:
+        if pd.isna(score):
+            return "Unavailable"
+        if score >= 85.0:
+            return "Strong"
+        if score >= 70.0:
+            return "Good"
+        if score >= 55.0:
+            return "Watch"
+        return "Weak"
+
+    def _holy_grail_verdict(
+        self,
+        layer_a_metrics_rolling: pd.DataFrame,
+        layer_a_trc_rolling: pd.DataFrame,
+        factor_risk_contribution_rolling: pd.DataFrame,
+        factor_residual_risk_rolling: pd.DataFrame,
+        layer_b_enabled: bool,
+    ) -> tuple[Dict[str, object], pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        primary_rows = layer_a_metrics_rolling.loc[
+            layer_a_metrics_rolling["window_months"] == self.layer_a_primary_window
+        ].sort_values("date")
+        latest_primary = primary_rows.iloc[-1] if not primary_rows.empty else None
+
+        independence_weights = {
+            "neff": 0.50,
+            "avg_abs_corr": 0.25,
+            "high_corr_pair_share_pct": 0.25,
+        }
+        balance_weights = {
+            "max_trc_share_pct": 0.40,
+            "n_rc": 0.35,
+            "risk_gini": 0.25,
+        }
+        macro_weights = {
+            "max_factor_trc_share_pct": 0.35,
+            "factor_hhi": 0.30,
+            "factor_n_rc": 0.20,
+            "factor_gini": 0.15,
+        }
+
+        latest_metrics = {
+            "neff": (
+                float(latest_primary["neff"]) if latest_primary is not None else math.nan
+            ),
+            "avg_abs_corr": (
+                float(latest_primary["avg_abs_corr"])
+                if latest_primary is not None
+                else math.nan
+            ),
+            "high_corr_pair_share_pct": (
+                float(latest_primary["high_corr_pair_share_pct"])
+                if latest_primary is not None
+                else math.nan
+            ),
+            "max_trc_share_pct": (
+                float(latest_primary["max_trc_share_pct"])
+                if latest_primary is not None
+                else math.nan
+            ),
+            "n_rc": (
+                float(latest_primary["n_rc"]) if latest_primary is not None else math.nan
+            ),
+            "risk_gini": (
+                float(latest_primary["risk_gini"])
+                if latest_primary is not None
+                else math.nan
+            ),
+        }
+
+        independence_metric_scores = {
+            "neff": self._score_high(latest_metrics["neff"], floor=1.0, target=8.0),
+            "avg_abs_corr": self._score_low(
+                latest_metrics["avg_abs_corr"], good=0.20, bad=0.70
+            ),
+            "high_corr_pair_share_pct": self._score_low(
+                latest_metrics["high_corr_pair_share_pct"], good=10.0, bad=30.0
+            ),
+        }
+        balance_metric_scores = {
+            "max_trc_share_pct": self._score_low(
+                latest_metrics["max_trc_share_pct"], good=20.0, bad=35.0
+            ),
+            "n_rc": self._score_high(latest_metrics["n_rc"], floor=1.0, target=8.0),
+            "risk_gini": self._score_low(
+                latest_metrics["risk_gini"], good=0.20, bad=0.60
+            ),
+        }
+        independence_score = self._weighted_metric_score(
+            independence_metric_scores, independence_weights
+        )
+        balance_score = self._weighted_metric_score(
+            balance_metric_scores, balance_weights
+        )
+
+        robustness_stats, robustness_table = self._robustness_distribution(primary_rows)
+        independence_median_score = self._weighted_metric_score(
+            {
+                "neff": self._score_high(
+                    robustness_stats["neff"]["median"], floor=1.0, target=8.0
+                ),
+                "avg_abs_corr": self._score_low(
+                    robustness_stats["avg_abs_corr"]["median"], good=0.20, bad=0.70
+                ),
+                "high_corr_pair_share_pct": self._score_low(
+                    robustness_stats["high_corr_pair_share_pct"]["median"],
+                    good=10.0,
+                    bad=30.0,
+                ),
+            },
+            independence_weights,
+        )
+        balance_median_score = self._weighted_metric_score(
+            {
+                "max_trc_share_pct": self._score_low(
+                    robustness_stats["max_trc_share_pct"]["median"],
+                    good=20.0,
+                    bad=35.0,
+                ),
+                "n_rc": self._score_high(
+                    robustness_stats["n_rc"]["median"], floor=1.0, target=8.0
+                ),
+                "risk_gini": self._score_low(
+                    robustness_stats["risk_gini"]["median"], good=0.20, bad=0.60
+                ),
+            },
+            balance_weights,
+        )
+        median_composite = self._weighted_metric_score(
+            {
+                "independence": independence_median_score,
+                "balance": balance_median_score,
+            },
+            {"independence": 0.50, "balance": 0.50},
+        )
+
+        independence_tail_score = self._weighted_metric_score(
+            {
+                "neff": self._score_high(
+                    robustness_stats["neff"]["p10"], floor=1.0, target=8.0
+                ),
+                "avg_abs_corr": self._score_low(
+                    robustness_stats["avg_abs_corr"]["p90"], good=0.20, bad=0.70
+                ),
+                "high_corr_pair_share_pct": self._score_low(
+                    robustness_stats["high_corr_pair_share_pct"]["p90"],
+                    good=10.0,
+                    bad=30.0,
+                ),
+            },
+            independence_weights,
+        )
+        balance_tail_score = self._weighted_metric_score(
+            {
+                "max_trc_share_pct": self._score_low(
+                    robustness_stats["max_trc_share_pct"]["p90"],
+                    good=20.0,
+                    bad=35.0,
+                ),
+                "n_rc": self._score_high(
+                    robustness_stats["n_rc"]["p10"], floor=1.0, target=8.0
+                ),
+                "risk_gini": self._score_low(
+                    robustness_stats["risk_gini"]["p90"], good=0.20, bad=0.60
+                ),
+            },
+            balance_weights,
+        )
+        tail_composite = self._weighted_metric_score(
+            {
+                "independence": independence_tail_score,
+                "balance": balance_tail_score,
+            },
+            {"independence": 0.50, "balance": 0.50},
+        )
+        robustness_score = self._weighted_metric_score(
+            {"median": median_composite, "tail": tail_composite},
+            {"median": 0.60, "tail": 0.40},
+        )
+
+        latest_macro_metrics = {
+            "max_factor_trc_share_pct": math.nan,
+            "factor_hhi": math.nan,
+            "factor_n_rc": math.nan,
+            "factor_gini": math.nan,
+            "residual_risk_share_pct": math.nan,
+            "factor_coverage_pct": math.nan,
+        }
+        if layer_b_enabled and not factor_risk_contribution_rolling.empty:
+            latest_factor_date = pd.Timestamp(
+                factor_risk_contribution_rolling["date"].max()
+            )
+            latest_factor_rows = factor_risk_contribution_rolling.loc[
+                factor_risk_contribution_rolling["date"] == latest_factor_date
+            ]
+            max_share_values = latest_factor_rows["max_share_pct"].dropna()
+            factor_hhi_values = latest_factor_rows["factor_hhi"].dropna()
+            factor_n_rc_values = latest_factor_rows["factor_n_rc"].dropna()
+            factor_gini_values = latest_factor_rows["factor_gini"].dropna()
+            latest_macro_metrics.update(
+                {
+                    "max_factor_trc_share_pct": (
+                        float(max_share_values.iloc[0])
+                        if not max_share_values.empty
+                        else math.nan
+                    ),
+                    "factor_hhi": (
+                        float(factor_hhi_values.iloc[0])
+                        if not factor_hhi_values.empty
+                        else math.nan
+                    ),
+                    "factor_n_rc": (
+                        float(factor_n_rc_values.iloc[0])
+                        if not factor_n_rc_values.empty
+                        else math.nan
+                    ),
+                    "factor_gini": (
+                        float(factor_gini_values.iloc[0])
+                        if not factor_gini_values.empty
+                        else math.nan
+                    ),
+                }
+            )
+        if layer_b_enabled and not factor_residual_risk_rolling.empty:
+            latest_residual_row = factor_residual_risk_rolling.sort_values("date").iloc[-1]
+            latest_macro_metrics.update(
+                {
+                    "residual_risk_share_pct": float(
+                        latest_residual_row.get("residual_risk_share_pct", math.nan)
+                    ),
+                    "factor_coverage_pct": float(
+                        latest_residual_row.get("factor_coverage_pct", math.nan)
+                    ),
+                }
+            )
+
+        macro_metric_scores = {
+            "max_factor_trc_share_pct": self._score_low(
+                latest_macro_metrics["max_factor_trc_share_pct"], good=25.0, bad=40.0
+            ),
+            "factor_hhi": self._score_low(
+                latest_macro_metrics["factor_hhi"], good=0.20, bad=0.40
+            ),
+            "factor_n_rc": self._score_high(
+                latest_macro_metrics["factor_n_rc"], floor=1.0, target=4.0
+            ),
+            "factor_gini": self._score_low(
+                latest_macro_metrics["factor_gini"], good=0.20, bad=0.60
+            ),
+        }
+        macro_score = self._weighted_metric_score(macro_metric_scores, macro_weights)
+        macro_available = layer_b_enabled and not pd.isna(macro_score)
+
+        component_scores = {
+            "independence": independence_score,
+            "balance": balance_score,
+            "robustness": robustness_score,
+            "macro": macro_score if macro_available else math.nan,
+        }
+
+        effective_weights = {name: 0.0 for name in HOLY_GRAIL_COMPONENT_WEIGHTS}
+        available_components = [
+            name
+            for name, score in component_scores.items()
+            if not pd.isna(score)
+        ]
+        if available_components:
+            raw_weight_total = float(
+                sum(HOLY_GRAIL_COMPONENT_WEIGHTS[name] for name in available_components)
+            )
+            for component_name in available_components:
+                effective_weights[component_name] = (
+                    HOLY_GRAIL_COMPONENT_WEIGHTS[component_name] / raw_weight_total * 100.0
+                )
+            holy_grail_score = float(
+                sum(
+                    component_scores[component_name]
+                    * effective_weights[component_name]
+                    / 100.0
+                    for component_name in available_components
+                )
+            )
+        else:
+            holy_grail_score = math.nan
+
+        rounded_score = round(float(holy_grail_score), 2) if not pd.isna(holy_grail_score) else math.nan
+        red_flags = self._build_red_flags(
+            latest_primary=latest_primary,
+            primary_rows=primary_rows,
+            layer_a_trc_rolling=layer_a_trc_rolling,
+            robustness_stats=robustness_stats,
+            macro_metrics=latest_macro_metrics,
+            layer_b_enabled=layer_b_enabled,
+        )
+        red_flags_table = pd.DataFrame(
+            red_flags,
+            columns=["code", "severity", "message", "value", "threshold", "context"],
+        )
+
+        scorecard_rows = []
+        component_order = ["independence", "balance", "robustness", "macro"]
+        for component_name in component_order:
+            component_score = component_scores[component_name]
+            effective_weight = float(effective_weights.get(component_name, 0.0))
+            weighted_score = (
+                float(component_score) * effective_weight / 100.0
+                if not pd.isna(component_score) and effective_weight > 0
+                else math.nan
+            )
+            scorecard_rows.append(
+                {
+                    "component": component_name,
+                    "available": component_name in available_components,
+                    "score": component_score,
+                    "weight_pct_raw": HOLY_GRAIL_COMPONENT_WEIGHTS[component_name],
+                    "weight_pct_effective": effective_weight,
+                    "weighted_score": weighted_score,
+                }
+            )
+        scorecard_rows.append(
+            {
+                "component": "total",
+                "available": True,
+                "score": rounded_score,
+                "weight_pct_raw": 100.0,
+                "weight_pct_effective": 100.0,
+                "weighted_score": rounded_score,
+            }
+        )
+        scorecard = pd.DataFrame(scorecard_rows)
+
+        verdict = {
+            "holy_grail_score": rounded_score,
+            "holy_grail_class": self._holy_grail_class(rounded_score),
+            "macro_policy": "renormalize",
+            "macro_available": macro_available,
+            "component_scores": {
+                component_name: (
+                    round(float(component_scores[component_name]), 2)
+                    if not pd.isna(component_scores[component_name])
+                    else math.nan
+                )
+                for component_name in component_order
+            },
+            "component_weight_pct": dict(HOLY_GRAIL_COMPONENT_WEIGHTS),
+            "effective_component_weight_pct": effective_weights,
+            "latest_metrics": latest_metrics,
+            "robustness_summary": {
+                "median_composite": median_composite,
+                "tail_composite": tail_composite,
+                "robustness_score": robustness_score,
+            },
+            "macro_metrics_latest": latest_macro_metrics,
+            "red_flag_count": int(len(red_flags)),
+            "red_flags": red_flags,
+        }
+        return verdict, scorecard, robustness_table, red_flags_table
+
+
+def format_holy_grail_cli_lines(
+    verdict: Dict[str, object], max_red_flags: int = 3
+) -> list[str]:
+    score = verdict.get("holy_grail_score", math.nan)
+    score_class = str(verdict.get("holy_grail_class", "Unavailable"))
+    if pd.isna(score):
+        score_line = f"Holy Grail score: n/a ({score_class})"
+    else:
+        score_line = f"Holy Grail score: {float(score):.2f} ({score_class})"
+
+    component_scores = verdict.get("component_scores", {})
+    component_line = (
+        "Component scores: "
+        "independence={independence}, balance={balance}, robustness={robustness}, macro={macro}".format(
+            independence=_format_score_value(component_scores.get("independence", math.nan)),
+            balance=_format_score_value(component_scores.get("balance", math.nan)),
+            robustness=_format_score_value(component_scores.get("robustness", math.nan)),
+            macro=_format_score_value(component_scores.get("macro", math.nan)),
+        )
+    )
+
+    flags = verdict.get("red_flags", [])
+    if isinstance(flags, list) and flags:
+        lines = [score_line, component_line, "Red flags:"]
+        for flag in flags[: max_red_flags]:
+            code = str(flag.get("code", "UNKNOWN"))
+            severity = str(flag.get("severity", "INFO"))
+            message = str(flag.get("message", ""))
+            lines.append(f"- [{severity}] {code}: {message}")
+        return lines
+    return [score_line, component_line, "Red flags: none"]
+
+
+def _format_score_value(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{float(value):.2f}"
 
 
 def _parse_fx_rates(fx_args: Optional[list[str]]) -> Dict[str, float]:
@@ -1156,6 +3356,21 @@ def _parse_target_weights(raw_weights: Optional[str]) -> Optional[Dict[str, floa
     return {str(k): float(v) for k, v in parsed.items()}
 
 
+def _parse_layer_a_windows(raw_windows: str) -> tuple[int, ...]:
+    windows = []
+    for token in raw_windows.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        windows.append(int(token))
+    if not windows:
+        raise ValueError("Layer A windows must contain at least one integer.")
+    unique = sorted({window for window in windows if window > 0})
+    if not unique:
+        raise ValueError("Layer A windows must be positive integers.")
+    return tuple(unique)
+
+
 def _load_fx_history(path: Optional[str]) -> Optional[pd.DataFrame]:
     if not path:
         return None
@@ -1169,6 +3384,12 @@ def _load_fx_history(path: Optional[str]) -> Optional[pd.DataFrame]:
                 "(or 'fx_rate') column."
             )
     return fx_history
+
+
+def _load_factor_returns(path: Optional[str]) -> Optional[pd.DataFrame]:
+    if not path:
+        return None
+    return pd.read_csv(path)
 
 
 def _build_cli() -> argparse.ArgumentParser:
@@ -1229,6 +3450,18 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Input unit for return_pct column.",
     )
     parser.add_argument(
+        "--return-type",
+        choices=["simple", "log"],
+        default="simple",
+        help="Return transformation used for analysis.",
+    )
+    parser.add_argument(
+        "--analysis-frequency",
+        choices=["auto", "daily", "monthly"],
+        default="auto",
+        help="Analysis frequency. 'auto' detects daily vs monthly from date spacing.",
+    )
+    parser.add_argument(
         "--allow-partial-scenarios",
         action="store_true",
         help=(
@@ -1266,8 +3499,8 @@ def _build_cli() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--covariance-method",
-        choices=["sample", "ewma"],
-        default="sample",
+        choices=["ledoit-wolf", "sample", "ewma"],
+        default="ledoit-wolf",
         help="Covariance estimator for risk contribution and volatility.",
     )
     parser.add_argument(
@@ -1282,6 +3515,117 @@ def _build_cli() -> argparse.ArgumentParser:
         default=24,
         help="Minimum overlapping observations for HIGH confidence pairwise stats.",
     )
+    parser.add_argument(
+        "--min-asset-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Minimum per-asset coverage required for covariance inclusion.",
+    )
+    parser.add_argument(
+        "--covariance-window",
+        type=int,
+        default=None,
+        help=(
+            "Optional trailing observation window for covariance estimation. "
+            "Defaults to 252 for daily and full history for monthly."
+        ),
+    )
+    parser.add_argument(
+        "--factor-input-csv",
+        default=None,
+        help=(
+            "Optional wide CSV with factor returns. Required columns: "
+            "date,growth,inflation,real_rates,credit_liquidity."
+        ),
+    )
+    parser.add_argument(
+        "--layer-b-window-months",
+        type=int,
+        default=36,
+        help="Rolling window size (months) for Layer B factor modeling.",
+    )
+    parser.add_argument(
+        "--layer-b-min-observations",
+        type=int,
+        default=24,
+        help="Minimum aligned observations needed for Layer B OLS.",
+    )
+    parser.add_argument(
+        "--layer-b-require-data",
+        action="store_true",
+        help="Require factor input CSV and fail if Layer B cannot run.",
+    )
+    parser.add_argument(
+        "--layer-b-collinearity-cond-threshold",
+        type=float,
+        default=30.0,
+        help="Condition number threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--layer-b-vif-threshold",
+        type=float,
+        default=10.0,
+        help="VIF threshold for Layer B collinearity flag.",
+    )
+    parser.add_argument(
+        "--layer-b-max-factor-trc-share",
+        type=float,
+        default=0.35,
+        help="Alert threshold for max factor TRC share (fraction).",
+    )
+    parser.add_argument(
+        "--layer-b-factor-hhi-threshold",
+        type=float,
+        default=0.35,
+        help="Alert threshold for factor HHI concentration.",
+    )
+    parser.add_argument(
+        "--layer-b-residual-share-threshold",
+        type=float,
+        default=0.40,
+        help="Alert threshold for residual risk share (fraction).",
+    )
+    parser.add_argument(
+        "--layer-b-min-coverage-pct",
+        type=float,
+        default=80.0,
+        help="Alert threshold for minimum factor coverage percentage.",
+    )
+    parser.add_argument(
+        "--layer-a-windows",
+        default="12,24,36",
+        help="Comma-separated rolling windows (months) for Layer A metrics.",
+    )
+    parser.add_argument(
+        "--layer-a-high-corr-threshold",
+        type=float,
+        default=0.70,
+        help="Pair-level absolute correlation threshold used in Layer A metrics.",
+    )
+    parser.add_argument(
+        "--layer-a-cluster-corr-cutoff",
+        type=float,
+        default=0.70,
+        help="Correlation cutoff for NumPy HAC clustering in Layer A.",
+    )
+    parser.add_argument(
+        "--layer-a-trc-max-share",
+        type=float,
+        default=0.35,
+        help="Maximum allowed absolute TRC share (fraction) before Layer A alert.",
+    )
+    parser.add_argument(
+        "--layer-a-min-n-rc",
+        type=float,
+        default=4.0,
+        help="Minimum effective number of risk contributors before Layer A alert.",
+    )
+    parser.add_argument(
+        "--layer-a-primary-window",
+        type=int,
+        default=36,
+        help="Primary Layer A rolling window used for summary alerts.",
+    )
     return parser
 
 
@@ -1295,7 +3639,10 @@ def main() -> int:
         base_currency=args.base_currency,
         fx_rates=_parse_fx_rates(args.fx),
         fx_history=_load_fx_history(args.fx_file),
+        factor_returns=_load_factor_returns(args.factor_input_csv),
         return_unit=args.return_unit,
+        return_type=args.return_type,
+        analysis_frequency=args.analysis_frequency,
         allow_partial_scenarios=args.allow_partial_scenarios,
         allow_unmapped_factors=args.allow_unmapped_factors,
         allow_shorts=args.allow_shorts,
@@ -1304,6 +3651,23 @@ def main() -> int:
         covariance_method=args.covariance_method,
         ewma_alpha=args.ewma_alpha,
         min_pair_overlap=args.min_pair_overlap,
+        min_asset_coverage_pct=args.min_asset_coverage_pct,
+        covariance_window=args.covariance_window,
+        layer_b_window_months=args.layer_b_window_months,
+        layer_b_min_observations=args.layer_b_min_observations,
+        layer_b_require_data=args.layer_b_require_data,
+        layer_b_collinearity_cond_threshold=args.layer_b_collinearity_cond_threshold,
+        layer_b_vif_threshold=args.layer_b_vif_threshold,
+        layer_b_max_factor_trc_share=args.layer_b_max_factor_trc_share,
+        layer_b_factor_hhi_threshold=args.layer_b_factor_hhi_threshold,
+        layer_b_residual_share_threshold=args.layer_b_residual_share_threshold,
+        layer_b_min_coverage_pct=args.layer_b_min_coverage_pct,
+        layer_a_windows=_parse_layer_a_windows(args.layer_a_windows),
+        layer_a_high_corr_threshold=args.layer_a_high_corr_threshold,
+        layer_a_cluster_corr_cutoff=args.layer_a_cluster_corr_cutoff,
+        layer_a_trc_max_share_threshold=args.layer_a_trc_max_share,
+        layer_a_min_n_rc=args.layer_a_min_n_rc,
+        layer_a_primary_window=args.layer_a_primary_window,
     )
     result = analyzer.run_analysis(
         corr_threshold=args.corr_threshold,
@@ -1316,6 +3680,8 @@ def main() -> int:
     print("Analysis complete.")
     print("Diversification metrics:", result.diversification_metrics)
     print("Management rules:", result.management_rules)
+    for line in format_holy_grail_cli_lines(result.holy_grail_verdict, max_red_flags=3):
+        print(line)
     return 0
 
 
