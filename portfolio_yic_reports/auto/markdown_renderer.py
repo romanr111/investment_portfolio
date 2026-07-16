@@ -151,8 +151,10 @@ def render_equity_table(
     Equity weights are computed against the equity-only total (stocks,
     excluding bonds/metals/commodities/BILLs) so the active weights sum to
     100%. The special-assets table uses the combined IB total.
+    Closed positions use the start-period equity total as denominator.
     """
     equity_total = equity_total_value(end_snap)
+    start_equity_total = equity_total_value(start_snap)
     combined_total = equity_total + special_assets_value(end_snap)
     syms = all_symbols(start_snap, end_snap)
     analyses: List[PositionAnalysis] = []
@@ -165,7 +167,9 @@ def render_equity_table(
         end_is_bill = end_rec is not None and end_rec.asset_category == "BILL"
         if start_is_bill or end_is_bill:
             continue
-        a = analyze_position(symbol, start_snap, end_snap, equity_total)
+        a = analyze_position(
+            symbol, start_snap, end_snap, equity_total, start_equity_total
+        )
         if a is not None:
             analyses.append(a)
 
@@ -225,6 +229,8 @@ def render_equity_table(
             [bills_analysis] if bills_analysis else []
         ),
         total_value=combined_total,
+        start_total_value=start_equity_total
+        + special_assets_value(start_snap),
     )
     if special_table:
         lines.append("")
@@ -241,8 +247,13 @@ def render_special_assets_table(
     end_snap: SnapshotData,
     analyses_with_bills: List[PositionAnalysis],
     total_value: float,
+    start_total_value: float = 0.0,
 ) -> str:
-    """Render the bonds/metals/commodities markdown table."""
+    """Render the bonds/metals/commodities markdown table.
+
+    Closed positions use ``start_total_value`` as denominator; if 0,
+    falls back to ``total_value`` (end-period).
+    """
     lines = [
         "| Позиція | Остання активність | Середня ціна входу | "
         "Вага (від загальної вартості) |",
@@ -254,7 +265,9 @@ def render_special_assets_table(
     for symbol in syms:
         if symbol not in SPECIAL_ASSET_TICKERS:
             continue
-        a = analyze_position(symbol, start_snap, end_snap, total_value)
+        a = analyze_position(
+            symbol, start_snap, end_snap, total_value, start_total_value
+        )
         if a is None or (not a.activity.strip() and a.avg_entry_price == 0.0):
             continue
         price_cell = _fmt_price_cell(symbol, a, end_snap)

@@ -125,9 +125,10 @@ def equity_total_value(snap: SnapshotData) -> float:
 
 
 def special_assets_value(snap: SnapshotData) -> float:
+    """Sum USD values of special assets (bonds, metals, commodities, BILLS)."""
     total = 0.0
     for symbol, rec in snap.positions.items():
-        if symbol in SPECIAL_ASSET_TICKERS:
+        if symbol in SPECIAL_ASSET_TICKERS or rec.asset_category == "BILL":
             total += usd_value(rec)
     return total
 
@@ -137,8 +138,15 @@ def analyze_position(
     start_snap: SnapshotData,
     end_snap: SnapshotData,
     total_value_for_weight: float,
+    start_total_value_for_weight: float = 0.0,
 ) -> Optional[PositionAnalysis]:
-    """Classify a single position's activity between two snapshots."""
+    """Classify a single position's activity between two snapshots.
+
+    ``total_value_for_weight`` is the end-period total used for open/new
+    positions. ``start_total_value_for_weight`` is the start-period total
+    used for closed (eliminated) positions; if 0, falls back to the
+    end-period total for backward compatibility.
+    """
     start_rec = start_snap.positions.get(symbol)
     end_rec = end_snap.positions.get(symbol)
 
@@ -151,6 +159,8 @@ def analyze_position(
     price_pct = 0.0
     special = is_special_asset(symbol)
     china_eq = symbol in CHINA_EQUITY_SYMBOLS
+
+    is_closed = False
 
     if start_rec and end_rec:
         if start_rec.shares > 0:
@@ -178,13 +188,18 @@ def analyze_position(
         _, avg_exit = sell_trades_for(end_snap, symbol)
         if avg_entry > 0 and avg_exit > 0:
             price_pct = ((avg_exit - avg_entry) / avg_entry) * 100
+        is_closed = True
     elif end_rec and not start_rec:
         activity = f"{ICON_NEW} {NEW_POSITION}"
         avg_entry = end_rec.cost_basis_price
         price_pct = price_change_pct(end_rec.cost_basis_price, end_rec.mark_price)
 
     weight = 0.0
-    if end_rec and total_value_for_weight > 0:
+    if is_closed and start_rec:
+        denom = start_total_value_for_weight or total_value_for_weight
+        if denom > 0:
+            weight = (usd_value(start_rec) / denom) * 100
+    elif end_rec and total_value_for_weight > 0:
         weight = (usd_value(end_rec) / total_value_for_weight) * 100
     elif start_rec and total_value_for_weight > 0:
         weight = (usd_value(start_rec) / total_value_for_weight) * 100
