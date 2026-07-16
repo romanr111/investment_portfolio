@@ -129,6 +129,63 @@ class TestPositionAnalyzer(unittest.TestCase):
         self.assertGreater(rest, 0)
         self.assertAlmostEqual(china + rest, 100, places=2)
 
+    def test_closed_position_uses_start_denominator(self):
+        """Closed position weight should use start-period equity total."""
+        from portfolio_yic_reports.auto.position_analyzer import (
+            analyze_position,
+            equity_total_value,
+        )
+
+        start_eq = equity_total_value(self.start)
+        end_eq = equity_total_value(self.end)
+        # VOO is closed (exists in start, not in end)
+        a = analyze_position("VOO", self.start, self.end, end_eq, start_eq)
+        self.assertIsNotNone(a)
+        self.assertIn("Закрита", a.activity)
+        # Weight should be start_value / start_equity_total, not / end_equity_total
+        voo_start_val = self.start.positions["VOO"].position_value
+        expected_weight = (voo_start_val / start_eq) * 100
+        self.assertAlmostEqual(a.weight, expected_weight, places=2)
+        # Verify it differs from end-period denom
+        end_denom_weight = (voo_start_val / end_eq) * 100
+        self.assertNotAlmostEqual(a.weight, end_denom_weight, places=2)
+
+    def test_special_assets_value_includes_bills(self):
+        """special_assets_value must include BILL positions (CUSIPs)."""
+        from portfolio_yic_reports.auto.position_analyzer import (
+            special_assets_value,
+        )
+
+        val = special_assets_value(self.end)
+        # End snapshot has a BILL position (912797PV3) worth 32762.02
+        self.assertGreater(val, 32762)
+
+    def test_lazy_init_no_filters_constants(self):
+        """portfolio_yic_reports.__init__ must not import data.filters_constants."""
+        import sys
+
+        # Block the module to simulate a clean checkout
+        original = sys.modules.pop("data.filters_constants", None)
+        sys.modules["data.filters_constants"] = None
+        try:
+            # Force re-import of the package
+            for mod in list(sys.modules.keys()):
+                if mod.startswith("portfolio_yic_reports."):
+                    del sys.modules[mod]
+            if "portfolio_yic_reports" in sys.modules:
+                del sys.modules["portfolio_yic_reports"]
+            import portfolio_yic_reports
+
+            # Accessing auto subpackage should work
+            from portfolio_yic_reports.auto import cli
+
+            self.assertTrue(True)
+        finally:
+            if original is not None:
+                sys.modules["data.filters_constants"] = original
+            else:
+                del sys.modules["data.filters_constants"]
+
 
 class TestCombinedLoader(unittest.TestCase):
     def test_match_combined_snapshot(self):

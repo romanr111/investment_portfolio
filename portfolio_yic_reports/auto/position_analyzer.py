@@ -1,7 +1,7 @@
 """Position-level analysis: activity classification and ratio calculations."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .config import (
     CHINA_EQUITY_SYMBOLS,
