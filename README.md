@@ -278,3 +278,30 @@ Migration note:
 ```bash
 python3 -m unittest discover -s tests
 ```
+
+## Quarterly Report (`just report`)
+
+Generates `portfolio_yic_reports/REPORT_YYYY_qN.md` - a Ukrainian quarterly portfolio report combining IB Flex portfolio snapshots, allocation diff, performance metrics, and Dalio risk analysis.
+
+```bash
+just report                              # last completed quarter
+just report -- --year 2025 --quarter 4   # specific quarter
+just report -- --skip-dalio               # omit Dalio section
+just report -- --snapshot-start path.xml --snapshot-end path.xml  # manual snapshots
+```
+
+Prerequisites:
+- IB Flex query `1188471` (`stocks_count_trades`) configured with Open Positions + Trades sections, Period = Last Business Day, Format = XML.
+- Add to `data/ib_flex_env.sh`:
+  ```bash
+  export IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT=1188471
+  ```
+- Use `just fetch-snapshot` to download a fresh snapshot into `data/ib_flex_snapshots/`.
+
+Data sources:
+- Positions/trades: IB Flex snapshots matched by `toDate` in XML filename.
+- Allocation diff: `data/portfolio_history.csv` (month-end bucket values).
+- Section 3 (YTD TWR, dividends, freedom progress): `data/snapshots/combined_data_*.json` nearest to quarter boundaries.
+- Dalio: `analytics/output/summary.json`.
+
+If the quarter is not yet complete or no matching snapshot exists, the command refuses with a clear error.

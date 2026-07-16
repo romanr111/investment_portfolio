@@ -19,3 +19,12 @@ test:
 
 run:
     venv/bin/python -m src.portfolio_sync
+
+# Generate the quarterly YIC portfolio report (last completed quarter).
+# Optional flags: year, quarter, snapshot-start, snapshot-end, skip-dalio, output-dir.
+report *args='':
+    venv/bin/python -m portfolio_yic_reports.auto.cli {{args}}
+
+# Fetch a fresh IB Flex portfolio snapshot (query 1188471) and save it.
+fetch-snapshot:
+    venv/bin/python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; print(IBFlexPortfolioFetcher().fetch_and_save())"

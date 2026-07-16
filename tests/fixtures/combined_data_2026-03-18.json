@@ -1,0 +1,21 @@
+{
+  "as_of_date": "2026-03-18",
+  "saved_at_utc": "2026-03-18T20:06:54Z",
+  "source": "test",
+  "data": {
+    "IB_PERFORMANCE": {
+      "period": "YTD",
+      "rate_of_return_pct": -6.84,
+      "measure": "TWR",
+      "source": "ib_flex_activity_statement",
+      "error": null
+    },
+    "TOTAL_ASSETS": 157781,
+    "FIN_FREEDOM_GOAL_PROGRESS": "31.56%",
+    "FIXED_INCOME_DATA": {
+      "yearly_earnings_fixed_income": 4925,
+      "stocks_yearly": 765,
+      "total_yearly": 5690
+    }
+  }
+}

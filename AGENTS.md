@@ -7,6 +7,8 @@
   - `just graph-reindex` — force-reindex CodeGraph
   - `just test` — run the Python test suite (`python3 -m unittest discover -s tests`)
   - `just run` — run the main portfolio sync pipeline (`python -m src.portfolio_sync`)
+  - `just report` — generate the quarterly YIC portfolio report (`python -m portfolio_yic_reports.auto.cli`); optional flags: `--year`, `--quarter`, `--snapshot-start`, `--snapshot-end`, `--skip-dalio`, `--output-dir`
+  - `just fetch-snapshot` — fetch a fresh IB Flex portfolio snapshot (query 1188471) into `data/ib_flex_snapshots/`
 - Use Headroom as the primary context-optimization layer, especially for bulky/noisy outputs: build logs, test output, JSON, verbose diagnostics, and large diffs. Do not default to RTK when Headroom is available. Retrieve exact original diagnostics when details matter.
 - Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree, then use `just graph-status`, `just graph-sync`, or `just graph-reindex`.
 - Treat each git worktree as a separate CodeGraph project with its own `.codegraph/codegraph.db`.
