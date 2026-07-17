@@ -1,0 +1,51 @@
+name: IB Flex Quarterly Snapshot
+
+on:
+  schedule:
+    # First calendar day of quarter-start months (Jan/Apr/Jul/Oct) at 06:00 UTC.
+    # Before US market open -> captures last business day of previous quarter.
+    - cron: '0 6 1 1,4,7,10 *'
+    # Last calendar day of quarter-end months (Mar/Jun/Sep/Dec) at 22:00 UTC.
+    # After US market close -> captures that day's positions.
+    - cron: '0 22 31 3,12 *'
+    - cron: '0 22 30 6,9 *'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    if: github.repository_owner == 'romanr111'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Fetch snapshot
+        id: fetch
+        run: python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; print('Fetched:', IBFlexPortfolioFetcher().fetch_and_save('data/ib_flex_snapshots'))"
+        env:
+          IB_FLEX_TOKEN: ${{ secrets.IB_FLEX_TOKEN }}
+          IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT: ${{ secrets.IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT }}
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flex-snapshot-${{ github.run_id }}
+          path: data/ib_flex_snapshots/*.xml
+          retention-days: 365
+          if-no-files-found: warn
+
+      - name: Notify Telegram
+        if: always()
+        run: python .github/scripts/notify_telegram.py || true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

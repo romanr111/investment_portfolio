@@ -93,22 +93,38 @@ def list_snapshots(snapshots_dir: Path) -> List[Path]:
     return files
 
 
+def _snapshot_to_date(path: Path) -> Optional[dt.date]:
+    """Return the effective date of a snapshot: XML ``toDate`` if parseable,
+    otherwise the date embedded in the filename."""
+    try:
+        from .flex_xml_parser import parse_snapshot
+
+        snap = parse_snapshot(str(path))
+        to_date = parse_to_date(snap.to_date)
+        if to_date is not None:
+            return to_date
+    except (OSError, ValueError):
+        pass
+    return parse_snapshot_filename_date(path.name)
+
+
 def match_snapshot(
     snapshots_dir: Path, boundary_date: dt.date
 ) -> Optional[Path]:
     """Return the newest snapshot with ``toDate`` <= ``boundary_date``.
 
-    Falls back to filename-parsed date when the XML cannot be opened.
+    Uses the XML ``toDate`` attribute when available and falls back to the
+    filename-parsed date when the XML cannot be opened.
     """
     candidates = list_snapshots(snapshots_dir)
     best: Optional[Path] = None
     best_date: Optional[dt.date] = None
     for path in candidates:
-        file_date = parse_snapshot_filename_date(path.name)
-        if file_date is None:
+        snap_date = _snapshot_to_date(path)
+        if snap_date is None:
             continue
-        if file_date <= boundary_date:
-            if best_date is None or file_date > best_date:
+        if snap_date <= boundary_date:
+            if best_date is None or snap_date > best_date:
                 best = path
-                best_date = file_date
+                best_date = snap_date
     return best
