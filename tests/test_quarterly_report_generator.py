@@ -363,5 +363,199 @@ class TestReportGeneration(unittest.TestCase):
             m.assert_not_called()
 
 
+class TestQ2ReportGeneration(unittest.TestCase):
+    """Tests using sanitized real Q2 2026 snapshots (LastBusinessDay, 0 trades)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.output_dir = Path(self.tmp) / "reports"
+        self.snapshots_dir = Path(self.tmp) / "snapshots"
+        self.combined_dir = Path(self.tmp) / "combined"
+        self.snapshots_dir.mkdir()
+        self.combined_dir.mkdir()
+        shutil.copy(
+            FIXTURES / "flex_portfolio_q2_2026_start.xml",
+            self.snapshots_dir / "stocks_count_trades_20260401_20260717T015740Z.xml",
+        )
+        shutil.copy(
+            FIXTURES / "flex_portfolio_q2_2026_end.xml",
+            self.snapshots_dir / "stocks_count_trades_20260630_20260717T025037Z.xml",
+        )
+        shutil.copy(
+            FIXTURES / "combined_data_2026-04-01.json", self.combined_dir
+        )
+        shutil.copy(
+            FIXTURES / "combined_data_2026-06-30.json", self.combined_dir
+        )
+        self.config = ReportConfig(
+            snapshots_dir=self.snapshots_dir,
+            combined_data_dir=self.combined_dir,
+            portfolio_history_csv=FIXTURES / "portfolio_history_q2_stub.csv",
+            dalio_summary_json=FIXTURES / "analytics_summary_stub.json",
+            output_dir=self.output_dir,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_parse_q2_start(self):
+        snap = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_start.xml")
+        )
+        self.assertEqual(snap.to_date, "20260401")
+        self.assertEqual(snap.account_id, "TEST123456")
+        self.assertEqual(len(snap.positions), 23)
+        self.assertEqual(len(snap.trades), 0)
+
+    def test_parse_q2_end(self):
+        snap = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        self.assertEqual(snap.to_date, "20260630")
+        self.assertEqual(snap.account_id, "TEST123456")
+        self.assertEqual(len(snap.positions), 23)
+        self.assertEqual(len(snap.trades), 0)
+
+    def test_q2_closed_positions_detected(self):
+        """COP, GDX, XLE present in start but absent in end -> closed."""
+        start = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_start.xml")
+        )
+        end = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        start_syms = set(start.positions.keys())
+        end_syms = set(end.positions.keys())
+        closed = start_syms - end_syms
+        self.assertIn("COP", closed)
+        self.assertIn("GDX", closed)
+        self.assertIn("XLE", closed)
+
+    def test_q2_new_positions_detected(self):
+        """MCO, SPGI, TLT absent in start but present in end -> new."""
+        start = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_start.xml")
+        )
+        end = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        new = set(end.positions.keys()) - set(start.positions.keys())
+        self.assertIn("MCO", new)
+        self.assertIn("SPGI", new)
+        self.assertIn("TLT", new)
+
+    def test_q2_increased_positions(self):
+        """CPRT, IAU, UBER share counts increased."""
+        start = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_start.xml")
+        )
+        end = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        for sym in ["CPRT", "IAU", "UBER"]:
+            self.assertGreater(
+                end.positions[sym].shares,
+                start.positions[sym].shares,
+                f"{sym} should have increased shares",
+            )
+
+    def test_q2_bill_rollover(self):
+        """BILL CUSIP changes: 912797TD9 (start) -> 912797TC1 (end)."""
+        start = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_start.xml")
+        )
+        end = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        self.assertIn("912797TD9", start.positions)
+        self.assertEqual(
+            start.positions["912797TD9"].asset_category, "BILL"
+        )
+        self.assertIn("912797TC1", end.positions)
+        self.assertEqual(
+            end.positions["912797TC1"].asset_category, "BILL"
+        )
+
+    def test_q2_closed_without_trades_no_exit_price(self):
+        """Closed positions with 0 trades should not show exit price in price column."""
+        out = generate_report(self.config, 2026, 2)
+        content = out.read_text(encoding="utf-8")
+        # COP is closed but trades=0 -> no exit arrow in price column
+        cop_lines = [
+            line for line in content.splitlines() if "COP" in line and "|" in line
+        ]
+        self.assertTrue(len(cop_lines) > 0)
+        for line in cop_lines:
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) >= 4:
+                price_cell = cells[3]
+                self.assertNotIn("→", price_cell)
+
+    def test_q2_report_e2e(self):
+        """Full Q2 report generation from sanitized real snapshots."""
+        out = generate_report(self.config, 2026, 2)
+        self.assertTrue(out.exists())
+        content = out.read_text(encoding="utf-8")
+        self.assertIn("Квартальний звіт", content)
+        self.assertIn("2-й квартал 2026 року", content)
+        self.assertIn("Net worth: $157,816", content)
+        self.assertIn("Зміни в алокації", content)
+        self.assertIn("Акціонарний портфель", content)
+        self.assertIn("Доходність та дивіденди", content)
+        self.assertIn("YTD TWR: -4.12%", content)
+        self.assertIn("Річний дивідендний дохід: $5,710", content)
+        self.assertIn("32.69% → 31.56%", content)
+
+    def test_q2_activity_counts(self):
+        """Activity summary: 2 increased, 0 decreased, ~13 unchanged, 2 new, 2 closed."""
+        out = generate_report(self.config, 2026, 2)
+        content = out.read_text(encoding="utf-8")
+        # Find the summary line with arrows
+        for line in content.splitlines():
+            if "Підсумок" in line:
+                self.assertIn("↑2", line)
+                self.assertIn("↓0", line)
+                self.assertIn("+2", line)
+                self.assertIn("-2", line)
+                break
+
+    def test_q2_new_positions_in_report(self):
+        """MCO and SPGI should appear as new positions in the report."""
+        out = generate_report(self.config, 2026, 2)
+        content = out.read_text(encoding="utf-8")
+        self.assertIn("MCO", content)
+        self.assertIn("SPGI", content)
+        self.assertIn("Нова", content)
+
+    def test_q2_allocation_diff(self):
+        """Allocation diff uses Q2 portfolio_history stub (Mar 31 -> Jun 30)."""
+        diff = compute_allocation_diff(
+            FIXTURES / "portfolio_history_q2_stub.csv", 2026, 2
+        )
+        self.assertEqual(diff.start_date, dt.date(2026, 3, 31))
+        self.assertEqual(diff.end_date, dt.date(2026, 6, 30))
+        buckets = {r.bucket: r for r in diff.rows}
+        self.assertIn("Stocks", buckets)
+        # Stocks went 65161 -> 57852
+        self.assertAlmostEqual(buckets["Stocks"].value_change, -7309.0)
+
+    def test_q2_core_satellite_ratio(self):
+        end = parse_snapshot(
+            str(FIXTURES / "flex_portfolio_q2_2026_end.xml")
+        )
+        core, sat = core_satellite_ratio(end)
+        self.assertGreater(core, 0)
+        self.assertGreater(sat, 0)
+        self.assertAlmostEqual(core + sat, 100, places=2)
+
+    def test_q2_flex_fetcher_not_called(self):
+        """Ensure Q2 report generation never triggers a network fetch."""
+        with mock.patch(
+            "src.brokers.ib_flex_portfolio.IBFlexPortfolioFetcher.fetch_snapshot_xml"
+        ) as m:
+            generate_report(self.config, 2026, 2)
+            m.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

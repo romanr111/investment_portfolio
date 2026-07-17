@@ -15,7 +15,7 @@ from .dalio_loader import extract_dalio_metrics, load_dalio_summary
 from .dates import (
     match_snapshot,
     quarter_end_date,
-    previous_quarter_end_date,
+    quarter_start_date,
 )
 from .flex_xml_parser import parse_snapshot
 from .markdown_renderer import render_report
@@ -44,7 +44,7 @@ def resolve_snapshots(
         )
 
     end_boundary = quarter_end_date(year, quarter)
-    start_boundary = previous_quarter_end_date(year, quarter)
+    start_boundary = quarter_start_date(year, quarter)
 
     end_path = match_snapshot(config.snapshots_dir, end_boundary)
     start_path = match_snapshot(config.snapshots_dir, start_boundary)
@@ -57,8 +57,8 @@ def resolve_snapshots(
         )
     if start_path is None:
         raise ValueError(
-            f"No IB Flex snapshot XML found with toDate <= previous quarter "
-            f"end {start_boundary} in {config.snapshots_dir}. Run the fetcher "
+            f"No IB Flex snapshot XML found with toDate <= quarter start "
+            f"{start_boundary} in {config.snapshots_dir}. Run the fetcher "
             f"or pass --snapshot-start."
         )
 
@@ -86,7 +86,7 @@ def generate_report(
 
     # Section 3: metrics from combined_data snapshots
     end_boundary = quarter_end_date(year, quarter)
-    start_boundary = previous_quarter_end_date(year, quarter)
+    start_boundary = quarter_start_date(year, quarter)
     end_combined = match_combined_snapshot(config.combined_data_dir, end_boundary)
     start_combined = match_combined_snapshot(
         config.combined_data_dir, start_boundary
