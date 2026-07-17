@@ -1,23 +1,46 @@
-## Agent tooling
+# Investment Portfolio - agent guide
 
-- Use `just` for project commands when a recipe exists. Key recipes:
-  - `just graph-bootstrap` — initialize CodeGraph for the current worktree
-  - `just graph-status` — check CodeGraph status
-  - `just graph-sync` — sync CodeGraph index
-  - `just graph-reindex` — force-reindex CodeGraph
-  - `just test` — run the Python test suite (`python3 -m unittest discover -s tests`)
-  - `just run` — run the main portfolio sync pipeline (`python -m src.portfolio_sync`)
-  - `just report` — generate the quarterly YIC portfolio report (`python -m portfolio_yic_reports.auto.cli`); optional flags: `--year`, `--quarter`, `--snapshot-start`, `--snapshot-end`, `--skip-dalio`, `--output-dir`
-  - `just fetch-snapshot` — fetch a fresh IB Flex portfolio snapshot (query 1188471) into `data/ib_flex_snapshots/`
-- Use Headroom as the primary context-optimization layer, especially for bulky/noisy outputs: build logs, test output, JSON, verbose diagnostics, and large diffs. Do not default to RTK when Headroom is available. Retrieve exact original diagnostics when details matter.
-- Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree, then use `just graph-status`, `just graph-sync`, or `just graph-reindex`.
-- Treat each git worktree as a separate CodeGraph project with its own `.codegraph/codegraph.db`.
-- Do not share or copy `.codegraph/` between worktrees.
-- Multiple agents in the same worktree can share one CodeGraph daemon; different worktrees must use separate indexes.
-- Practical new-worktree setup: `git worktree add ../investment_portfolio_feature_x -b feature/x && cd ../investment_portfolio_feature_x && just graph-bootstrap && just graph-status`.
+Personal portfolio automation: IB Gateway live data, dividend income estimates, Google Sheets sync, historical snapshots, Dalio-style risk analysis, and automated quarterly YIC portfolio reports. Python 3; venv at `venv/`; env vars loaded from `data/ib_flex_env.sh` (local-only).
 
-## Python project notes
+## Where to look (load on demand)
 
-- The project is Python 3. Prefer the existing virtualenv at `venv/` when active; otherwise use `python3` from the host.
+| Task | Read |
+|------|------|
+| Run / build / test / fetch-snapshot / report commands and flags | `.agents/references/commands.md` |
+| Work on the quarterly report or IB Flex fetcher | `.agents/references/flex-report.md` |
+| Symbol / caller / dependency analysis, worktree setup | `.agents/references/codegraph.md` |
+| Bulky output, logs, diffs, cross-session memory | `~/.config/opencode/references/headroom.md` |
+
+## Key functionality
+
+**Portfolio sync pipeline** (`just run` / `python -m src.portfolio_sync`): the global workflow that collects all data. Auto-bootstraps `.venv`, loads `data/ib_flex_env.sh`, then by default:
+1. Fetches live positions from IB Gateway (`ib_insync`)
+2. Fetches YTD performance from IB Flex Web Service
+3. Calculates allocation and dividend income (yfinance/Yahoo)
+4. Writes `data/snapshots/combined_data_<date>_<timestamp>.json` (+ `_latest.json`)
+5. Updates Google Sheets (`data/credentials.json`)
+6. Skips history sync and Dalio analysis by default
+
+For full-collection command, flags, env vars, and outputs see `.agents/references/commands.md`.
+
+**Quarterly report** (`just report`): generates `portfolio_yic_reports/REPORT_YYYY_qN.md` from IB Flex snapshots + portfolio_history + combined_data + Dalio. See `.agents/references/flex-report.md`.
+
+**Dalio risk analysis** (`analytics/dalio_holy_grail.py`): Holy Grail risk analyzer. See `README.md` for full flag reference.
+
+## Architecture map
+
+- `src/` - portfolio sync pipeline (IB Gateway fetch, allocation, dividends, Sheets update, history)
+- `src/brokers/ib_flex_portfolio.py` - shared IB Flex snapshot fetcher (query 1188471)
+- `portfolio_yic_reports/auto/` - automated quarterly report generator (CLI, parser, analyzer, renderer)
+- `analytics/` - Dalio Holy Grail risk analyzer
+- `tests/` - test suite; `tests/fixtures/` for quarterly report fixtures
+- `data/` - local-only: snapshots, combined_data, portfolio_history.csv, credentials, env
+
+## Non-negotiables (every change)
+
 - Keep `data/` local-only. Only `data/README.md` is tracked. Do not commit credentials, snapshots, or private sheets config.
-- Run tests with `just test` rather than invoking `unittest` directly when possible.
+- Use Headroom as the primary context-optimization layer for bulky/noisy outputs (build logs, test output, JSON, verbose diagnostics, large diffs). Do not default to RTK when Headroom is available. Retrieve exact original diagnostics when details matter.
+- Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree.
+- Prefer `just` for project commands when a recipe exists (see `justfile` or `.agents/references/commands.md`). Prefer `just test` over invoking `unittest` directly.
+- Quarterly report tests are isolated: `venv/bin/python -m unittest discover -s tests -p test_quarterly_report_generator.py` (26 tests). The full `just test` suite requires dependencies (pandas, numpy, requests) that may be missing in worktree venvs; use the primary worktree venv at `/Users/roman/Documents/Development/investment_portfolio/venv/bin/python` when needed.
+- The quarterly report requires IB Flex snapshots in `data/ib_flex_snapshots/`. If no snapshot matches the quarter boundary, the generator refuses with a `ValueError` (incomplete quarters cannot be reported).
