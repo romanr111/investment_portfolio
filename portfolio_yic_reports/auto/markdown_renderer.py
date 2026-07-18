@@ -24,6 +24,7 @@ def _fmt_price_cell(
     symbol: str,
     analysis: PositionAnalysis,
     end_snap: SnapshotData,
+    start_snap: Optional[SnapshotData] = None,
 ) -> str:
     """Format entry/exit price cell with P&L percentage."""
     avg_price = analysis.avg_entry_price
@@ -54,6 +55,17 @@ def _fmt_price_cell(
         else:
             pct_str = f"{sign}{pct:.0f}%"
         return f"{avg_price:.2f}$ → {exit_price:.2f}$ (Exit) ({pct_str})"
+
+    if start_snap is not None:
+        start_rec = start_snap.positions.get(symbol)
+        if start_rec is not None and start_rec.mark_price > 0:
+            pct = ((start_rec.mark_price - avg_price) / avg_price) * 100
+            sign = "+" if pct > 0 else ""
+            if abs(pct) < 1:
+                pct_str = f"{sign}{pct:.1f}%"
+            else:
+                pct_str = f"{sign}{pct:.0f}%"
+            return f"{avg_price:.2f}$ ({pct_str})"
 
     return f"{avg_price:.2f}$"
 
@@ -186,7 +198,7 @@ def render_equity_table(
         "|----------|--------------------------|----------------------------------|----------------|",
     ]
     for a in analyses:
-        price_cell = _fmt_price_cell(a.symbol, a, end_snap)
+        price_cell = _fmt_price_cell(a.symbol, a, end_snap, start_snap)
         weight_cell = _fmt_weight_cell(a.symbol, a)
         lines.append(
             f"| {a.symbol} | {a.activity} | {price_cell} | {weight_cell} |"
@@ -270,7 +282,7 @@ def render_special_assets_table(
         )
         if a is None or (not a.activity.strip() and a.avg_entry_price == 0.0):
             continue
-        price_cell = _fmt_price_cell(symbol, a, end_snap)
+        price_cell = _fmt_price_cell(symbol, a, end_snap, start_snap)
         weight_cell = _fmt_weight_cell(symbol, a)
         rows.append((a.weight, f"| {symbol} | {a.activity} | {price_cell} | {weight_cell} |"))
 
