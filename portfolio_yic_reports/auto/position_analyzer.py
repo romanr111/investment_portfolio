@@ -8,6 +8,7 @@ from .config import (
     CHINESE_STOCKS,
     CORE_SYMBOLS,
     EXCLUDED_FROM_EQUITY,
+    HARDCODED_ENTRY_PRICES,
     HKD_TO_USD_RATE,
     SPECIAL_ASSET_TICKERS,
 )
@@ -180,19 +181,19 @@ def analyze_position(
             )
         else:
             activity = f"{ICON_UNCHANGED} {UNCHANGED}"
-        avg_entry = end_rec.cost_basis_price
-        price_pct = price_change_pct(end_rec.cost_basis_price, end_rec.mark_price)
+        avg_entry = HARDCODED_ENTRY_PRICES.get(symbol, end_rec.cost_basis_price)
+        price_pct = price_change_pct(avg_entry, end_rec.mark_price)
     elif start_rec and not end_rec:
         activity = f"{ICON_ELIMINATED} {ELIMINATED}"
-        avg_entry = start_rec.cost_basis_price
+        avg_entry = HARDCODED_ENTRY_PRICES.get(symbol, start_rec.cost_basis_price)
         _, avg_exit = sell_trades_for(end_snap, symbol)
         if avg_entry > 0 and avg_exit > 0:
             price_pct = ((avg_exit - avg_entry) / avg_entry) * 100
         is_closed = True
     elif end_rec and not start_rec:
         activity = f"{ICON_NEW} {NEW_POSITION}"
-        avg_entry = end_rec.cost_basis_price
-        price_pct = price_change_pct(end_rec.cost_basis_price, end_rec.mark_price)
+        avg_entry = HARDCODED_ENTRY_PRICES.get(symbol, end_rec.cost_basis_price)
+        price_pct = price_change_pct(avg_entry, end_rec.mark_price)
 
     weight = 0.0
     if is_closed and start_rec:

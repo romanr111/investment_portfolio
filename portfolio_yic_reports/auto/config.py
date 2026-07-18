@@ -14,7 +14,7 @@ REPORTS_OUTPUT_DIR = REPO_ROOT / "portfolio_yic_reports"
 SNAPSHOT_FILENAME_PREFIX = "stocks_count_trades_"
 COMBINED_DATA_FILENAME_PREFIX = "combined_data_"
 
-HKD_TO_USD_RATE = 0.128
+HKD_TO_USD_RATE = 0.1275
 
 CORE_SYMBOLS = {"VOO", "QQQ", "BRK B", "BN"}
 CHINA_EQUITY_SYMBOLS = {"9988", "700", "KWEB", "PDD"}
@@ -39,6 +39,10 @@ SPECIAL_ASSET_TICKERS = sorted(
 EXCLUDED_FROM_EQUITY = sorted(
     BOND_TICKERS | PRECIOUS_METALS_TICKERS | {"SGOV", "COMB", "SLV", "BILLS"}
 )
+
+HARDCODED_ENTRY_PRICES = {
+    "9988": 152.7,
+}
 
 
 @dataclass(frozen=True)
