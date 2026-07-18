@@ -55,3 +55,4 @@ class ReportConfig:
     skip_dalio: bool = False
     snapshot_start: str = ""
     snapshot_end: str = ""
+    trades_xml: str = ""

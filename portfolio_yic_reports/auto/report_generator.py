@@ -79,6 +79,10 @@ def generate_report(
     start_snap = parse_snapshot(str(inputs.start_snap_path))
     end_snap = parse_snapshot(str(inputs.end_snap_path))
 
+    trades_snap = None
+    if config.trades_xml:
+        trades_snap = parse_snapshot(config.trades_xml)
+
     # Section 1: allocation diff from portfolio_history.csv
     allocation_diff = compute_allocation_diff(
         config.portfolio_history_csv, year, quarter
@@ -110,6 +114,7 @@ def generate_report(
         end_metrics=end_metrics,
         dalio=dalio,
         skip_dalio=config.skip_dalio,
+        trades_snap=trades_snap,
     )
 
     config.output_dir.mkdir(parents=True, exist_ok=True)

@@ -76,10 +76,14 @@ def extract_to_date(xml_text: str) -> Optional[str]:
 
 
 class IBFlexPortfolioFetcher:
-    """Fetches a portfolio snapshot XML from the IB Flex Web Service.
+    """Fetches a portfolio snapshot or trades XML from the IB Flex Web Service.
 
-    The Flex query (default ID ``1188471``) must include Open Positions and
-    Trades sections with ``Period = Last Business Day``.
+    For position snapshots (default): ``IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT``
+    must include Open Positions + Trades sections with ``Period = Last Business Day``.
+
+    For quarterly trades: pass ``query_id`` explicitly or set
+    ``IB_FLEX_QUERY_ID_QUARTERLY_TRADES``; the query must include Trades
+    section with ``Period = Last Quarter``.
     """
 
     def __init__(

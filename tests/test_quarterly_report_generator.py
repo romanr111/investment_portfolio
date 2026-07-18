@@ -556,6 +556,48 @@ class TestQ2ReportGeneration(unittest.TestCase):
             generate_report(self.config, 2026, 2)
             m.assert_not_called()
 
+    def test_q2_closed_positions_show_actual_exit_price_with_trades_xml(self):
+        """When a quarterly trades XML is provided, closed positions show
+        the actual sell price from trades, not an approximation."""
+        config = ReportConfig(
+            snapshots_dir=self.snapshots_dir,
+            combined_data_dir=self.combined_dir,
+            portfolio_history_csv=FIXTURES / "portfolio_history_q2_stub.csv",
+            dalio_summary_json=FIXTURES / "analytics_summary_stub.json",
+            output_dir=self.output_dir,
+            trades_xml=str(FIXTURES / "flex_trades_q2_2026.xml"),
+        )
+        out = generate_report(config, 2026, 2)
+        content = out.read_text(encoding="utf-8")
+        # COP was sold at 111.46 per the trades XML
+        cop_lines = [
+            line for line in content.splitlines() if "COP" in line and "|" in line
+        ]
+        self.assertTrue(len(cop_lines) > 0)
+        cop_price_cell = [c.strip() for c in cop_lines[0].split("|")][3]
+        self.assertIn("111.46", cop_price_cell)
+        self.assertIn("(Exit)", cop_price_cell)
+
+    def test_q2_special_asset_exit_price_from_trades_xml(self):
+        """GDX (special asset) sold at 88.36 should show in bonds/metals table."""
+        config = ReportConfig(
+            snapshots_dir=self.snapshots_dir,
+            combined_data_dir=self.combined_dir,
+            portfolio_history_csv=FIXTURES / "portfolio_history_q2_stub.csv",
+            dalio_summary_json=FIXTURES / "analytics_summary_stub.json",
+            output_dir=self.output_dir,
+            trades_xml=str(FIXTURES / "flex_trades_q2_2026.xml"),
+        )
+        out = generate_report(config, 2026, 2)
+        content = out.read_text(encoding="utf-8")
+        gdx_lines = [
+            line for line in content.splitlines() if "GDX" in line and "|" in line
+        ]
+        self.assertTrue(len(gdx_lines) > 0)
+        gdx_price_cell = [c.strip() for c in gdx_lines[0].split("|")][3]
+        self.assertIn("88.36", gdx_price_cell)
+        self.assertIn("(Exit)", gdx_price_cell)
+
 
 if __name__ == "__main__":
     unittest.main()

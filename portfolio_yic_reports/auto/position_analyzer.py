@@ -140,6 +140,7 @@ def analyze_position(
     end_snap: SnapshotData,
     total_value_for_weight: float,
     start_total_value_for_weight: float = 0.0,
+    trades_snap: Optional[SnapshotData] = None,
 ) -> Optional[PositionAnalysis]:
     """Classify a single position's activity between two snapshots.
 
@@ -147,6 +148,10 @@ def analyze_position(
     positions. ``start_total_value_for_weight`` is the start-period total
     used for closed (eliminated) positions; if 0, falls back to the
     end-period total for backward compatibility.
+
+    ``trades_snap`` is an optional quarterly trades snapshot used to find
+    actual sell prices for closed positions. When provided, takes
+    precedence over ``end_snap`` for exit-price lookups.
     """
     start_rec = start_snap.positions.get(symbol)
     end_rec = end_snap.positions.get(symbol)
@@ -186,7 +191,8 @@ def analyze_position(
     elif start_rec and not end_rec:
         activity = f"{ICON_ELIMINATED} {ELIMINATED}"
         avg_entry = HARDCODED_ENTRY_PRICES.get(symbol, start_rec.cost_basis_price)
-        _, avg_exit = sell_trades_for(end_snap, symbol)
+        sell_source = trades_snap if trades_snap is not None else end_snap
+        _, avg_exit = sell_trades_for(sell_source, symbol)
         if avg_entry > 0 and avg_exit > 0:
             price_pct = ((avg_exit - avg_entry) / avg_entry) * 100
         is_closed = True

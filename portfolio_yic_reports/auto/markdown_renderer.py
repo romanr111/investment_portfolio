@@ -157,6 +157,7 @@ def _bills_analysis(
 def render_equity_table(
     start_snap: SnapshotData,
     end_snap: SnapshotData,
+    trades_snap: Optional[SnapshotData] = None,
 ) -> str:
     """Render the main equity positions markdown table.
 
@@ -180,7 +181,8 @@ def render_equity_table(
         if start_is_bill or end_is_bill:
             continue
         a = analyze_position(
-            symbol, start_snap, end_snap, equity_total, start_equity_total
+            symbol, start_snap, end_snap, equity_total,
+            start_equity_total, trades_snap=trades_snap,
         )
         if a is not None:
             analyses.append(a)
@@ -243,6 +245,7 @@ def render_equity_table(
         total_value=combined_total,
         start_total_value=start_equity_total
         + special_assets_value(start_snap),
+        trades_snap=trades_snap,
     )
     if special_table:
         lines.append("")
@@ -260,6 +263,7 @@ def render_special_assets_table(
     analyses_with_bills: List[PositionAnalysis],
     total_value: float,
     start_total_value: float = 0.0,
+    trades_snap: Optional[SnapshotData] = None,
 ) -> str:
     """Render the bonds/metals/commodities markdown table.
 
@@ -278,7 +282,8 @@ def render_special_assets_table(
         if symbol not in SPECIAL_ASSET_TICKERS:
             continue
         a = analyze_position(
-            symbol, start_snap, end_snap, total_value, start_total_value
+            symbol, start_snap, end_snap, total_value,
+            start_total_value, trades_snap=trades_snap,
         )
         if a is None or (not a.activity.strip() and a.avg_entry_price == 0.0):
             continue
@@ -383,6 +388,7 @@ def render_report(
     end_metrics: Dict,
     dalio: Dict,
     skip_dalio: bool,
+    trades_snap: Optional[SnapshotData] = None,
 ) -> str:
     """Render the full quarterly report markdown."""
     gen_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -415,7 +421,7 @@ def render_report(
     # Section 2: equity portfolio
     sections.append("## 2. Акціонарний портфель (IB)")
     sections.append("")
-    sections.append(render_equity_table(start_snap, end_snap))
+    sections.append(render_equity_table(start_snap, end_snap, trades_snap))
     sections.append("")
 
     # Section 3: performance

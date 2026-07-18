@@ -37,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir", default="",
         help="Директорія для збереження звіту.",
     )
+    parser.add_argument(
+        "--trades-xml", default="",
+        help="Шлях до XML з trades за квартал (query Period=LastQuarter).",
+    )
     return parser
 
 
@@ -56,6 +60,7 @@ def main(argv: Optional[list] = None) -> int:
         snapshot_start=args.snapshot_start,
         snapshot_end=args.snapshot_end,
         skip_dalio=args.skip_dalio,
+        trades_xml=args.trades_xml,
     )
     if output_dir is not None:
         config = ReportConfig(
@@ -67,6 +72,7 @@ def main(argv: Optional[list] = None) -> int:
             skip_dalio=config.skip_dalio,
             snapshot_start=config.snapshot_start,
             snapshot_end=config.snapshot_end,
+            trades_xml=config.trades_xml,
         )
 
     try:

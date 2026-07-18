@@ -28,3 +28,7 @@ report *args='':
 # Fetch a fresh IB Flex portfolio snapshot (query 1188471) and save it.
 fetch-snapshot:
     venv/bin/python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; print(IBFlexPortfolioFetcher().fetch_and_save())"
+
+# Fetch quarterly trades XML (query Period=LastQuarter) for exit prices.
+fetch-trades:
+    venv/bin/python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; import os; print(IBFlexPortfolioFetcher(query_id=os.getenv('IB_FLEX_QUERY_ID_QUARTERLY_TRADES')).fetch_and_save('data/ib_flex_snapshots'))"

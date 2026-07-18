@@ -32,6 +32,13 @@ jobs:
           IB_FLEX_TOKEN: ${{ secrets.IB_FLEX_TOKEN }}
           IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT: ${{ secrets.IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT }}
 
+      - name: Fetch quarterly trades
+        if: github.event_name == 'schedule' && startsWith(github.event.schedule, '0 6')
+        run: python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; import os; print('Trades:', IBFlexPortfolioFetcher(query_id=os.getenv('IB_FLEX_QUERY_ID_QUARTERLY_TRADES')).fetch_and_save('data/ib_flex_snapshots'))"
+        env:
+          IB_FLEX_TOKEN: ${{ secrets.IB_FLEX_TOKEN }}
+          IB_FLEX_QUERY_ID_QUARTERLY_TRADES: ${{ secrets.IB_FLEX_QUERY_ID_QUARTERLY_TRADES }}
+
       - name: Upload artifact
         if: success()
         uses: actions/upload-artifact@v4
