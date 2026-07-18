@@ -193,7 +193,7 @@ def render_equity_table(
         "BILLS", start_bills, end_bills, combined_total
     )
 
-    analyses.sort(key=lambda a: a.weight, reverse=True)
+    analyses.sort(key=lambda a: ("Закрита" in a.activity, -a.weight), reverse=False)
 
     lines = [
         "| Позиція | Остання активність | Середня ціна входу | Вага |",
@@ -289,7 +289,7 @@ def render_special_assets_table(
             continue
         price_cell = _fmt_price_cell(symbol, a, end_snap, start_snap)
         weight_cell = _fmt_weight_cell(symbol, a)
-        rows.append((a.weight, f"| {symbol} | {a.activity} | {price_cell} | {weight_cell} |"))
+        rows.append((a.weight, "Закрита" in a.activity, f"| {symbol} | {a.activity} | {price_cell} | {weight_cell} |"))
 
     # Aggregated BILLS row
     for a in analyses_with_bills:
@@ -301,13 +301,13 @@ def render_special_assets_table(
                 f"{a.weight:.2f}%" if a.weight > 0 else "-"
             )
             rows.append(
-                (a.weight, f"| T Bills | {a.activity} | {price_cell} | {weight_cell} |")
+                (a.weight, "Закрита" in a.activity, f"| T Bills | {a.activity} | {price_cell} | {weight_cell} |")
             )
 
-    rows.sort(key=lambda r: r[0], reverse=True)
+    rows.sort(key=lambda r: (r[1], -r[0]), reverse=False)
     if not rows:
         return ""
-    lines.extend(r[1] for r in rows)
+    lines.extend(r[2] for r in rows)
     return "\n".join(lines)
 
 
