@@ -14,12 +14,15 @@ IB Flex query 1188471 (Open Positions + Trades, Period=Last Business Day, XML)
   -> flex_xml_parser.parse_snapshot -> positions + trades
   -> position_analyzer (equity/special-assets tables, closed positions)
   -> allocation_diff (from data/portfolio_history.csv, month-end bucket values)
-  -> combined_loader (from data/snapshots/combined_data_*.json, nearest <= quarter boundary)
-     -> Section 3: YTD TWR, dividends, freedom progress
+  -> combined_loader (from data/snapshots/combined_data_*.json, latest-timestamp file
+     with embedded date <= quarter boundary)
+      -> Section 3: YTD TWR, S&P 500, NASDAQ, dividends, freedom progress
   -> dalio_loader (from analytics/output/summary.json)
-     -> Section 4: Dalio risk metrics
+      -> Section 6: Dalio risk metrics
   -> markdown_renderer -> portfolio_yic_reports/REPORT_YYYY_qN.md
 ```
+
+Note: the report only reads `combined_data`; it never re-fetches or recomputes TWR/benchmarks/income. See `.agents/references/data-flow.md` for the full contract.
 
 ## Required env vars
 
@@ -77,10 +80,11 @@ If no matching snapshot exists, the command refuses with a `ValueError`. Incompl
 
 ## Tests
 
-`tests/test_quarterly_report_generator.py` - 26 tests using fixtures in `tests/fixtures/`. Run with:
+`tests/test_quarterly_report_generator.py` + `tests/test_auto_data_layer.py` cover the quarterly report generator using fixtures in `tests/fixtures/`. Run with:
 
 ```bash
 venv/bin/python -m unittest discover -s tests -p test_quarterly_report_generator.py
+venv/bin/python -m unittest discover -s tests -p test_auto_data_layer.py
 ```
 
 Note: the worktree's own `venv/` may lack dependencies (pandas, numpy, requests). Use the primary worktree's venv at `/Users/roman/Documents/Development/investment_portfolio/venv/bin/python` if the worktree venv is not populated.
