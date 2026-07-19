@@ -43,57 +43,43 @@ from datetime import datetime
 # Import bond tickers list
 from data.filters_constants import BONDS_VALUES, PRECIOUS_METALS
 
+# Ticker sets, FX rate, and hardcoded prices live in auto/config.py (single source
+# of truth). See .agents/references/data-flow.md. The legacy module re-imports them
+# here so behaviour stays identical without duplicating the definitions. Try the
+# package import first (when run as a module); fall back to a relative import
+# when the file is run directly from inside the portfolio_yic_reports/ directory.
+try:
+    from portfolio_yic_reports.auto.config import (
+        CHINA_EQUITY_SYMBOLS,
+        CHINESE_STOCKS,
+        CORE_SYMBOLS,
+        EXCLUDED_FROM_EQUITY,
+        HARDCODED_ENTRY_PRICES,
+        HKD_TO_USD_RATE,
+        SPECIAL_ASSET_TICKERS,
+    )
+except ModuleNotFoundError:
+    from auto.config import (
+        CHINA_EQUITY_SYMBOLS,
+        CHINESE_STOCKS,
+        CORE_SYMBOLS,
+        EXCLUDED_FROM_EQUITY,
+        HARDCODED_ENTRY_PRICES,
+        HKD_TO_USD_RATE,
+        SPECIAL_ASSET_TICKERS,
+    )
+
 # Filter out duplicate exchange-specific tickers (e.g., IHYG.L)
 BONDS_CORE = [t for t in BONDS_VALUES if "." not in t]
 PRECIOUS_METALS_CORE = [t for t in PRECIOUS_METALS if "." not in t]
 
 # Symbols to exclude from main portfolio calculations (displayed separately)
-EXCLUDED_SYMBOLS = list(
-    dict.fromkeys(
-        BONDS_CORE
-        + PRECIOUS_METALS_CORE
-        + [
-            "SGOV",  # Government Money Market Fund
-            "COMB",  # Commodity broad ETF
-            "SLV",  # Silver ETF
-            "BILLS",  # Aggregated Treasury Bills position
-        ]
-    ).keys()
-)
+EXCLUDED_SYMBOLS = list(EXCLUDED_FROM_EQUITY)
 
-# Special assets to be shown in a separate table (bonds, gold, commodities)
-LONG_BONDS_GOLD_COMMODITIES = list(
-    dict.fromkeys(
-        BONDS_CORE
-        + PRECIOUS_METALS_CORE
-        + [
-            "COMB",  # Commodity broad ETF
-            "SLV",  # Silver ETF
-            "BILLS",  # Aggregated Treasury Bills position
-        ]
-    ).keys()
-)
-
-# Core symbols for Core/Satellite split (edit to match your rules)
-CORE_SYMBOLS = {
-    "VOO",
-    "QQQ",
-    "BRK B",
-    "BN",
-}
-
-# Chinese equity symbols for China vs. rest split
-CHINA_EQUITY_SYMBOLS = {
-    "9988",
-    "700",
-    "KWEB",
-    "PDD",
-}
-
-HKD_TO_USD_RATE = (
-    0.128  # Approximate HKD to USD conversion rate, should be updated with current rate
-)
-CHINESE_STOCKS = ["9988", "700"]  # Chinese stocks with values in HKD
+# Special assets to be shown in a separate table (bonds, gold, commodities).
+# SPECIAL_ASSET_TICKERS excludes the synthetic "BILLS" symbol (handled via
+# asset_category == "BILL"); the legacy list includes it.
+LONG_BONDS_GOLD_COMMODITIES = SPECIAL_ASSET_TICKERS + ["BILLS"]
 
 # Ukrainian translations for portfolio changes
 INCREASED = "Збільшив"
@@ -313,10 +299,8 @@ class PortfolioAnalyzer:
             "eliminated": 0,
         }
 
-        # Special cases - hardcoded values
-        self.hardcoded_prices = {
-            "9988": 152.7,  # Hardcoded average buying price for 9988
-        }
+        # Hardcoded average buy prices - single source of truth in auto/config.py
+        self.hardcoded_prices = HARDCODED_ENTRY_PRICES
 
     def get_all_symbols(self) -> Set[str]:
         """Get all symbols from both portfolios"""
