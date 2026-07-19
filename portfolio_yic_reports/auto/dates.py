@@ -2,10 +2,13 @@
 
 import calendar
 import datetime as dt
+import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .config import SNAPSHOT_FILENAME_PREFIX
+
+_TIMESTAMP_RE = re.compile(r"_(\d{8})T(\d{6})Z$")
 
 
 def last_completed_quarter(today: Optional[dt.date] = None) -> Tuple[int, int]:
@@ -108,23 +111,54 @@ def _snapshot_to_date(path: Path) -> Optional[dt.date]:
     return parse_snapshot_filename_date(path.name)
 
 
+def _parse_snapshot_filename_timestamp(name: str) -> Optional[dt.datetime]:
+    """Extract the ``YYYYMMDDTHHMMSSZ`` timestamp from a snapshot filename.
+
+    Returns None for files without a timestamp suffix. Such files sort
+    before timestamped siblings of the same date, so the latest
+    timestamped snapshot wins on ties.
+    """
+    stem = Path(name).stem
+    m = _TIMESTAMP_RE.search(stem)
+    if m is None:
+        return None
+    try:
+        return dt.datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
+def _snapshot_sort_key(path: Path) -> Tuple[dt.date, dt.datetime]:
+    """Sort key: (effective snapshot date, filename timestamp or datetime.min).
+
+    Files without a timestamp suffix sort before timestamped siblings of
+    the same date, so the latest timestamped snapshot wins on ties.
+    """
+    d = _snapshot_to_date(path) or dt.date.min
+    ts = _parse_snapshot_filename_timestamp(path.name)
+    return (d, ts or dt.datetime.min)
+
+
 def match_snapshot(
     snapshots_dir: Path, boundary_date: dt.date
 ) -> Optional[Path]:
     """Return the newest snapshot with ``toDate`` <= ``boundary_date``.
 
     Uses the XML ``toDate`` attribute when available and falls back to the
-    filename-parsed date when the XML cannot be opened.
+    filename-parsed date when the XML cannot be opened. When multiple
+    snapshots share the same effective date, the one with the latest
+    filename-embedded timestamp wins (mirrors
+    ``combined_loader.match_combined_snapshot``).
     """
     candidates = list_snapshots(snapshots_dir)
     best: Optional[Path] = None
-    best_date: Optional[dt.date] = None
+    best_key: Optional[Tuple[dt.date, dt.datetime]] = None
     for path in candidates:
         snap_date = _snapshot_to_date(path)
-        if snap_date is None:
+        if snap_date is None or snap_date > boundary_date:
             continue
-        if snap_date <= boundary_date:
-            if best_date is None or snap_date > best_date:
-                best = path
-                best_date = snap_date
+        key = _snapshot_sort_key(path)
+        if best_key is None or key > best_key:
+            best = path
+            best_key = key
     return best
