@@ -258,3 +258,40 @@ def china_ratio(snap: SnapshotData) -> Tuple[float, float]:
 def all_symbols(start_snap: SnapshotData, end_snap: SnapshotData) -> List[str]:
     syms = set(start_snap.positions.keys()) | set(end_snap.positions.keys())
     return sorted(syms)
+
+
+def top_positions_by_weight(snap: SnapshotData, n: int = 3) -> List[Tuple[str, float]]:
+    """Top-n equity positions by USD weight %.
+
+    Excludes SPECIAL_ASSET_TICKERS and BILL positions. Returns
+    [(symbol, weight_pct)] sorted desc. Weight computed against
+    equity_total_value(snap).
+    """
+    total = equity_total_value(snap)
+    if total <= 0:
+        return []
+    weighted: List[Tuple[str, float]] = []
+    for symbol, rec in snap.positions.items():
+        if is_excluded_from_equity(symbol, rec.asset_category):
+            continue
+        weight = (usd_value(rec) / total) * 100
+        weighted.append((symbol, weight))
+    weighted.sort(key=lambda item: item[1], reverse=True)
+    return weighted[:n]
+
+
+def position_contributions(
+    analyses: List["PositionAnalysis"],
+) -> List[Tuple[str, float]]:
+    """Approximate contribution of each position to portfolio return:
+    weight * price_change_pct / 100. Returns [(symbol, contribution_pct)]
+    sorted DESC by absolute value. Skips positions where price_change_pct
+    == 0 or weight == 0.
+    """
+    contributions: List[Tuple[str, float]] = []
+    for a in analyses:
+        if a.weight == 0 or a.price_change_pct == 0:
+            continue
+        contributions.append((a.symbol, a.weight * a.price_change_pct / 100))
+    contributions.sort(key=lambda item: abs(item[1]), reverse=True)
+    return contributions
