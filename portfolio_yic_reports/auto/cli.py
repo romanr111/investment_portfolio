@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -63,17 +64,7 @@ def main(argv: Optional[list] = None) -> int:
         trades_xml=args.trades_xml,
     )
     if output_dir is not None:
-        config = ReportConfig(
-            snapshots_dir=config.snapshots_dir,
-            combined_data_dir=config.combined_data_dir,
-            portfolio_history_csv=config.portfolio_history_csv,
-            dalio_summary_json=config.dalio_summary_json,
-            output_dir=output_dir,
-            skip_dalio=config.skip_dalio,
-            snapshot_start=config.snapshot_start,
-            snapshot_end=config.snapshot_end,
-            trades_xml=config.trades_xml,
-        )
+        config = replace(config, output_dir=output_dir)
 
     try:
         generate_report(config, year, quarter)
