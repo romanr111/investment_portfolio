@@ -17,6 +17,10 @@ graph-status: graph-bootstrap
 test:
     venv/bin/python -m unittest discover -s tests
 
+# Run tests in parallel (3 workers) for faster execution.
+test-parallel:
+    venv/bin/python tests/parallel_runner.py
+
 run:
     venv/bin/python -m src.portfolio_sync
 
