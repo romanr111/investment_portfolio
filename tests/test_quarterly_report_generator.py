@@ -17,6 +17,7 @@ from portfolio_yic_reports.auto.config import ReportConfig
 from portfolio_yic_reports.auto.dalio_loader import extract_dalio_metrics
 from portfolio_yic_reports.auto.dates import (
     last_completed_quarter,
+    match_snapshot,
     parse_snapshot_filename_date,
     quarter_end_date,
     previous_quarter_end_date,
@@ -91,7 +92,7 @@ class TestFlexParser(unittest.TestCase):
             str(FIXTURES / "flex_portfolio_q4_2025.xml")
         )
         self.assertEqual(snap.to_date, "20251231")
-        self.assertEqual(snap.account_id, "U9064529")
+        self.assertEqual(snap.account_id, "TEST123456")
         self.assertIn("9988", snap.positions)
         self.assertGreater(equity_total_value(snap), 0)
         # Has BILL position
@@ -199,6 +200,43 @@ class TestCombinedLoader(unittest.TestCase):
         self.assertIn("2025-12-31", path.name)
 
     # extract_metrics tests consolidated in test_auto_data_layer.py
+
+
+class TestSnapshotMatching(unittest.TestCase):
+    """Behavioral tests for match_snapshot tie-breaking."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.snapshots_dir = Path(self.tmp) / "snapshots"
+        self.snapshots_dir.mkdir()
+        # Copy the Q1 2026 fixture (toDate=20260331) to two filenames with
+        # different filename-embedded timestamps but the same toDate.
+        src = FIXTURES / "flex_portfolio_q1_2026.xml"
+        self.older = (
+            self.snapshots_dir
+            / "stocks_count_trades_20260331_20260403T020000Z.xml"
+        )
+        self.newer = (
+            self.snapshots_dir
+            / "stocks_count_trades_20260331_20260403T030000Z.xml"
+        )
+        shutil.copy(src, self.older)
+        shutil.copy(src, self.newer)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_match_snapshot_picks_latest_timestamp_on_tie(self):
+        """When two snapshots share the same toDate, the one with the
+        latest filename-embedded timestamp wins."""
+        result = match_snapshot(self.snapshots_dir, dt.date(2026, 3, 31))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, self.newer.name)
+
+    def test_match_snapshot_ignores_files_after_boundary(self):
+        """Snapshots with toDate > boundary are not selected."""
+        result = match_snapshot(self.snapshots_dir, dt.date(2026, 3, 30))
+        self.assertIsNone(result)
 
 
 class TestDalioLoader(unittest.TestCase):
