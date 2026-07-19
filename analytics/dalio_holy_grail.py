@@ -1536,36 +1536,28 @@ class DalioHolyGrailAnalyzer:
             raise ValueError("ewma_alpha must be between 0 and 1.")
 
         assets = list(returns_wide.columns)
-        covariance = pd.DataFrame(index=assets, columns=assets, dtype=float)
-        for left_idx, left_asset in enumerate(assets):
-            for right_idx, right_asset in enumerate(assets):
-                pair = pd.concat(
-                    [
-                        returns_wide.iloc[:, left_idx],
-                        returns_wide.iloc[:, right_idx],
-                    ],
-                    axis=1,
-                ).dropna()
-                if len(pair) < self.min_covariance_observations:
-                    covariance.loc[left_asset, right_asset] = math.nan
+        R = returns_wide.to_numpy(dtype=float)
+        n_obs, n_assets = R.shape
+        nan_mask = np.isnan(R)
+        cov = np.full((n_assets, n_assets), math.nan, dtype=float)
+        for i in range(n_assets):
+            for j in range(i, n_assets):
+                valid_mask = ~nan_mask[:, i] & ~nan_mask[:, j]
+                count = int(valid_mask.sum())
+                if count < self.min_covariance_observations:
                     continue
-
-                left_values = pair.iloc[:, 0].values.astype(float)
-                right_values = pair.iloc[:, 1].values.astype(float)
-                count = len(pair)
-                decay_weights = np.power(1.0 - alpha, np.arange(count - 1, -1, -1))
-                decay_weights = decay_weights / decay_weights.sum()
-                left_mean = float((left_values * decay_weights).sum())
-                right_mean = float((right_values * decay_weights).sum())
-                cov_value = float(
-                    (
-                        decay_weights
-                        * (left_values - left_mean)
-                        * (right_values - right_mean)
-                    ).sum()
-                )
-                covariance.loc[left_asset, right_asset] = cov_value
-        return covariance
+                # Match the original: decay weights are arange(count-1, -1, -1)
+                # applied to the dropped-NaN slice (i.e. count = remaining rows).
+                w = np.power(1.0 - alpha, np.arange(count - 1, -1, -1))
+                w = w / w.sum()
+                li = R[valid_mask, i]
+                rj = R[valid_mask, j]
+                li_mean = float((li * w).sum())
+                rj_mean = float((rj * w).sum())
+                cov_value = float((w * (li - li_mean) * (rj - rj_mean)).sum())
+                cov[i, j] = cov_value
+                cov[j, i] = cov_value
+        return pd.DataFrame(cov, index=assets, columns=assets)
 
     def _pairwise_confidence_flags(self, returns_wide: pd.DataFrame) -> pd.DataFrame:
         rows = []

@@ -143,12 +143,28 @@ def build_daily_history(start: str = "2024-01-01", periods: int = 320) -> pd.Dat
 
 
 class DalioHolyGrailAnalyzerTest(unittest.TestCase):
+    # Cache the default-config run_analysis result across tests so the
+    # ~2s analysis runs once per test session instead of once per test.
+    _cached_history = None
+    _cached_analyzer = None
+    _cached_result = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._cached_history = build_synthetic_history()
+        cls._cached_analyzer = DalioHolyGrailAnalyzer(cls._cached_history)
+        cls._cached_result = cls._cached_analyzer.run_analysis()
+
     def setUp(self) -> None:
-        self.history = build_synthetic_history()
-        self.analyzer = DalioHolyGrailAnalyzer(self.history)
+        self.history = self._cached_history
+        self.analyzer = self._cached_analyzer
+
+    def _run(self):
+        """Return the cached default-config analysis result."""
+        return self._cached_result
 
     def test_data_quality_checks_pass_for_clean_monthly_dataset(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         checks = result.quality_checks.set_index("check")["passed"].to_dict()
 
         self.assertTrue(checks["no_missing_monthly_dates"])
@@ -157,7 +173,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertTrue(checks["minimum_history_window"])
 
     def test_correlation_matrix_is_symmetric_with_unity_diagonal(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         corr = result.correlation_matrix
 
         symmetry_gap = (corr - corr.T).abs().max().max()
@@ -166,7 +182,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
             self.assertAlmostEqual(float(corr.loc[bucket, bucket]), 1.0, places=10)
 
     def test_risk_contributions_sum_to_portfolio_volatility(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         rc = result.risk_contribution_by_bucket
         portfolio_volatility = float(rc["portfolio_volatility"].iloc[0])
 
@@ -175,7 +191,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         )
 
     def test_increasing_crypto_weight_raises_risk_contribution_faster_than_weight(self) -> None:
-        baseline_result = self.analyzer.run_analysis()
+        baseline_result = self._run()
         baseline_rc = baseline_result.risk_contribution_by_bucket.set_index("asset_bucket")
 
         adjusted_history = self.history.copy()
@@ -198,7 +214,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         )
 
     def test_stress_scenarios_have_expected_economic_direction(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         stress = result.stress_test_results.set_index("scenario")
 
         self.assertLess(float(stress.loc["credit_spread_recession", "portfolio_return_pct"]), 0.0)
@@ -427,7 +443,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
             analyzer.run_analysis()
 
     def test_tail_risk_metrics_are_present_and_ordered(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         tail = result.tail_risk_metrics.iloc[0]
 
         self.assertLessEqual(float(tail["cvar_95_pct"]), float(tail["var_95_pct"]))
@@ -501,7 +517,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertFalse(ewma_result.covariance_matrix.equals(sample_result.covariance_matrix))
 
     def test_default_covariance_method_is_ledoit_wolf(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         self.assertEqual(result.management_rules["covariance_method_effective"], "ledoit-wolf")
         self.assertIn("asset_coverage", result.to_tables())
 
@@ -698,7 +714,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertEqual(set(result.layer_a_metrics_rolling["window_months"]), {12, 24, 36})
 
     def test_auto_frequency_monthly_uses_full_history_window(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         self.assertEqual(result.management_rules["analysis_frequency"], "monthly")
         self.assertEqual(int(result.management_rules["covariance_window_effective"]), 60)
 
@@ -1120,7 +1136,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertNotEqual(int(clusters.loc["A"]), int(clusters.loc["C"]))
 
     def test_layer_a_trc_concentration_metrics_are_bounded(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         primary = (
             result.layer_a_metrics_rolling
             .loc[result.layer_a_metrics_rolling["window_months"] == 36]
@@ -1243,7 +1259,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertGreater(float(independent_dr), float(correlated_dr))
 
     def test_layer_a_rolling_outputs_have_expected_shape_and_columns(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
 
         metrics = result.layer_a_metrics_rolling
         self.assertEqual(set(metrics["window_months"].unique().tolist()), {12, 24, 36})
@@ -1350,7 +1366,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertTrue(pd.isna(latest_new_huge_trc["trc"]))
 
     def test_layer_a_regression_preserves_legacy_outputs_and_adds_new_keys(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         tables = result.to_tables()
 
         self.assertIn("correlation_matrix", tables)
@@ -1371,7 +1387,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertIn("holy_grail_score", result.holy_grail_verdict)
 
     def test_holy_grail_scores_are_bounded(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         verdict = result.holy_grail_verdict
 
         total_score = float(verdict["holy_grail_score"])
@@ -1399,7 +1415,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertAlmostEqual(float(effective_weights["macro"]), 0.0, places=8)
 
     def test_holy_grail_robustness_percentiles_are_ordered(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         robustness = result.holy_grail_robustness
         self.assertFalse(robustness.empty)
 
@@ -1410,7 +1426,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
             self.assertLessEqual(float(row["median"]), float(row["p90"]))
 
     def test_holy_grail_risk_concentration_flag_and_balance_drop(self) -> None:
-        baseline = self.analyzer.run_analysis()
+        baseline = self._run()
         baseline_balance = float(
             baseline.holy_grail_scorecard.loc[
                 baseline.holy_grail_scorecard["component"] == "balance", "score"
@@ -1526,7 +1542,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertIn("FACTOR_CONCENTRATION", result.holy_grail_red_flags["code"].tolist())
 
     def test_holy_grail_save_result_tables_and_summary_include_verdict(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         with TemporaryDirectory() as temp_dir:
             self.analyzer.save_result_tables(result, temp_dir)
             output_path = Path(temp_dir)
@@ -1542,7 +1558,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
             self.assertIn("holy_grail_score", payload["holy_grail_verdict"])
 
     def test_holy_grail_cli_lines_include_score_and_red_flags_block(self) -> None:
-        result = self.analyzer.run_analysis()
+        result = self._run()
         lines = format_holy_grail_cli_lines(result.holy_grail_verdict, max_red_flags=2)
 
         self.assertTrue(any(line.startswith("Holy Grail score:") for line in lines))
