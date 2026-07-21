@@ -30,8 +30,7 @@ Personal portfolio automation: IB Gateway live data, dividend income estimates, 
 
 - The quarterly report **never re-fetches or recomputes** TWR/benchmarks/income. It reads `data/snapshots/combined_data_*.json` written by `just run`.
 - `combined_data` is the single source of truth for both Google Sheets and the quarterly report. Do not duplicate fetch/calc logic in the report package.
-- Ticker sets, FX rates, and hardcoded prices live in `portfolio_yic_reports/auto/config.py` only. Legacy modules import from there; do not redefine.
-- For the full 3-stage data contract (gathering -> Flex snapshot -> report) and order of operations, see `.agents/references/data-flow.md`.
+- Ticker sets, FX rates, and hardcoded prices live in `portfolio_yic_reports/analyze_portfolio_reports.py` only. Do not redefine them elsewhere.
 
 ## Workflow
 

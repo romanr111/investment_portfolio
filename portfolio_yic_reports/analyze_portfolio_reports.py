@@ -44,37 +44,14 @@ from datetime import datetime
 # Import bond tickers list
 from data.filters_constants import BONDS_VALUES, PRECIOUS_METALS
 
-# Ticker sets, FX rate, and hardcoded prices live in auto/config.py (single source
-# of truth). See .agents/references/data-flow.md. The legacy module re-imports them
-# here so behaviour stays identical without duplicating the definitions. Try the
-# package import first (when run as a module); fall back to a relative import
-# when the file is run directly from inside the portfolio_yic_reports/ directory.
-try:
-    from portfolio_yic_reports.auto.config import (
-        CHINA_EQUITY_SYMBOLS,
-        CHINESE_STOCKS,
-        CORE_SYMBOLS,
-        EXCLUDED_FROM_EQUITY,
-        HARDCODED_ENTRY_PRICES,
-        HKD_TO_USD_RATE,
-        SPECIAL_ASSET_TICKERS,
-    )
-except ModuleNotFoundError:
-    from auto.config import (
-        CHINA_EQUITY_SYMBOLS,
-        CHINESE_STOCKS,
-        CORE_SYMBOLS,
-        EXCLUDED_FROM_EQUITY,
-        HARDCODED_ENTRY_PRICES,
-        HKD_TO_USD_RATE,
-        SPECIAL_ASSET_TICKERS,
-    )
-
 # Filter out duplicate exchange-specific tickers (e.g., IHYG.L)
 BONDS_CORE = [t for t in BONDS_VALUES if "." not in t]
 PRECIOUS_METALS_CORE = [t for t in PRECIOUS_METALS if "." not in t]
 
 # Symbols to exclude from main portfolio calculations (displayed separately)
+EXCLUDED_FROM_EQUITY = sorted(
+    set(BONDS_CORE + PRECIOUS_METALS_CORE + ["COMB", "SLV", "BILLS"])
+)
 EXCLUDED_SYMBOLS = list(EXCLUDED_FROM_EQUITY)
 
 # Special assets to be shown in a separate table (bonds, gold, commodities)
@@ -109,6 +86,12 @@ HKD_TO_USD_RATE = (
     0.128  # Approximate HKD to USD conversion rate, should be updated with current rate
 )
 CHINESE_STOCKS = ["9988", "700"]  # Chinese stocks with values in HKD
+
+# Hardcoded entry prices for positions where IBKR cost basis is unreliable
+# (e.g. cross-listed HK shares). Symbol -> USD entry price.
+HARDCODED_ENTRY_PRICES = {
+    "9988": 152.7,
+}
 
 # Ukrainian translations for portfolio changes
 INCREASED = "Збільшив"
