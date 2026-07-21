@@ -1,0 +1,65 @@
+<FlexQueryResponse queryName="stocks_trades_quarterly" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="TEST123456" fromDate="20260401" toDate="20260630" period="LastQuarter" whenGenerated="20260718;041334">
+<Trades>
+<SymbolSummary assetCategory="STK" symbol="COP" quantity="-25" tradePrice="111.46" buySell="SELL" />
+<Order assetCategory="STK" symbol="COP" quantity="-25" tradePrice="111.46" buySell="SELL" />
+<Trade assetCategory="STK" symbol="COP" quantity="-25" tradePrice="111.46" buySell="SELL" />
+<SymbolSummary assetCategory="STK" symbol="CPRT" quantity="10" tradePrice="33.515" buySell="BUY" />
+<Order assetCategory="STK" symbol="CPRT" quantity="10" tradePrice="33.515" buySell="BUY" />
+<Trade assetCategory="STK" symbol="CPRT" quantity="10" tradePrice="33.515" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="GDX" quantity="3" tradePrice="94.38" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="GDX" quantity="-13" tradePrice="88.36" buySell="SELL" />
+<Order assetCategory="STK" symbol="GDX" quantity="3" tradePrice="94.38" buySell="BUY" />
+<Trade assetCategory="STK" symbol="GDX" quantity="3" tradePrice="94.38" buySell="BUY" />
+<Order assetCategory="STK" symbol="GDX" quantity="-13" tradePrice="88.36" buySell="SELL" />
+<Trade assetCategory="STK" symbol="GDX" quantity="-13" tradePrice="88.36" buySell="SELL" />
+<SymbolSummary assetCategory="STK" symbol="IAU" quantity="5" tradePrice="88.1393" buySell="BUY" />
+<Order assetCategory="STK" symbol="IAU" quantity="5" tradePrice="88.1393" buySell="BUY" />
+<Trade assetCategory="STK" symbol="IAU" quantity="5" tradePrice="88.1393" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="MCO" quantity="3" tradePrice="453.2538" buySell="BUY" />
+<Order assetCategory="STK" symbol="MCO" quantity="3" tradePrice="453.2538" buySell="BUY" />
+<Trade assetCategory="STK" symbol="MCO" quantity="3" tradePrice="453.2538" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="SPGI" quantity="3" tradePrice="412.43" buySell="BUY" />
+<Order assetCategory="STK" symbol="SPGI" quantity="3" tradePrice="412.43" buySell="BUY" />
+<Trade assetCategory="STK" symbol="SPGI" quantity="3" tradePrice="412.43" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="TLT" quantity="15" tradePrice="87.325" buySell="BUY" />
+<Order assetCategory="STK" symbol="TLT" quantity="15" tradePrice="87.325" buySell="BUY" />
+<Trade assetCategory="STK" symbol="TLT" quantity="15" tradePrice="87.325" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="UBER" quantity="7" tradePrice="71.37" buySell="BUY" />
+<Order assetCategory="STK" symbol="UBER" quantity="7" tradePrice="71.37" buySell="BUY" />
+<Trade assetCategory="STK" symbol="UBER" quantity="7" tradePrice="71.37" buySell="BUY" />
+<SymbolSummary assetCategory="STK" symbol="XLE" quantity="-45" tradePrice="58.48" buySell="SELL" />
+<Order assetCategory="STK" symbol="XLE" quantity="-45" tradePrice="58.48" buySell="SELL" />
+<Trade assetCategory="STK" symbol="XLE" quantity="-45" tradePrice="58.48" buySell="SELL" />
+<SymbolSummary assetCategory="CASH" symbol="EUR.USD" quantity="1.73307459" tradePrice="1.159201504" buySell="BUY" />
+<SymbolSummary assetCategory="CASH" symbol="EUR.USD" quantity="-869.16307459" tradePrice="1.158292276" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-195.35" tradePrice="1.15794" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-195.35" tradePrice="1.15794" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-0.03" tradePrice="1.15794" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-0.03" tradePrice="1.15794" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-381.37" tradePrice="1.15814" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-381.37" tradePrice="1.15814" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-0.01" tradePrice="1.15814" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-0.01" tradePrice="1.15814" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-289.29" tradePrice="1.1587" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-289.29" tradePrice="1.1587" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-1.73" tradePrice="1.15829" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-1.73" tradePrice="1.15829" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="1.73" tradePrice="1.1592" buySell="BUY" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="1.73" tradePrice="1.1592" buySell="BUY" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="0.00307459" tradePrice="1.16004791" buySell="BUY" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="0.00307459" tradePrice="1.16004791" buySell="BUY" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-0.00307459" tradePrice="1.15929883" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-0.00307459" tradePrice="1.15929883" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-0.79" tradePrice="1.16883874" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-0.79" tradePrice="1.16883874" buySell="SELL" />
+<Order assetCategory="CASH" symbol="EUR.USD" quantity="-0.59" tradePrice="1.15934589" buySell="SELL" />
+<Trade assetCategory="CASH" symbol="EUR.USD" quantity="-0.59" tradePrice="1.15934589" buySell="SELL" />
+<SymbolSummary assetCategory="BILL" symbol="912797TC1" quantity="33000" tradePrice="98.0778778" buySell="BUY" />
+<Order assetCategory="BILL" symbol="912797TC1" quantity="33000" tradePrice="98.0778778" buySell="BUY" />
+<Trade assetCategory="BILL" symbol="912797TC1" quantity="33000" tradePrice="98.0778778" buySell="BUY" />
+</Trades>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

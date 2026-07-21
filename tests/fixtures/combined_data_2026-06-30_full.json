@@ -1,0 +1,57 @@
+{
+  "as_of_date": "2026-06-30",
+  "saved_at_utc": "2026-06-30T20:41:34Z",
+  "source": "test",
+  "data": {
+    "IB_PERFORMANCE": {
+      "period": "YTD",
+      "rate_of_return_pct": -4.12,
+      "measure": "TWR",
+      "source": "ib_flex_activity_statement",
+      "error": null
+    },
+    "INDEX_PERFORMANCE": {
+      "SP500": {
+        "symbol": "^GSPC",
+        "name": "S&P 500",
+        "currency": "USD",
+        "description": "S&P 500 Index - US large-cap stocks",
+        "success": true,
+        "error": null,
+        "period": "YTD",
+        "rate_of_return_pct": 9.34,
+        "start_date": "2026-01-01",
+        "end_date": "2026-06-30",
+        "start_price": 6858.4702,
+        "end_price": 7499.3599,
+        "current_price": 7499.36,
+        "market_change": 58.929688,
+        "market_change_pct": 0.7920199,
+        "source": "yfinance"
+      },
+      "NASDAQ": {
+        "symbol": "^IXIC",
+        "name": "NASDAQ Composite",
+        "currency": "USD",
+        "description": "NASDAQ Composite Index - US tech stocks",
+        "success": true,
+        "error": null,
+        "period": "YTD",
+        "rate_of_return_pct": 12.82,
+        "start_date": "2026-01-01",
+        "end_date": "2026-06-30",
+        "start_price": 23235.6309,
+        "end_price": 26213.7188,
+        "current_price": 26213.719,
+        "source": "yfinance"
+      }
+    },
+    "TOTAL_ASSETS": 157816,
+    "FIN_FREEDOM_GOAL_PROGRESS": "31.56%",
+    "FIXED_INCOME_DATA": {
+      "yearly_earnings_fixed_income": 4925,
+      "stocks_yearly": 764,
+      "total_yearly": 5689
+    }
+  }
+}

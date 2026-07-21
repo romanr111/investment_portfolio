@@ -1,0 +1,39 @@
+<FlexQueryResponse queryName="stocks_count_trades" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="TEST123456" fromDate="20260331" toDate="20260331" period="" whenGenerated="20260403;020000">
+<OpenPositions>
+<OpenPosition symbol="9988" position="500" costBasisPrice="94.530331932" positionValue="71400" assetCategory="STK" markPrice="142.8" />
+<OpenPosition symbol="BN" position="120" costBasisPrice="30.66" positionValue="5506.8" assetCategory="STK" markPrice="45.89" />
+<OpenPosition symbol="BRK B" position="14" costBasisPrice="488.29" positionValue="7037.1" assetCategory="STK" markPrice="502.65" />
+<OpenPosition symbol="KWEB" position="160" costBasisPrice="34.56" positionValue="5448" assetCategory="STK" markPrice="34.05" />
+<OpenPosition symbol="AMZN" position="18" costBasisPrice="206.56" positionValue="3718.08" assetCategory="STK" markPrice="206.56" />
+<OpenPosition symbol="NKE" position="85" costBasisPrice="74.128915271" positionValue="5415.35" assetCategory="STK" markPrice="63.71" />
+<OpenPosition symbol="GOOG" position="19" costBasisPrice="192.86" positionValue="5962.2" assetCategory="STK" markPrice="313.8" />
+<OpenPosition symbol="META" position="8" costBasisPrice="649.73" positionValue="5197.84" assetCategory="STK" markPrice="649.73" />
+<OpenPosition symbol="XLE" position="76" costBasisPrice="59.05" positionValue="4487.8" assetCategory="STK" markPrice="59.05" />
+<OpenPosition symbol="COF" position="10" costBasisPrice="109.04875" positionValue="2423.6" assetCategory="STK" markPrice="242.36" />
+<OpenPosition symbol="CPRT" position="45" costBasisPrice="39.59" positionValue="1761.75" assetCategory="STK" markPrice="39.15" />
+<OpenPosition symbol="IBKR" position="17.3979" costBasisPrice="58.669749567" positionValue="1118.86" assetCategory="STK" markPrice="64.31" />
+<OpenPosition symbol="PDD" position="11" costBasisPrice="114.28" positionValue="1247.09" assetCategory="STK" markPrice="113.39" />
+<OpenPosition symbol="UBER" position="13" costBasisPrice="75.22" positionValue="1062.23" assetCategory="STK" markPrice="81.71" />
+<OpenPosition symbol="MSFT" position="1" costBasisPrice="402.53" positionValue="402.53" assetCategory="STK" markPrice="402.53" />
+<OpenPosition symbol="WHR" position="62" costBasisPrice="77.11" positionValue="4472.68" assetCategory="STK" markPrice="72.14" />
+<OpenPosition symbol="IHYG" position="20" costBasisPrice="93.72" positionValue="1869.8" assetCategory="STK" markPrice="93.49" />
+<OpenPosition symbol="IAU" position="120" costBasisPrice="76.08" positionValue="9740.4" assetCategory="STK" markPrice="81.17" />
+<OpenPosition symbol="COMB" position="190" costBasisPrice="26.17" positionValue="4010.9" assetCategory="STK" markPrice="21.11" />
+<OpenPosition symbol="SPHY" position="90" costBasisPrice="23.42" positionValue="2130.3" assetCategory="STK" markPrice="23.67" />
+<OpenPosition symbol="912797PV3" position="33000" costBasisPrice="99.14" positionValue="32762.02" assetCategory="BILL" markPrice="99.256889" />
+</OpenPositions>
+<Trades>
+<Trade symbol="VOO" buySell="SELL" quantity="-4" tradePrice="614.87" assetCategory="STK" />
+<Trade symbol="FISV" buySell="SELL" quantity="-10" tradePrice="63.08" assetCategory="STK" />
+<Trade symbol="CVX" buySell="SELL" quantity="-12" tradePrice="182.75" assetCategory="STK" />
+<Trade symbol="CVS" buySell="SELL" quantity="-30" tradePrice="73.25" assetCategory="STK" />
+<Trade symbol="CP" buySell="SELL" quantity="-23" tradePrice="85.00" assetCategory="STK" />
+<Trade symbol="TLT" buySell="SELL" quantity="-85" tradePrice="88.43" assetCategory="STK" />
+<Trade symbol="SGOV" buySell="SELL" quantity="-46" tradePrice="100.38" assetCategory="STK" />
+<Trade symbol="SLV" buySell="SELL" quantity="-30" tradePrice="81.06" assetCategory="STK" />
+</Trades>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

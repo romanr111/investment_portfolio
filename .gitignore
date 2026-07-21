@@ -6,3 +6,5 @@ analytics/output/
 !/data/README.md
 portfolio_yic_reports/stocks_trades_quarterly_*.xml
 .codegraph/
+portfolio_yic_reports/stocks_count_trades*.xml
+portfolio_yic_reports/REPORT_*.md

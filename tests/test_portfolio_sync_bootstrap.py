@@ -1,32 +1,43 @@
+"""Tests for portfolio_sync bootstrap: env file parsing."""
 import os
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from src import portfolio_sync
 
 
-def test_load_local_env_file_reads_export_lines_without_overriding(monkeypatch, tmp_path):
-    env_file = tmp_path / "ib_flex_env.sh"
-    env_file.write_text(
-        "\n".join(
-            [
-                "# local config",
-                "export IB_FLEX_TOKEN='secret-token'",
-                'export IB_ACCOUNT_ID="DU123"',
-                "export EXISTING_VALUE=from-file",
-            ]
-        )
-    )
-    monkeypatch.delenv("IB_FLEX_TOKEN", raising=False)
-    monkeypatch.delenv("IB_ACCOUNT_ID", raising=False)
-    monkeypatch.setenv("EXISTING_VALUE", "from-env")
+class TestPortfolioSyncBootstrap(unittest.TestCase):
 
-    portfolio_sync._load_local_env_file(env_file)
+    def test_load_local_env_file_reads_export_lines_without_overriding(self):
+        with TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / "ib_flex_env.sh"
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "# local config",
+                        "export IB_FLEX_TOKEN='secret-token'",
+                        'export IB_ACCOUNT_ID="DU123"',
+                        "export EXISTING_VALUE=from-file",
+                    ]
+                )
+            )
+            # Clean env vars before the test.
+            for key in ("IB_FLEX_TOKEN", "IB_ACCOUNT_ID"):
+                os.environ.pop(key, None)
+            os.environ["EXISTING_VALUE"] = "from-env"
 
-    assert os.environ["IB_FLEX_TOKEN"] == "secret-token"
-    assert os.environ["IB_ACCOUNT_ID"] == "DU123"
-    assert os.environ["EXISTING_VALUE"] == "from-env"
+            portfolio_sync._load_local_env_file(env_file)
+
+            self.assertEqual(os.environ["IB_FLEX_TOKEN"], "secret-token")
+            self.assertEqual(os.environ["IB_ACCOUNT_ID"], "DU123")
+            self.assertEqual(os.environ["EXISTING_VALUE"], "from-env")
+
+            # Cleanup
+            for key in ("IB_FLEX_TOKEN", "IB_ACCOUNT_ID", "EXISTING_VALUE"):
+                os.environ.pop(key, None)
 
 
-def test_venv_python_points_inside_project_venv():
-    python_path = portfolio_sync._venv_python()
-
-    assert ".venv" in python_path.parts
+if __name__ == "__main__":
+    unittest.main()

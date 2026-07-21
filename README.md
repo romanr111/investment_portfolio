@@ -278,3 +278,56 @@ Migration note:
 ```bash
 python3 -m unittest discover -s tests
 ```
+
+## Quarterly Report (`just report`)
+
+Generates `portfolio_yic_reports/REPORT_YYYY_qN.md` - a Ukrainian quarterly portfolio report combining IB Flex portfolio snapshots, allocation diff, performance metrics, and Dalio risk analysis.
+
+```bash
+just report                              # last completed quarter
+just report -- --year 2025 --quarter 4   # specific quarter
+just report -- --skip-dalio               # omit Dalio section
+just report -- --snapshot-start path.xml --snapshot-end path.xml  # manual snapshots
+```
+
+Prerequisites:
+- IB Flex query `1188471` (`stocks_count_trades`) configured with Open Positions + Trades sections, Period = Last Business Day, Format = XML.
+- Add to `data/ib_flex_env.sh`:
+  ```bash
+  export IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT=1188471
+  ```
+- Use `just fetch-snapshot` to download a fresh snapshot into `data/ib_flex_snapshots/`.
+
+Data sources:
+- Positions/trades: IB Flex snapshots matched by `toDate` in XML filename.
+- Allocation diff: `data/portfolio_history.csv` (month-end bucket values).
+- Section 3 (YTD TWR, dividends, freedom progress): `data/snapshots/combined_data_*.json` nearest to quarter boundaries.
+- Dalio: `analytics/output/summary.json`.
+
+If the quarter is not yet complete or no matching snapshot exists, the command refuses with a clear error.
+
+### Automated Quarterly Snapshots (GitHub Actions)
+
+A GitHub Actions cron workflow fetches IB Flex snapshots automatically on quarter boundaries:
+
+- **First calendar day of Jan/Apr/Jul/Oct at 06:00 UTC** - captures the last business day of the previous quarter (start snapshot).
+- **Last calendar day of Mar/Jun/Sep/Dec at 22:00 UTC** - captures that day's positions (end snapshot).
+
+Each fetch is stored as a GitHub Actions artifact (365-day retention) and a Telegram notification is sent.
+
+To use the fetched snapshots locally:
+
+1. Download the artifact from the GitHub Actions run page.
+2. Place the XML file(s) in `data/ib_flex_snapshots/`.
+3. Run `just report -- --year YYYY --quarter N`.
+
+Required GitHub secrets:
+
+| Secret | Value |
+|---|---|
+| `IB_FLEX_TOKEN` | IB Flex Web Service token |
+| `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` | `1188471` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token (create via @BotFather) |
+| `TELEGRAM_CHAT_ID` | Your chat ID (get via @userinfobot) |
+
+The workflow can also be triggered manually via `workflow_dispatch` for backfill.

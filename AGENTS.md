@@ -1,18 +1,6 @@
-## Agent tooling
+# Investment Portfolio - agent guide
 
-- Use `just` for project commands when a recipe exists. Key recipes:
-  - `just graph-bootstrap` — initialize CodeGraph for the current worktree
-  - `just graph-status` — check CodeGraph status
-  - `just graph-sync` — sync CodeGraph index
-  - `just graph-reindex` — force-reindex CodeGraph
-  - `just test` — run the Python test suite (`python3 -m unittest discover -s tests`)
-  - `just run` — run the main portfolio sync pipeline (`python -m src.portfolio_sync`)
-- Use Headroom as the primary context-optimization layer, especially for bulky/noisy outputs: build logs, test output, JSON, verbose diagnostics, and large diffs. Do not default to RTK when Headroom is available. Retrieve exact original diagnostics when details matter.
-- Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree, then use `just graph-status`, `just graph-sync`, or `just graph-reindex`.
-- Treat each git worktree as a separate CodeGraph project with its own `.codegraph/codegraph.db`.
-- Do not share or copy `.codegraph/` between worktrees.
-- Multiple agents in the same worktree can share one CodeGraph daemon; different worktrees must use separate indexes.
-- Practical new-worktree setup: `git worktree add ../investment_portfolio_feature_x -b feature/x && cd ../investment_portfolio_feature_x && just graph-bootstrap && just graph-status`.
+Personal portfolio automation: IB Gateway live data, dividend income estimates, Google Sheets sync, historical snapshots, Dalio-style risk analysis, and automated quarterly YIC portfolio reports. Python 3; venv at `venv/`; env vars loaded from `data/ib_flex_env.sh` (local-only).
 
 ## Quarterly report generation
 
@@ -30,6 +18,21 @@
 
 ## Python project notes
 
-- The project is Python 3. Prefer the existing virtualenv at `venv/` when active; otherwise use `python3` from the host.
 - Keep `data/` local-only. Only `data/README.md` is tracked. Do not commit credentials, snapshots, or private sheets config.
-- Run tests with `just test` rather than invoking `unittest` directly when possible.
+- Use Headroom as the primary context-optimization layer for bulky/noisy outputs. Do not default to RTK when Headroom is available.
+- Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree.
+- Prefer `just` for project commands when a recipe exists (see `justfile` or `.agents/references/commands.md`).
+- Quarterly report worktree venvs may lack deps (pandas, numpy, requests); use the primary worktree venv at `/Users/roman/Documents/Development/investment_portfolio/venv/bin/python` when needed.
+- The quarterly report requires IB Flex snapshots in `data/ib_flex_snapshots/`. If no snapshot matches the quarter boundary, the generator refuses with a `ValueError` (incomplete quarters cannot be reported).
+- GitHub Actions workflow `.github/workflows/flex-snapshot.yml` fetches IB Flex snapshots automatically on quarter boundaries. Download artifacts and place XMLs in `data/ib_flex_snapshots/` before running `just report`.
+
+## Data invariants (every change)
+
+- The quarterly report **never re-fetches or recomputes** TWR/benchmarks/income. It reads `data/snapshots/combined_data_*.json` written by `just run`.
+- `combined_data` is the single source of truth for both Google Sheets and the quarterly report. Do not duplicate fetch/calc logic in the report package.
+- Ticker sets, FX rates, and hardcoded prices live in `portfolio_yic_reports/auto/config.py` only. Legacy modules import from there; do not redefine.
+- For the full 3-stage data contract (gathering -> Flex snapshot -> report) and order of operations, see `.agents/references/data-flow.md`.
+
+## Workflow
+
+Use `commit-hygiene`, `code-review`, `self-review` skills for project workflows.
