@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Квартальний звіт · Q2 2026</title>
+<style>
+:root {
+  --paper: #FBFAF7;
+  --card: #FFFFFF;
+  --ink: #1A2532;
+  --navy: #1F3A5F;
+  --navy-soft: #B9C4D1;
+  --muted: #64707D;
+  --hairline: #E4E1D8;
+  --track: #ECE9E0;
+  --green: #1A7A4E;
+  --red: #B03A2E;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.page { max-width: 920px; margin: 0 auto; padding: 56px 40px 64px; }
+
+/* ---------- Masthead ---------- */
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--ink);
+  position: relative;
+}
+.masthead::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.overline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin-bottom: 10px;
+}
+h1 {
+  font-family: "Iowan Old Style", "Palatino", Georgia, "Times New Roman", serif;
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 600;
+  margin: 0 0 6px;
+  letter-spacing: 0.005em;
+}
+.subtitle { font-size: 14px; color: var(--muted); }
+.period {
+  text-align: right;
+  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
+  color: var(--navy);
+  flex: none;
+}
+.period .q { font-size: 34px; font-weight: 600; line-height: 1; display: block; }
+.period .y { font-size: 15px; letter-spacing: 0.12em; }
+
+/* ---------- Sections ---------- */
+section { margin-top: 48px; }
+.sec-label {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.sec-num {
+  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
+  font-size: 14px;
+  color: var(--navy);
+  letter-spacing: 0.06em;
+}
+.sec-title {
+  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
+  font-size: 23px;
+  font-weight: 600;
+  margin: 0;
+}
+.sec-rule { flex: 1; border-bottom: 1px solid var(--hairline); transform: translateY(-6px); }
+h3 {
+  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 30px 0 4px;
+}
+
+/* ---------- KPI cards ---------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-top: 3px solid var(--navy);
+  border-radius: 3px;
+  padding: 14px 16px 12px;
+}
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  min-height: 28px;
+}
+.kpi-value {
+  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.navy { color: var(--navy); }
+.footnote { font-size: 12.5px; color: var(--muted); margin-top: 14px; font-style: italic; }
+
+/* ---------- Tables ---------- */
+.table-scroll { overflow-x: auto; margin-top: 14px; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13.5px;
+}
+th {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ink);
+  white-space: nowrap;
+}
+td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: middle;
+}
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.num { text-align: right; }
+.ticker { font-weight: 600; white-space: nowrap; }
+tr.total td {
+  border-top: 1.5px solid var(--ink);
+  border-bottom: none;
+  font-weight: 600;
+  padding-top: 10px;
+}
+tr.closed-row td { color: var(--muted); }
+tr.closed-row td.ticker, tr.closed-row .ticker { color: var(--muted); }
+.sub { color: var(--muted); font-size: 12px; }
+
+/* ---------- Badges ---------- */
+.pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pill-new { color: var(--navy); background: rgba(31, 58, 95, 0.08); border: 1px solid rgba(31, 58, 95, 0.28); }
+.pill-add { color: var(--green); background: rgba(26, 122, 78, 0.08); border: 1px solid rgba(26, 122, 78, 0.28); }
+.pill-cut { color: var(--red); background: rgba(176, 58, 46, 0.05); border: 1px solid rgba(176, 58, 46, 0.2); }
+.pill-close { color: var(--red); background: rgba(176, 58, 46, 0.07); border: 1px solid rgba(176, 58, 46, 0.26); }
+.hold { color: var(--muted); font-size: 12.5px; }
+
+/* ---------- Inline weight bars ---------- */
+.wcell { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.wbar {
+  width: 72px; height: 5px;
+  background: var(--track);
+  border-radius: 2px;
+  overflow: hidden;
+  flex: none;
+}
+.wbar i { display: block; height: 100%; background: var(--navy); border-radius: 2px; }
+.wval { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Allocation paired bars ---------- */
+td.bars { width: 170px; }
+.bar {
+  display: block;
+  height: 4px;
+  background: var(--track);
+  border-radius: 2px;
+  margin: 3px 0;
+  min-width: 150px;
+}
+.bar i { display: block; height: 100%; border-radius: 2px; }
+.bar.was i { background: var(--navy-soft); }
+.bar.now i { background: var(--navy); }
+.chip { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- Split bars ---------- */
+.split { margin-top: 18px; }
+.split-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.split-head .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.split-bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; background: var(--track); }
+.split-bar .a { background: var(--navy); }
+.split-bar .b { background: var(--navy-soft); }
+
+/* ---------- Callouts ---------- */
+/* ---------- Footer ---------- */
+footer {
+  margin-top: 56px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+  .page { padding: 32px 18px 48px; }
+  h1 { font-size: 30px; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .masthead { flex-direction: column; align-items: flex-start; }
+  .period { text-align: left; }
+}
+
+/* ---------- Print ---------- */
+@page { margin: 16mm 14mm; }
+@media print {
+  body { background: #fff; }
+  .page { max-width: none; padding: 0; }
+  .kpi-card, .table-scroll, .split { break-inside: avoid; }
+  section { margin-top: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <div>
+    <div class="overline">Portfolio Review</div>
+    <h1>Квартальний звіт</h1>
+    <div class="subtitle">Квітень – Червень 2026 року</div>
+  </div>
+  <div class="period"><span class="q">Q2</span><span class="y">2026</span></div>
+</header>
+
+<section>
+  <div class="sec-label">
+    <span class="sec-num">01</span>
+    <h2 class="sec-title">Коротко за квартал</h2>
+    <span class="sec-rule"></span>
+  </div>
+  <div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">IBKR YTD</div><div class="kpi-value neg">−6.8%</div></div><div class="kpi-card"><div class="kpi-label">S&amp;P 500 YTD</div><div class="kpi-value pos">+9.3%</div></div><div class="kpi-card"><div class="kpi-label">Відставання від S&amp;P 500 (процентні пункти)</div><div class="kpi-value neg">−16,2%</div></div><div class="kpi-card"><div class="kpi-label">Головна зміна: частка кешу</div><div class="kpi-value pos">+5,2%</div></div></div>
+  <p class="footnote">Доходи стосуються лише IBKR.<br>
+  Не входять у доходність: Криптокредитування, Криптовалюти, P2P-кредитування, Інші активи (~29% капіталу).</p>
+</section>
+
+<section>
+  <div class="sec-label">
+    <span class="sec-num">02</span>
+    <h2 class="sec-title">Зміни в структурі сукупного портфеля</h2>
+    <span class="sec-rule"></span>
+  </div>
+  <div class="table-scroll"><table><thead><tr><th>Клас активів</th><th class="num">Було</th><th class="num">Стало</th><th>Було → Стало</th><th class="num">Зміна, %</th></tr></thead><tbody><tr><td>Акції IBKR</td><td class="num">33.90%</td><td class="num">32.20%</td><td class="bars"><span class="bar was"><i style="width:100.0%"></i></span><span class="bar now"><i style="width:95.0%"></i></span></td><td class="num"><span class="chip neg">▼ −1.70%</span></td></tr><tr><td>Облігації</td><td class="num">22.60%</td><td class="num">24.00%</td><td class="bars"><span class="bar was"><i style="width:66.7%"></i></span><span class="bar now"><i style="width:70.8%"></i></span></td><td class="num"><span class="chip pos">▲ +1.40%</span></td></tr><tr><td>Інші активи</td><td class="num">17.40%</td><td class="num">13.80%</td><td class="bars"><span class="bar was"><i style="width:51.3%"></i></span><span class="bar now"><i style="width:40.7%"></i></span></td><td class="num"><span class="chip neg">▼ −3.60%</span></td></tr><tr><td>Криптокредитування</td><td class="num">11.10%</td><td class="num">11.50%</td><td class="bars"><span class="bar was"><i style="width:32.7%"></i></span><span class="bar now"><i style="width:33.9%"></i></span></td><td class="num"><span class="chip pos">▲ +0.40%</span></td></tr><tr><td>Кеш</td><td class="num">1.10%</td><td class="num">6.30%</td><td class="bars"><span class="bar was"><i style="width:3.2%"></i></span><span class="bar now"><i style="width:18.6%"></i></span></td><td class="num"><span class="chip pos">▲ +5.20%</span></td></tr><tr><td>Дорогоцінні метали</td><td class="num">6.90%</td><td class="num">5.70%</td><td class="bars"><span class="bar was"><i style="width:20.4%"></i></span><span class="bar now"><i style="width:16.8%"></i></span></td><td class="num"><span class="chip neg">▼ −1.20%</span></td></tr><tr><td>Товарні активи</td><td class="num">3.00%</td><td class="num">2.90%</td><td class="bars"><span class="bar was"><i style="width:8.8%"></i></span><span class="bar now"><i style="width:8.6%"></i></span></td><td class="num"><span class="chip neg">▼ −0.10%</span></td></tr><tr><td>Криптовалюти</td><td class="num">2.70%</td><td class="num">2.30%</td><td class="bars"><span class="bar was"><i style="width:8.0%"></i></span><span class="bar now"><i style="width:6.8%"></i></span></td><td class="num"><span class="chip neg">▼ −0.40%</span></td></tr><tr><td>P2P-кредитування</td><td class="num">1.30%</td><td class="num">1.30%</td><td class="bars"><span class="bar was"><i style="width:3.8%"></i></span><span class="bar now"><i style="width:3.8%"></i></span></td><td class="num"><span class="chip">—</span></td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="sec-label">
+    <span class="sec-num">03</span>
+    <h2 class="sec-title">Склад і зміни портфеля IBKR</h2>
+    <span class="sec-rule"></span>
+  </div>
+
+  <h3>Акції</h3>
+  <div class="table-scroll"><table><thead><tr><th>Позиція</th><th>Остання активність</th><th class="num">Вага</th><th class="num">Середня ціна</th><th class="num">P/L</th></tr></thead><tbody><tr><td class="ticker">BRK B</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:100.0%"></i></span><span class="wval">13.78%</span></span></td><td class="num">488.29$</td><td class="num pos">+2.5%</td></tr><tr><td class="ticker">GOOG</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:95.8%"></i></span><span class="wval">13.20%</span></span></td><td class="num">192.86$</td><td class="num pos">+83.2%</td></tr><tr><td class="ticker">9988</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:84.8%"></i></span><span class="wval">11.69%</span></span></td><td class="num">152.70$</td><td class="num neg">−39.2%</td></tr><tr><td class="ticker">BN</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:66.9%"></i></span><span class="wval">9.21%</span></span></td><td class="num">30.66$</td><td class="num pos">+38.9%</td></tr><tr><td class="ticker">KWEB</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:55.9%"></i></span><span class="wval">7.70%</span></span></td><td class="num">34.56$</td><td class="num neg">−29.2%</td></tr><tr><td class="ticker">AMZN</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:51.0%"></i></span><span class="wval">7.03%</span></span></td><td class="num">206.56$</td><td class="num pos">+15.4%</td></tr><tr><td class="ticker">NKE</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:49.8%"></i></span><span class="wval">6.86%</span></span></td><td class="num">74.13$</td><td class="num neg">−44.6%</td></tr><tr><td class="ticker">META</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:40.2%"></i></span><span class="wval">5.54%</span></span></td><td class="num">649.73$</td><td class="num neg">−13.3%</td></tr><tr><td class="ticker">WHR</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:34.3%"></i></span><span class="wval">4.73%</span></span></td><td class="num">77.11$</td><td class="num neg">−48.9%</td></tr><tr><td class="ticker">COF</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:28.6%"></i></span><span class="wval">3.95%</span></span></td><td class="num">109.05$</td><td class="num pos">+84.0%</td></tr><tr><td class="ticker">CPRT</td><td><span class="pill pill-add">Збільшив (+22%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:22.1%"></i></span><span class="wval">3.05%</span></span></td><td class="num">38.50$</td><td class="num neg">−26.8%</td></tr><tr><td class="ticker">IBKR</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:21.6%"></i></span><span class="wval">2.98%</span></span></td><td class="num">58.67$</td><td class="num pos">+48.4%</td></tr><tr><td class="ticker">UBER</td><td><span class="pill pill-add">Збільшив (+54%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:20.6%"></i></span><span class="wval">2.84%</span></span></td><td class="num">73.92$</td><td class="num neg">−2.4%</td></tr><tr><td class="ticker">MCO</td><td><span class="pill pill-new">Нова позиція</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:19.4%"></i></span><span class="wval">2.67%</span></span></td><td class="num">453.59$</td><td class="num neg">−0.1%</td></tr><tr><td class="ticker">SPGI</td><td><span class="pill pill-new">Нова позиція</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:17.4%"></i></span><span class="wval">2.40%</span></span></td><td class="num">412.76$</td><td class="num neg">−1.3%</td></tr><tr><td class="ticker">PDD</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:12.0%"></i></span><span class="wval">1.65%</span></span></td><td class="num">114.28$</td><td class="num neg">−33.3%</td></tr><tr><td class="ticker">MSFT</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:5.3%"></i></span><span class="wval">0.73%</span></span></td><td class="num">402.53$</td><td class="num neg">−7.3%</td></tr><tr class="closed-row"><td class="ticker">COP</td><td><span class="pill pill-close">Закрита позиція</span></td><td class="num">5.82% → 0%</td><td class="num">106.81$ → 111.46$</td><td class="num pos">+4.4%</td></tr><tr class="closed-row"><td class="ticker">XLE</td><td><span class="pill pill-close">Закрита позиція</span></td><td class="num">4.81% → 0%</td><td class="num">59.05$ → 58.48$</td><td class="num neg">−1.0%</td></tr><tr class="total"><td>Підсумок</td><td></td><td class="num">100.00%</td><td></td><td></td></tr></tbody></table></div>
+
+  <div class="split"><div class="split-head"><span>Співвідношення Core/Satellite</span><span class="v">13.78% / 86.22%</span></div><div class="split-bar"><i class="a" style="width:13.78%"></i><i class="b" style="width:86.22%"></i></div></div>
+  <div class="split"><div class="split-head"><span>Співвідношення Китай/Інші</span><span class="v">21.03% / 78.97%</span></div><div class="split-bar"><i class="a" style="width:21.03%"></i><i class="b" style="width:78.97%"></i></div></div>
+
+  <h3>Облігації, золото та товарні активи</h3>
+  <div class="table-scroll"><table><thead><tr><th>Позиція</th><th>Остання активність</th><th class="num">Вага (IBKR активи)</th><th class="num">Середня ціна</th><th class="num">P/L</th></tr></thead><tbody><tr><td class="ticker">T Bills</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:100.0%"></i></span><span class="wval">31.42%</span></span></td><td class="num">98.09$</td><td class="num">0.0%</td></tr><tr><td class="ticker">IAU</td><td><span class="pill pill-add">Збільшив (+4%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:28.0%"></i></span><span class="wval">8.79%</span></span></td><td class="num">76.08$</td><td class="num neg">−0.7%</td></tr><tr><td class="ticker">COMB</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:14.1%"></i></span><span class="wval">4.44%</span></span></td><td class="num">26.17$</td><td class="num neg">−8.0%</td></tr><tr><td class="ticker">SPHY</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:6.5%"></i></span><span class="wval">2.05%</span></span></td><td class="num">23.42$</td><td class="num pos">+0.1%</td></tr><tr><td class="ticker">IHYG</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:5.6%"></i></span><span class="wval">1.77%</span></span></td><td class="num">93.72$</td><td class="num neg">−2.7%</td></tr><tr><td class="ticker">TLT</td><td><span class="pill pill-new">Нова позиція</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:4.0%"></i></span><span class="wval">1.26%</span></span></td><td class="num">87.39$</td><td class="num neg">−1.1%</td></tr><tr class="closed-row"><td class="ticker">GDX</td><td><span class="pill pill-close">Закрита позиція</span></td><td class="num">0.93% → 0%</td><td class="num">82.16$ → 88.36$</td><td class="num pos">+7.5%</td></tr></tbody></table></div>
+</section>
+
+<footer>
+  <span>Квартальний звіт · Q2 2026</span>
+</footer>
+
+</div>
+</body>
+</html>

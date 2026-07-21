@@ -37,6 +37,7 @@ import os
 import xml.etree.ElementTree as ET
 import glob
 import argparse
+from pathlib import Path
 from typing import Dict, List, Tuple, Set, Optional
 from datetime import datetime
 
@@ -79,7 +80,6 @@ CORE_SYMBOLS = {
     "VOO",
     "QQQ",
     "BRK B",
-    "BN",
 }
 
 # Chinese equity symbols for China vs. rest split
@@ -518,6 +518,28 @@ class XMLPortfolioParser:
 
         return portfolio, from_date, to_date
 
+    @staticmethod
+    def _merge_trades_into(file_path: str, portfolio: Portfolio) -> None:
+        """Parse a supplemental trades-only Flex export and add sell trades."""
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        for trade in root.findall(".//Trade"):
+            symbol = trade.attrib.get("symbol", "")
+            if not symbol:
+                continue
+
+            buy_sell = trade.attrib.get("buySell", "").upper()
+            quantity = float(trade.attrib.get("quantity", "0"))
+            trade_price = float(trade.attrib.get("tradePrice", "0"))
+
+            is_sell = buy_sell == "SELL" or quantity < 0
+            if not is_sell:
+                continue
+
+            sell_quantity = abs(quantity)
+            portfolio.add_sell_trade(symbol, sell_quantity, trade_price)
+
 
 class TableFormatter:
     """Class for formatting portfolio data as a table"""
@@ -551,8 +573,6 @@ class TableFormatter:
                 pct_str = f"{sign}{pct_change:.1f}%"
             else:
                 pct_str = f"{sign}{pct_change:.0f}%"
-            if symbol == "COMB" and pct_change < 0:
-                pct_str = f"{pct_str} дивіденди"
             return f"{avg_price:.2f}$ ({pct_str})"
 
         target_price = self.analyzer.final_portfolio.get_avg_sell_price(symbol)
@@ -723,7 +743,7 @@ class TableFormatter:
         special_data = []
 
         # Create table header
-        header = f"{HEADER_SYMBOL.ljust(self.symbol_width)}  {HEADER_ACTIVITY.ljust(self.activity_width)}  {HEADER_AVG_PRICE.ljust(self.price_width)}  {'Вага (від загальної вартості)'.ljust(self.weight_width)}"
+        header = f"{HEADER_SYMBOL.ljust(self.symbol_width)}  {HEADER_ACTIVITY.ljust(self.activity_width)}  {HEADER_AVG_PRICE.ljust(self.price_width)}  {'Вага (IBKR активи)'.ljust(self.weight_width)}"
         separator = f"{'-' * self.symbol_width}  {'-' * self.activity_width}  {'-' * self.price_width}  {'-' * self.weight_width}"
 
         table_lines = [header, separator]
@@ -881,7 +901,7 @@ class TableFormatter:
         special_data = []
 
         # Create Markdown table header for special assets
-        header = f"| {HEADER_SYMBOL} | {HEADER_ACTIVITY} | {HEADER_AVG_PRICE} | Вага (від загальної вартості) |"
+        header = f"| {HEADER_SYMBOL} | {HEADER_ACTIVITY} | {HEADER_AVG_PRICE} | Вага (IBKR активи) |"
         separator = f"|{'-' * (self.symbol_width + 2)}|{'-' * (self.activity_width + 2)}|{'-' * (self.price_width + 2)}|{'-' * (self.weight_width + 2)}|"
 
         table_lines = [header, separator]
@@ -1017,24 +1037,48 @@ def generate_report_filename(date_str: str) -> str:
         return "portfolio_report.md"
 
 
-def main():
-    """Main function"""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Analyze stock portfolio changes.")
-    parser.add_argument(
-        "--format",
-        choices=["text", "markdown", "both"],
-        default="both",
-        help="Output format: text, markdown, or both (default: both)",
-    )
-    args = parser.parse_args()
+class PortfolioReportGenerator:
+    """Generates portfolio comparison reports in text or Markdown format."""
 
-    # Determine base directory (directory where this script resides)
-    from pathlib import Path
+    def __init__(
+        self,
+        initial_portfolio: Portfolio,
+        final_portfolio: Portfolio,
+        format_type: str = "text",
+    ) -> None:
+        self.analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
+        self.formatter = TableFormatter(self.analyzer, format_type=format_type)
+        self.format_type = format_type
 
-    base_dir = Path(__file__).resolve().parent
+    def generate(self) -> str:
+        """Generate the report as a string."""
+        return self.formatter.format_as_table()
 
-    # Find all files matching pattern in base directory
+    def save_markdown(self, output_path: Path, title: str) -> None:
+        """Save the Markdown report to the given path with a title."""
+        report = self.generate()
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(f"\n # {title}\n\n")
+            f.write(report)
+
+
+def load_portfolios(
+    base_dir: Path,
+) -> Optional[Tuple[Portfolio, Portfolio, str, str]]:
+    """
+    Discover the Flex XML exports in base_dir, parse them, apply hardcoded
+    one-off adjustments, and return weighted portfolios with period dates.
+
+    Shared by the Markdown report (main) and the quarterly HTML generator so
+    the one-off adjustments live in exactly one place.
+
+    Returns (initial_portfolio, final_portfolio, initial_to_date,
+    final_to_date) or None when the input files are missing.
+
+    If a `stocks_trades_quarterly_YYYY_qN.xml` file is present, its `<Trade>`
+    elements are merged into the final portfolio so closed positions can show
+    realized P/L.
+    """
     matching_files = list(base_dir.glob("stocks_count*.xml"))
 
     initial_file = None
@@ -1049,7 +1093,7 @@ def main():
     if not initial_file or not final_file:
         print("Error: Could not find required files in", base_dir)
         print("Expected: stocks_count1.xml (initial) and stocks_count2.xml (final)")
-        return
+        return None
 
     print(f"Analyzing positions from {initial_file.name} to {final_file.name}...")
 
@@ -1060,20 +1104,187 @@ def main():
     )
     final_portfolio, final_from_date, final_to_date = parser.parse(str(final_file))
 
-    # HARD-CODED ONE-OFF: adjust BN initial shares for the stock split.
-    # Remove this block after the next report run.
-    bn_initial = initial_portfolio.get_stock("BN")
-    if bn_initial:
-        original_bn_shares = bn_initial.shares
-        bn_initial.shares = 82.5
-        print(
-            "NOTE: BN initial shares hardcoded from "
-            f"{original_bn_shares} to {bn_initial.shares} due to stock split."
-        )
+    # Merge supplemental quarterly trades if available
+    for trades_path in sorted(base_dir.glob("stocks_trades_quarterly_*.xml")):
+        parser._merge_trades_into(str(trades_path), final_portfolio)
+        print(f"Merged trades from {trades_path.name}")
 
     # Calculate portfolio weights
     initial_portfolio.calculate_weights()
     final_portfolio.calculate_weights()
+
+    return initial_portfolio, final_portfolio, initial_to_date, final_to_date
+
+
+def _activity_kind(activity: str) -> Tuple[str, str]:
+    """Map an activity string with icon prefix to (kind, text without icon)."""
+    for icon, kind in (
+        (ICON_NEW, "new"),
+        (ICON_INCREASED, "increased"),
+        (ICON_DECREASED, "decreased"),
+        (ICON_ELIMINATED, "closed"),
+    ):
+        if icon and activity.startswith(icon):
+            return kind, activity[len(icon):].strip()
+    return "unchanged", activity.strip()
+
+
+def collect_stock_rows(analyzer: PortfolioAnalyzer) -> List[Dict]:
+    """
+    Structured stock rows for the HTML report: open positions sorted by
+    weight descending, then closed positions, price and P/L as separate
+    fields. Mirrors the row logic of the Markdown table.
+    """
+    formatter = TableFormatter(analyzer)
+    open_rows = []
+    closed_rows = []
+
+    for symbol in analyzer.get_all_symbols():
+        if formatter._should_skip(symbol):
+            continue
+
+        activity, avg_price, _, pl_pct = analyzer.analyze_change(symbol)
+        kind, activity_text = _activity_kind(activity)
+        symbol_display = formatter._display_symbol(symbol)
+
+        if kind == "closed":
+            weight_text, _ = formatter._format_weight_cell(symbol)
+            sell_price = analyzer.final_portfolio.get_avg_sell_price(symbol)
+            if avg_price > 0 and sell_price > 0:
+                price_text = f"{avg_price:.2f}$ → {sell_price:.2f}$"
+            elif avg_price > 0:
+                price_text = f"{avg_price:.2f}$"
+            else:
+                price_text = "-"
+            initial_stock = analyzer.initial_portfolio.get_stock(symbol)
+            closed_rows.append(
+                (
+                    initial_stock.weight if initial_stock else 0.0,
+                    {
+                        "symbol": symbol_display,
+                        "kind": kind,
+                        "activity_text": activity_text,
+                        "weight_text": weight_text,
+                        "price_text": price_text,
+                        "pl_pct": pl_pct if avg_price > 0 and sell_price > 0 else None,
+                    },
+                )
+            )
+        else:
+            final_stock = analyzer.final_portfolio.get_stock(symbol)
+            weight = final_stock.weight if final_stock else 0.0
+            open_rows.append(
+                (
+                    weight,
+                    {
+                        "symbol": symbol_display,
+                        "kind": kind,
+                        "activity_text": activity_text,
+                        "weight_pct": weight,
+                        "price_text": f"{avg_price:.2f}$" if avg_price > 0 else "-",
+                        "pl_pct": pl_pct if avg_price > 0 else None,
+                    },
+                )
+            )
+
+    open_rows.sort(key=lambda item: item[0], reverse=True)
+    closed_rows.sort(key=lambda item: item[0], reverse=True)
+    return [row for _, row in open_rows] + [row for _, row in closed_rows]
+
+
+def collect_special_asset_rows(analyzer: PortfolioAnalyzer) -> List[Dict]:
+    """
+    Structured bond/gold/commodity rows for the HTML report. Weights use the
+    same base as the Markdown special-assets table: stocks total plus special
+    assets total (IBKR subset). Price and P/L columns mirror collect_stock_rows
+    so both IBKR tables share the same column format.
+    """
+    formatter = TableFormatter(analyzer)
+
+    all_existing_symbols = analyzer.initial_portfolio.get_symbols().union(
+        analyzer.final_portfolio.get_symbols()
+    )
+
+    stocks_total = analyzer.final_portfolio.get_total_value()
+    special_assets_value = 0
+    for special_symbol in LONG_BONDS_GOLD_COMMODITIES:
+        special_stock = analyzer.final_portfolio.get_stock(
+            special_symbol
+        ) or analyzer.initial_portfolio.get_stock(special_symbol)
+        if special_stock:
+            special_assets_value += special_stock.usd_value
+    total_portfolio_value = stocks_total + special_assets_value
+
+    rows = []
+    for symbol in LONG_BONDS_GOLD_COMMODITIES:
+        if symbol not in all_existing_symbols:
+            continue
+
+        activity, avg_price, _, pl_pct = analyzer.analyze_change(symbol)
+        if not activity.strip() and avg_price == 0.0:
+            continue
+
+        kind, activity_text = _activity_kind(activity)
+
+        initial_stock = analyzer.initial_portfolio.get_stock(symbol)
+        final_stock = analyzer.final_portfolio.get_stock(symbol)
+
+        if kind == "closed":
+            sell_price = analyzer.final_portfolio.get_avg_sell_price(symbol)
+            if avg_price > 0 and sell_price > 0:
+                price_text = f"{avg_price:.2f}$ → {sell_price:.2f}$"
+            elif avg_price > 0:
+                price_text = f"{avg_price:.2f}$"
+            else:
+                price_text = "-"
+            row_pl_pct = pl_pct if avg_price > 0 and sell_price > 0 else None
+        else:
+            price_text = f"{avg_price:.2f}$" if avg_price > 0 else "-"
+            row_pl_pct = pl_pct if avg_price > 0 else None
+
+        row = {
+            "symbol": formatter._display_symbol(symbol),
+            "kind": kind,
+            "activity_text": activity_text,
+            "price_text": price_text,
+            "pl_pct": row_pl_pct,
+        }
+        weight_sort = 0.0
+        if final_stock and total_portfolio_value > 0:
+            weight = (final_stock.usd_value / total_portfolio_value) * 100
+            row["weight_pct"] = weight
+            weight_sort = weight
+        elif initial_stock and total_portfolio_value > 0:
+            weight = (initial_stock.usd_value / total_portfolio_value) * 100
+            row["weight_text"] = f"{weight:.2f}% → 0%" if weight > 0 else "-"
+        else:
+            row["weight_text"] = "-"
+
+        rows.append((weight_sort, row))
+
+    rows.sort(key=lambda item: item[0], reverse=True)
+    return [row for _, row in rows]
+
+
+def main():
+    """Main function"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Analyze stock portfolio changes.")
+    parser.add_argument(
+        "--format",
+        choices=["text", "markdown", "both"],
+        default="both",
+        help="Output format: text, markdown, or both (default: both)",
+    )
+    args = parser.parse_args()
+
+    # Determine base directory (directory where this script resides)
+    base_dir = Path(__file__).resolve().parent
+
+    loaded = load_portfolios(base_dir)
+    if loaded is None:
+        return
+    initial_portfolio, final_portfolio, initial_to_date, final_to_date = loaded
 
     # Format date for report header - use initial_to_date as the period
     period_formatted = format_date_with_quarter(initial_to_date)
@@ -1084,25 +1295,21 @@ def main():
 
     # Output based on the specified format
     if args.format in ["text", "both"]:
-        # Create analyzer for text output
-        text_analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
-        text_formatter = TableFormatter(text_analyzer, format_type="text")
-        text_output = text_formatter.format_as_table()
+        text_generator = PortfolioReportGenerator(
+            initial_portfolio, final_portfolio, format_type="text"
+        )
+        text_output = text_generator.generate()
         print(text_output)
 
     if args.format in ["markdown", "both"]:
-        # Create a separate analyzer instance for markdown to prevent double counting
-        markdown_analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
-        markdown_formatter = TableFormatter(markdown_analyzer, format_type="markdown")
-        markdown_output = markdown_formatter.format_as_table()
-
-        # Save markdown output to a file without printing to console
+        markdown_generator = PortfolioReportGenerator(
+            initial_portfolio, final_portfolio, format_type="markdown"
+        )
         report_filename = generate_report_filename(initial_to_date)
-        # Save to script directory (where XML files are located)
         output_path = base_dir / report_filename
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(f"\n # Зміни в портфелі акцій за {period_formatted}\n\n")
-            f.write(markdown_output)
+        markdown_generator.save_markdown(
+            output_path, f"Зміни в портфелі акцій за {period_formatted}"
+        )
         print(f"\nMarkdown звіт збережено у файл: {output_path}")
 
 

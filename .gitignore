@@ -4,4 +4,5 @@ analytics/output/
 /data/**
 !/data/
 !/data/README.md
+portfolio_yic_reports/stocks_trades_quarterly_*.xml
 .codegraph/
