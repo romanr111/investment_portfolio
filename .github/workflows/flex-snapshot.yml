@@ -2,13 +2,12 @@ name: IB Flex Quarterly Snapshot
 
 on:
   schedule:
-    # First calendar day of quarter-start months (Jan/Apr/Jul/Oct) at 06:00 UTC.
+    # 1st day of Jan/Apr/Jul/Oct at 06:00 UTC.
     # Before US market open -> captures last business day of previous quarter.
+    # This single cron produces both the quarter-end snapshot for the just-ended
+    # quarter AND the quarter-start snapshot for the new quarter (same toDate).
+    # Quarterly trades are fetched in the same run.
     - cron: '0 6 1 1,4,7,10 *'
-    # Last calendar day of quarter-end months (Mar/Jun/Sep/Dec) at 22:00 UTC.
-    # After US market close -> captures that day's positions.
-    - cron: '0 22 31 3,12 *'
-    - cron: '0 22 30 6,9 *'
   workflow_dispatch:
 
 jobs:
@@ -34,7 +33,7 @@ jobs:
 
       - name: Fetch quarterly trades
         if: github.event_name == 'schedule' && startsWith(github.event.schedule, '0 6')
-        run: python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; import os; print('Trades:', IBFlexPortfolioFetcher(query_id=os.getenv('IB_FLEX_QUERY_ID_QUARTERLY_TRADES')).fetch_and_save('data/ib_flex_snapshots'))"
+        run: python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; import os; print('Trades:', IBFlexPortfolioFetcher(query_id=os.getenv('IB_FLEX_QUERY_ID_QUARTERLY_TRADES')).fetch_and_save('data/ib_flex_snapshots', filename_prefix='trades'))"
         env:
           IB_FLEX_TOKEN: ${{ secrets.IB_FLEX_TOKEN }}
           IB_FLEX_QUERY_ID_QUARTERLY_TRADES: ${{ secrets.IB_FLEX_QUERY_ID_QUARTERLY_TRADES }}
