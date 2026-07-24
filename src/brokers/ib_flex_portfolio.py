@@ -121,11 +121,13 @@ class IBFlexPortfolioFetcher:
         return self._download_statement(reference_code)
 
     def fetch_and_save(
-        self, snapshots_dir: str = "data/ib_flex_snapshots"
+        self,
+        snapshots_dir: str = "data/ib_flex_snapshots",
+        filename_prefix: str = "stocks_count_trades",
     ) -> Path:
         """Fetch the snapshot XML and persist it under ``snapshots_dir``.
 
-        File name: ``stocks_count_trades_<toDate>_<timestamp>.xml``.
+        File name: ``<filename_prefix>_<toDate>_<timestamp>.xml``.
         Returns the path to the saved file.
         """
         xml_text = self.fetch_snapshot_xml()
@@ -136,7 +138,7 @@ class IBFlexPortfolioFetcher:
 
         out_dir = Path(snapshots_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        file_path = out_dir / f"stocks_count_trades_{to_date}_{timestamp}.xml"
+        file_path = out_dir / f"{filename_prefix}_{to_date}_{timestamp}.xml"
         file_path.write_text(xml_text, encoding="utf-8")
         logger.info("Saved IB Flex portfolio snapshot to %s", file_path)
         return file_path
