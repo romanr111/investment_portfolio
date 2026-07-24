@@ -281,45 +281,45 @@ python3 -m unittest discover -s tests
 
 ## Quarterly Report (`just report`)
 
-Generates `portfolio_yic_reports/REPORT_YYYY_qN.md` - a Ukrainian quarterly portfolio report combining IB Flex portfolio snapshots, allocation diff, performance metrics, and Dalio risk analysis.
+Generates `portfolio_yic_reports/portfolio_report_YYYY_qN.md` and `portfolio_report_qN_YYYY.html` - Ukrainian quarterly portfolio reports combining IB Flex portfolio snapshots, allocation diff, performance metrics, and Dalio risk analysis.
 
 ```bash
-just report                              # last completed quarter
-just report -- --year 2025 --quarter 4   # specific quarter
-just report -- --skip-dalio               # omit Dalio section
-just report -- --snapshot-start path.xml --snapshot-end path.xml  # manual snapshots
+just fetch-snapshots              # download CI-fetched Flex snapshots
+just run                          # update combined_data (TWR, allocation, dividends)
+just report 2026 2                # generate Q2 2026 report
+just report 2025 4                # generate Q4 2025 report
 ```
 
 Prerequisites:
 - IB Flex query `1188471` (`stocks_count_trades`) configured with Open Positions + Trades sections, Period = Last Business Day, Format = XML.
+- IB Flex query `1575659` (`stocks_trades_quarterly`) configured with Trades section, Period = Last Quarter, Format = XML.
 - Add to `data/ib_flex_env.sh`:
   ```bash
   export IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT=1188471
+  export IB_FLEX_QUERY_ID_QUARTERLY_TRADES=1575659
   ```
-- Use `just fetch-snapshot` to download a fresh snapshot into `data/ib_flex_snapshots/`.
+- Snapshots in `data/ib_flex_snapshots/` (use `just fetch-snapshots` to download CI artifacts).
 
 Data sources:
-- Positions/trades: IB Flex snapshots matched by `toDate` in XML filename.
+- Positions: IB Flex snapshots in `data/ib_flex_snapshots/` matched by XML `toDate` (+/-3 day tolerance).
+- Trades: `trades_*.xml` in `data/ib_flex_snapshots/` matched by quarter date range.
 - Allocation diff: `data/portfolio_history.csv` (month-end bucket values).
-- Section 3 (YTD TWR, dividends, freedom progress): `data/snapshots/combined_data_*.json` nearest to quarter boundaries.
+- YTD TWR, S&P 500/NASDAQ, dividends, freedom progress: `data/snapshots/combined_data_*.json` selected by quarter end date.
 - Dalio: `analytics/output/summary.json`.
 
-If the quarter is not yet complete or no matching snapshot exists, the command refuses with a clear error.
+If no matching snapshot exists, the command refuses with a clear error.
 
 ### Automated Quarterly Snapshots (GitHub Actions)
 
-A GitHub Actions cron workflow fetches IB Flex snapshots automatically on quarter boundaries:
-
-- **First calendar day of Jan/Apr/Jul/Oct at 06:00 UTC** - captures the last business day of the previous quarter (start snapshot).
-- **Last calendar day of Mar/Jun/Sep/Dec at 22:00 UTC** - captures that day's positions (end snapshot).
+A GitHub Actions cron workflow fetches IB Flex snapshots automatically on the 1st day of Jan/Apr/Jul/Oct at 06:00 UTC (before US market open), capturing the last business day of the previous quarter. Positions and quarterly trades are fetched in a single run.
 
 Each fetch is stored as a GitHub Actions artifact (365-day retention) and a Telegram notification is sent.
 
 To use the fetched snapshots locally:
 
-1. Download the artifact from the GitHub Actions run page.
-2. Place the XML file(s) in `data/ib_flex_snapshots/`.
-3. Run `just report -- --year YYYY --quarter N`.
+1. Run `just fetch-snapshots` to download artifacts from the last 4 CI runs into `data/ib_flex_snapshots/`.
+2. Run `just run` to update `combined_data` (YTD, allocation, dividends).
+3. Run `just report YYYY Q` to generate the report.
 
 Required GitHub secrets:
 
@@ -327,6 +327,7 @@ Required GitHub secrets:
 |---|---|
 | `IB_FLEX_TOKEN` | IB Flex Web Service token |
 | `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` | `1188471` |
+| `IB_FLEX_QUERY_ID_QUARTERLY_TRADES` | `1575659` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token (create via @BotFather) |
 | `TELEGRAM_CHAT_ID` | Your chat ID (get via @userinfobot) |
 
