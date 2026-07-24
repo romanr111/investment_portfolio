@@ -1,0 +1,48 @@
+name: Publish Report to Pages
+
+on:
+  push:
+    branches: [report-source]
+    paths: [index.html]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: report-source
+
+      - name: Verify only allowed files in commit
+        run: |
+          files=$(git ls-files)
+          echo "Tracked files: $files"
+          for f in $files; do
+            case "$f" in
+              index.html|.nojekyll) ;;
+              *) echo "ERROR: unexpected file tracked: $f" >&2; exit 1 ;;
+            esac
+          done
+          [ -s index.html ] || { echo "ERROR: index.html is empty" >&2; exit 1; }
+          ! grep -qE "U[0-9]{7}|account_id.*[0-9]{6}" index.html || {
+            echo "ERROR: possible account ID in HTML" >&2; exit 1
+          }
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v5
