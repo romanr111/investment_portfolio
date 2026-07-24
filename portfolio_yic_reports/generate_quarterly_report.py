@@ -519,7 +519,7 @@ def main() -> int:
 
     output_path = args.output
     if output_path is None:
-        output_path = base_dir / generate_html_report_filename(initial_to_date)
+        output_path = base_dir / f"portfolio_report_q{args.quarter}_{args.year}.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html_doc, encoding="utf-8")
     print(f"HTML звіт збережено у файл: {output_path}")

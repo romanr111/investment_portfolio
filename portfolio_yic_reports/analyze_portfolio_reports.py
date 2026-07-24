@@ -1447,7 +1447,7 @@ def main():
         markdown_generator = PortfolioReportGenerator(
             initial_portfolio, final_portfolio, format_type="markdown"
         )
-        report_filename = generate_report_filename(initial_to_date)
+        report_filename = f"portfolio_report_{args.year}_q{args.quarter}.md"
         output_path = base_dir / report_filename
         markdown_generator.save_markdown(
             output_path, f"Зміни в портфелі акцій за {period_formatted}"
