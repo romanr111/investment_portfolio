@@ -191,6 +191,17 @@ def select_before_snapshot(
     return None
 
 
+def select_after_snapshot(
+    snapshots_dir: Path, quarter_end: datetime
+) -> Optional[Path]:
+    """
+    Newest dated combined_data snapshot that carries allocation data, dated
+    on or before quarter end (plus grace days). Used for the "Стало" column
+    and YTD metrics instead of the always-current final_data.json.
+    """
+    return select_before_snapshot(snapshots_dir, quarter_end)
+
+
 def build_allocation_rows(
     before: Dict[str, float], after: Dict[str, float]
 ) -> List[AllocationRow]:
@@ -372,6 +383,12 @@ def main() -> int:
         "start of the quarter (default: auto-selected)",
     )
     parser.add_argument(
+        "--after",
+        type=Path,
+        help="Path to a data/snapshots/combined_data_*.json snapshot for the "
+        "end of the quarter (default: auto-selected by quarter end date)",
+    )
+    parser.add_argument(
         "--ibkr-ytd",
         type=float,
         help="Override IBKR YTD %% (default: IB_PERFORMANCE in final_data.json)",
@@ -394,14 +411,31 @@ def main() -> int:
     loaded = load_portfolios(args.year, args.quarter)
     if loaded is None:
         return 1
-    initial_portfolio, final_portfolio, initial_to_date, _ = loaded
+    initial_portfolio, final_portfolio, initial_to_date, final_to_date = loaded
 
-    final_data_path = repo_root / "data" / "final_data.json"
-    if not final_data_path.exists():
-        print(f"Error: {final_data_path} not found. Run `just run` first.")
-        return 2
-    with final_data_path.open(encoding="utf-8") as f:
-        final_data = json.load(f)
+    # Section 2 "Стало": use a quarter-end combined_data snapshot instead of
+    # the always-current final_data.json, so historical reports don't mix
+    # old positions with current allocations.
+    snapshots_dir = repo_root / "data" / "snapshots"
+    quarter_end_dt = datetime.strptime(final_to_date, "%Y%m%d")
+    if args.after:
+        after_path = args.after
+    else:
+        after_path = select_after_snapshot(snapshots_dir, quarter_end_dt)
+    if after_path is None or not after_path.exists():
+        # Fallback to final_data.json for the current quarter
+        final_data_path = repo_root / "data" / "final_data.json"
+        if not final_data_path.exists():
+            print(f"Error: no end-of-quarter snapshot found in {snapshots_dir}")
+            print(f"  and {final_data_path} not found. Run `just run` first.")
+            return 2
+        print("Warning: using current final_data.json (may not match quarter end)")
+        with final_data_path.open(encoding="utf-8") as f:
+            final_data = json.load(f)
+    else:
+        print(f"End-of-quarter allocation: {after_path}")
+        with after_path.open(encoding="utf-8") as f:
+            final_data = json.load(f)
 
     # Section 1: YTD figures
     ibkr_ytd = args.ibkr_ytd
