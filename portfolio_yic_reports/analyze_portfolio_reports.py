@@ -37,9 +37,10 @@ import os
 import xml.etree.ElementTree as ET
 import glob
 import argparse
+import calendar
 from pathlib import Path
 from typing import Dict, List, Tuple, Set, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 # Import bond tickers list
 from data.filters_constants import BONDS_VALUES, PRECIOUS_METALS
@@ -1058,37 +1059,163 @@ class PortfolioReportGenerator:
             f.write(report)
 
 
+def _last_business_day_of_month(year: int, month: int) -> date:
+    """Last business day of a given month (Mon-Fri)."""
+    last_day = calendar.monthrange(year, month)[1]
+    d = date(year, month, last_day)
+    while d.weekday() >= 5:  # Sat=5, Sun=6
+        d = d.replace(day=d.day - 1)
+    return d
+
+
+def _quarter_dates(year: int, quarter: int) -> Tuple[date, date]:
+    """Return (start_date, end_date) for a quarter.
+
+    start_date = last business day of the month before the quarter starts
+    end_date   = last business day of the last month of the quarter
+    """
+    start_month = (quarter - 1) * 3 + 1
+    if quarter == 1:
+        prev_end = _last_business_day_of_month(year - 1, 12)
+    else:
+        prev_end = _last_business_day_of_month(year, start_month - 1)
+    end_month = quarter * 3
+    quarter_end = _last_business_day_of_month(year, end_month)
+    return prev_end, quarter_end
+
+
+def _date_to_yyyymmdd(d: date) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def _match_snapshot_by_todate(
+    snapshots_dir: Path, target_date: date, prefix: str = "stocks_count_trades",
+    tolerance_days: int = 3,
+) -> Optional[Path]:
+    """Find the XML snapshot whose toDate is closest to target_date.
+
+    Exact match preferred. Falls back to the nearest toDate within
+    +/- tolerance_days of the target. Among ties, prefers the later date.
+    """
+    target_str = _date_to_yyyymmdd(target_date)
+    best: Optional[Path] = None
+    best_diff: Optional[int] = None
+    best_date: Optional[date] = None
+    for path in sorted(snapshots_dir.glob(f"{prefix}_*.xml")):
+        try:
+            tree = ET.parse(str(path))
+            root = tree.getroot()
+            for elem in root.iter():
+                tag = elem.tag.rsplit("}", 1)[-1]
+                if tag == "FlexStatement" and "toDate" in elem.attrib:
+                    to_date_str = elem.attrib["toDate"]
+                    if len(to_date_str) == 8:
+                        snap_date = datetime.strptime(to_date_str, "%Y%m%d").date()
+                        diff = abs((snap_date - target_date).days)
+                        if diff == 0:
+                            return path
+                        if diff <= tolerance_days:
+                            if best_diff is None or diff < best_diff or (
+                                diff == best_diff and snap_date > best_date
+                            ):
+                                best = path
+                                best_diff = diff
+                                best_date = snap_date
+                    break
+        except (ET.ParseError, OSError):
+            continue
+    if best is not None:
+        print(f"Warning: no exact match for {target_str}, using nearest {best.name}")
+    return best
+
+
+def _match_trades_snapshot(
+    snapshots_dir: Path, year: int, quarter: int
+) -> Optional[Path]:
+    """Find a trades XML whose fromDate/toDate span the quarter.
+
+    Looks for files with prefix 'trades_' whose fromDate matches the
+    quarter start month and toDate matches the quarter end month.
+    Falls back to 'stocks_trades_quarterly_YYYY_qN.xml' naming.
+    """
+    start_date, end_date = _quarter_dates(year, quarter)
+    start_str = _date_to_yyyymmdd(start_date)
+    end_str = _date_to_yyyymmdd(end_date)
+
+    # CI format: trades_<toDate>_<timestamp>.xml
+    for path in sorted(snapshots_dir.glob("trades_*.xml")):
+        try:
+            tree = ET.parse(str(path))
+            root = tree.getroot()
+            for elem in root.iter():
+                tag = elem.tag.rsplit("}", 1)[-1]
+                if tag == "FlexStatement":
+                    from_date = elem.attrib.get("fromDate", "")
+                    to_date = elem.attrib.get("toDate", "")
+                    if from_date == start_str and to_date == end_str:
+                        return path
+                    # Loose match: same month range
+                    if (len(from_date) == 8 and len(to_date) == 8
+                            and from_date[:6] == start_str[:6]
+                            and to_date[:6] == end_str[:6]):
+                        return path
+                    break
+        except (ET.ParseError, OSError):
+            continue
+
+    # Legacy format: stocks_trades_quarterly_YYYY_qN.xml
+    legacy = snapshots_dir / f"stocks_trades_quarterly_{year}_q{quarter}.xml"
+    if legacy.exists():
+        return legacy
+
+    return None
+
+
 def load_portfolios(
-    base_dir: Path,
+    year: int,
+    quarter: int,
+    snapshots_dir: Optional[Path] = None,
 ) -> Optional[Tuple[Portfolio, Portfolio, str, str]]:
     """
-    Discover the Flex XML exports in base_dir, parse them, apply hardcoded
-    one-off adjustments, and return weighted portfolios with period dates.
+    Discover Flex XML snapshots for the given quarter, parse them, and return
+    weighted portfolios with period dates.
 
-    Shared by the Markdown report (main) and the quarterly HTML generator so
-    the one-off adjustments live in exactly one place.
+    Searches ``data/ib_flex_snapshots/`` for position snapshots matched by
+    toDate (last business day of month) and trades snapshots matched by
+    date range. Falls back to ``portfolio_yic_reports/`` legacy naming
+    (stocks_count_trades1.xml / stocks_count_trades2.xml) if the new directory
+    has no matches.
 
     Returns (initial_portfolio, final_portfolio, initial_to_date,
     final_to_date) or None when the input files are missing.
-
-    If a `stocks_trades_quarterly_YYYY_qN.xml` file is present, its `<Trade>`
-    elements are merged into the final portfolio so closed positions can show
-    realized P/L.
     """
-    matching_files = list(base_dir.glob("stocks_count*.xml"))
+    repo_root = Path(__file__).resolve().parents[1]
+    if snapshots_dir is None:
+        snapshots_dir = repo_root / "data" / "ib_flex_snapshots"
 
-    initial_file = None
-    final_file = None
-    for path in matching_files:
-        name = path.name
-        if name.endswith("1.xml"):
-            initial_file = path
-        elif name.endswith("2.xml"):
-            final_file = path
+    start_date, end_date = _quarter_dates(year, quarter)
+
+    # Try new directory first
+    initial_file = _match_snapshot_by_todate(snapshots_dir, start_date)
+    final_file = _match_snapshot_by_todate(snapshots_dir, end_date)
+
+    # Fallback to legacy naming in portfolio_yic_reports/
+    legacy_dir = Path(__file__).resolve().parent
+    if initial_file is None:
+        legacy1 = legacy_dir / "stocks_count_trades1.xml"
+        if legacy1.exists():
+            initial_file = legacy1
+            print(f"Using legacy file: {legacy1.name}")
+    if final_file is None:
+        legacy2 = legacy_dir / "stocks_count_trades2.xml"
+        if legacy2.exists():
+            final_file = legacy2
+            print(f"Using legacy file: {legacy2.name}")
 
     if not initial_file or not final_file:
-        print("Error: Could not find required files in", base_dir)
-        print("Expected: stocks_count1.xml (initial) and stocks_count2.xml (final)")
+        print(f"Error: Could not find snapshots for {year} Q{quarter} in {snapshots_dir}")
+        print(f"  Expected toDate ~ {start_date} (start) and ~ {end_date} (end)")
+        print("  Run `just fetch-snapshots` or place XMLs manually.")
         return None
 
     print(f"Analyzing positions from {initial_file.name} to {final_file.name}...")
@@ -1101,9 +1228,17 @@ def load_portfolios(
     final_portfolio, final_from_date, final_to_date = parser.parse(str(final_file))
 
     # Merge supplemental quarterly trades if available
-    for trades_path in sorted(base_dir.glob("stocks_trades_quarterly_*.xml")):
-        parser._merge_trades_into(str(trades_path), final_portfolio)
-        print(f"Merged trades from {trades_path.name}")
+    trades_file = _match_trades_snapshot(snapshots_dir, year, quarter)
+    if trades_file is None:
+        # Legacy fallback
+        legacy_trades = legacy_dir / f"stocks_trades_quarterly_{year}_q{quarter}.xml"
+        if legacy_trades.exists():
+            trades_file = legacy_trades
+    if trades_file is not None:
+        parser._merge_trades_into(str(trades_file), final_portfolio)
+        print(f"Merged trades from {trades_file.name}")
+    else:
+        print("No quarterly trades file found; closed positions won't show exit prices.")
 
     # Calculate portfolio weights
     initial_portfolio.calculate_weights()
@@ -1264,8 +1399,14 @@ def collect_special_asset_rows(analyzer: PortfolioAnalyzer) -> List[Dict]:
 
 def main():
     """Main function"""
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description="Analyze stock portfolio changes.")
+    parser.add_argument(
+        "--year", type=int, required=True, help="Report year (e.g. 2026)."
+    )
+    parser.add_argument(
+        "--quarter", type=int, choices=[1, 2, 3, 4], required=True,
+        help="Report quarter (1-4)."
+    )
     parser.add_argument(
         "--format",
         choices=["text", "markdown", "both"],
@@ -1274,22 +1415,18 @@ def main():
     )
     args = parser.parse_args()
 
-    # Determine base directory (directory where this script resides)
     base_dir = Path(__file__).resolve().parent
 
-    loaded = load_portfolios(base_dir)
+    loaded = load_portfolios(args.year, args.quarter)
     if loaded is None:
         return
     initial_portfolio, final_portfolio, initial_to_date, final_to_date = loaded
 
-    # Format date for report header - use initial_to_date as the period
     period_formatted = format_date_with_quarter(initial_to_date)
 
-    # Generate and print output
     print(f"Зміни в портфелі акцій за {period_formatted}:")
     print("-" * 80)
 
-    # Output based on the specified format
     if args.format in ["text", "both"]:
         text_generator = PortfolioReportGenerator(
             initial_portfolio, final_portfolio, format_type="text"

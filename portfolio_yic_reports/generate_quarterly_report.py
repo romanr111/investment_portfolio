@@ -359,6 +359,13 @@ def main() -> int:
         description="Generate the institutional-style quarterly HTML report."
     )
     parser.add_argument(
+        "--year", type=int, required=True, help="Report year (e.g. 2026)."
+    )
+    parser.add_argument(
+        "--quarter", type=int, choices=[1, 2, 3, 4], required=True,
+        help="Report quarter (1-4)."
+    )
+    parser.add_argument(
         "--before",
         type=Path,
         help="Path to a data/snapshots/combined_data_*.json snapshot for the "
@@ -384,7 +391,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    loaded = load_portfolios(base_dir)
+    loaded = load_portfolios(args.year, args.quarter)
     if loaded is None:
         return 1
     initial_portfolio, final_portfolio, initial_to_date, _ = loaded
