@@ -1134,13 +1134,22 @@ def _match_trades_snapshot(
 ) -> Optional[Path]:
     """Find a trades XML whose fromDate/toDate span the quarter.
 
-    Looks for files with prefix 'trades_' whose fromDate matches the
-    quarter start month and toDate matches the quarter end month.
+    IBKR Flex ``Period=LastQuarter`` uses calendar dates: fromDate is the
+    first calendar day of the quarter (e.g. 20260401), toDate is the last
+    calendar day (e.g. 20260630). This function matches against those
+    calendar boundaries, not the last-business-day boundaries used for
+    position snapshots.
+
     Falls back to 'stocks_trades_quarterly_YYYY_qN.xml' naming.
     """
-    start_date, end_date = _quarter_dates(year, quarter)
-    start_str = _date_to_yyyymmdd(start_date)
-    end_str = _date_to_yyyymmdd(end_date)
+    start_month = (quarter - 1) * 3 + 1
+    end_month = quarter * 3
+    quarter_start_calendar = date(year, start_month, 1)
+    quarter_end_calendar = date(
+        year, end_month, calendar.monthrange(year, end_month)[1]
+    )
+    start_str = _date_to_yyyymmdd(quarter_start_calendar)
+    end_str = _date_to_yyyymmdd(quarter_end_calendar)
 
     # CI format: trades_<toDate>_<timestamp>.xml
     for path in sorted(snapshots_dir.glob("trades_*.xml")):
