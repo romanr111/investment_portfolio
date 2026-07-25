@@ -12,7 +12,7 @@ Assembles the institutional-style quarterly report from:
 
 Usage (from the repo root):
     venv/bin/python portfolio_yic_reports/generate_quarterly_report.py
-    ... [--before PATH] [--ibkr-ytd -6.8] [--sp500-ytd 9.3] [--output PATH] [--open]
+    ... [--before PATH] [--after PATH] [--ibkr-ytd -6.8] [--sp500-ytd 9.3] [--output PATH] [--open]
 
 Output: portfolio_report_qN_YYYY.html next to the Markdown report.
 """
@@ -36,6 +36,7 @@ from analyze_portfolio_reports import (
 from quarterly_report_html import (
     MINUS,
     AllocationRow,
+    DetailTable,
     KpiCard,
     PositionRow,
     ReportData,
@@ -94,6 +95,198 @@ def _fmt_comma_pct1(value: float) -> str:
 def _fmt_signed_pct1(value: float) -> str:
     sign = "+" if value > 0 else (MINUS if value < 0 else "")
     return f"{sign}{abs(value):.1f}%"
+
+
+def _fmt_usd(value: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    return f"${float(value):,.0f}"
+
+
+def _fmt_optional_pct(value: Optional[float]) -> str:
+    return "-" if value is None else f"{float(value):.2f}%"
+
+
+def build_alternative_asset_tables(
+    after_data: Dict, quarter_key: str
+) -> List[DetailTable]:
+    payload = after_data.get("data", after_data)
+    positions = payload.get("POSITION_DATA", {})
+    quarter = payload.get("ACTIVITY_DATA", {}).get("quarters", {}).get(
+        quarter_key, {}
+    )
+    tables: List[DetailTable] = []
+
+    crypto_rows = []
+    for row in quarter.get("crypto", []):
+        complete = row.get("coverage") == "complete"
+        crypto_rows.append(
+            [
+                str(row.get("asset", "")),
+                _fmt_usd(row.get("start_value_usd")),
+                _fmt_usd(row.get("buys_usd")) if complete else "-",
+                _fmt_usd(row.get("sells_usd")) if complete else "-",
+                _fmt_usd(row.get("rewards_usd")) if complete else "-",
+                (
+                    f"{float(row.get('net_change_quantity', 0)):+.8g}"
+                    if complete
+                    else "-"
+                ),
+                _fmt_usd(row.get("end_value_usd")),
+                str(row.get("status", "")),
+                str(row.get("coverage", "partial")),
+            ]
+        )
+    if crypto_rows:
+        tables.append(
+            DetailTable(
+                title="Криптовалюти",
+                headers=[
+                    "Актив",
+                    "Старт",
+                    "Купівлі",
+                    "Продажі",
+                    "Rewards",
+                    "Чиста зміна",
+                    "Фініш",
+                    "Статус",
+                    "Coverage",
+                ],
+                rows=crypto_rows,
+            )
+        )
+
+    lending = quarter.get("crypto_lending")
+    lending_positions = positions.get("crypto_lending", [])
+    if lending or lending_positions:
+        total_principal = sum(
+            float(position.get("principal_usd", 0)) for position in lending_positions
+        )
+        weighted_apy = None
+        if total_principal > 0:
+            weighted_apy = sum(
+                float(position.get("principal_usd", 0))
+                * float(position.get("expected_apy", 0))
+                for position in lending_positions
+            ) / total_principal
+            if abs(weighted_apy) <= 1:
+                weighted_apy *= 100
+        lending = lending or {}
+        complete = lending.get("coverage") == "complete"
+        tables.append(
+            DetailTable(
+                title="Криптокредитування",
+                headers=[
+                    "Principal",
+                    "Внесення",
+                    "Виведення",
+                    "Фактичний income",
+                    "Фактична дохідність",
+                    "Expected APY",
+                    "Coverage",
+                ],
+                rows=[
+                    [
+                        _fmt_usd(lending.get("end_principal_usd", total_principal)),
+                        _fmt_usd(lending.get("deposits_usd")) if complete else "-",
+                        _fmt_usd(lending.get("withdrawals_usd")) if complete else "-",
+                        _fmt_usd(lending.get("income_usd")) if complete else "-",
+                        _fmt_optional_pct(lending.get("return_pct")) if complete else "-",
+                        _fmt_optional_pct(weighted_apy),
+                        str(lending.get("coverage", "partial")),
+                    ]
+                ],
+            )
+        )
+
+        material_crypto_assets = {
+            str(row.get("asset", "")) for row in quarter.get("crypto", [])
+        }
+        volatile_reward_rows = [
+            reward
+            for reward in lending.get("volatile_rewards", [])
+            if str(reward.get("asset", "")) in material_crypto_assets
+        ]
+        if volatile_reward_rows:
+            tables.append(
+                DetailTable(
+                    title="Earn rewards (volatile)",
+                    headers=["Актив", "Кількість", "USD value", "Coverage"],
+                    rows=[
+                        [
+                            str(reward.get("asset", "")),
+                            f"{float(reward.get('quantity', 0)):.8g}",
+                            _fmt_usd(reward.get("usd_value")),
+                            str(reward.get("coverage", "partial")),
+                        ]
+                        for reward in volatile_reward_rows
+                    ],
+                )
+            )
+
+    active_cars = [
+        car for car in positions.get("other_assets", []) if car.get("status") != "sold"
+    ]
+    if active_cars:
+        tables.append(
+            DetailTable(
+                title="Активні автомобілі",
+                headers=["Актив", "Статус", "Carrying value", "Собівартість", "Coverage"],
+                rows=[
+                    [
+                        str(car.get("name", car.get("asset_id", ""))),
+                        str(car.get("status", "")),
+                        _fmt_usd(car.get("carrying_value_usd")),
+                        _fmt_usd(car.get("capitalized_cost_usd")),
+                        str(car.get("coverage", "partial")),
+                    ]
+                    for car in active_cars
+                ],
+            )
+        )
+
+    sold_cars = quarter.get("sold_cars", [])
+    if sold_cars:
+        tables.append(
+            DetailTable(
+                title="Продані автомобілі",
+                headers=["Актив", "Net proceeds", "Profit", "All-in profit", "ROI", "Днів"],
+                rows=[
+                    [
+                        str(car.get("name", car.get("asset_id", ""))),
+                        _fmt_usd(car.get("net_proceeds_usd")),
+                        _fmt_usd(car.get("realized_profit_usd")),
+                        _fmt_usd(car.get("all_in_profit_usd")),
+                        _fmt_optional_pct(car.get("roi_pct")),
+                        (
+                            str(car.get("holding_days"))
+                            if car.get("holding_days") is not None
+                            else "-"
+                        ),
+                    ]
+                    for car in sold_cars
+                ],
+            )
+        )
+
+    p2p_positions = positions.get("p2p", [])
+    if p2p_positions:
+        tables.append(
+            DetailTable(
+                title="P2P",
+                headers=["Платформа", "Баланс", "Статус", "Станом на"],
+                rows=[
+                    [
+                        str(position.get("account", "")),
+                        _fmt_usd(position.get("balance_usd")),
+                        str(position.get("status", "")),
+                        str(position.get("as_of_date", "")),
+                    ]
+                    for position in p2p_positions
+                ],
+            )
+        )
+    return tables
 
 
 def generate_html_report_filename(date_str: str) -> str:
@@ -338,6 +531,7 @@ def build_report_data(
     before_values: Dict[str, float],
     after_values: Dict[str, float],
     net_worth: float,
+    after_data: Optional[Dict] = None,
 ) -> ReportData:
     formatter = TableFormatter(analyzer)
     date_obj = datetime.strptime(initial_to_date, "%Y%m%d")
@@ -359,6 +553,9 @@ def build_report_data(
         special_asset_rows=[
             _position_row(r) for r in collect_special_asset_rows(analyzer)
         ],
+        alternative_asset_tables=build_alternative_asset_tables(
+            after_data or {}, f"{date_obj.year}-Q{quarter}"
+        ),
     )
 
 
@@ -423,6 +620,9 @@ def main() -> int:
     else:
         after_path = select_after_snapshot(snapshots_dir, quarter_end_dt)
     if after_path is None or not after_path.exists():
+        if args.after:
+            print(f"Error: end-of-quarter snapshot not found: {args.after}")
+            return 2
         # Fallback to final_data.json for the current quarter
         final_data_path = repo_root / "data" / "final_data.json"
         if not final_data_path.exists():
@@ -431,16 +631,17 @@ def main() -> int:
             return 2
         print("Warning: using current final_data.json (may not match quarter end)")
         with final_data_path.open(encoding="utf-8") as f:
-            final_data = json.load(f)
+            after_data = json.load(f)
     else:
         print(f"End-of-quarter allocation: {after_path}")
         with after_path.open(encoding="utf-8") as f:
-            final_data = json.load(f)
+            after_data = json.load(f)
+    after_payload = after_data.get("data", after_data)
 
     # Section 1: YTD figures
     ibkr_ytd = args.ibkr_ytd
     if ibkr_ytd is None:
-        ib_perf = final_data.get("IB_PERFORMANCE", {})
+        ib_perf = after_payload.get("IB_PERFORMANCE", {})
         ibkr_ytd = ib_perf.get("rate_of_return_pct")
         if ibkr_ytd is None or ib_perf.get("error"):
             print(
@@ -450,7 +651,7 @@ def main() -> int:
             return 2
     sp500_ytd = args.sp500_ytd
     if sp500_ytd is None:
-        sp500 = final_data.get("INDEX_PERFORMANCE", {}).get("SP500", {})
+        sp500 = after_payload.get("INDEX_PERFORMANCE", {}).get("SP500", {})
         sp500_ytd = sp500.get("rate_of_return_pct")
         if sp500_ytd is None or not sp500.get("success", True):
             print(
@@ -460,9 +661,9 @@ def main() -> int:
             return 2
 
     # Section 2: allocation before/after
-    after_alloc = read_allocations(final_data)
-    after_values = read_allocation_values(final_data)
-    net_worth = read_net_worth(final_data)
+    after_alloc = read_allocations(after_data)
+    after_values = read_allocation_values(after_data)
+    net_worth = read_net_worth(after_data)
     quarter_start = datetime.strptime(initial_to_date, "%Y%m%d")
     if args.before:
         before_path = args.before
@@ -514,6 +715,7 @@ def main() -> int:
         before_values,
         after_values,
         net_worth,
+        after_data,
     )
     html_doc = render_report(report_data)
 

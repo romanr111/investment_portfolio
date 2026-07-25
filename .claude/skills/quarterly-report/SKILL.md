@@ -21,12 +21,13 @@ Produces two files in `portfolio_yic_reports/`: `portfolio_report_YYYY_qN.md` (t
 ## Generate
 
 ```bash
-just report
+just report YEAR QUARTER
 ```
 
 `generate_quarterly_report.py` options:
 
 - `--before PATH` - explicit start-of-quarter `data/snapshots/combined_data_*.json` snapshot. Auto-selected otherwise: newest one dated on or before quarter start + 5 days grace. Needed manually only when the auto-picked snapshot predates the `ASSET_ALLOCATION` field or is otherwise wrong (see Known caveats).
+- `--after PATH` - explicit end-of-quarter `combined_data` snapshot. Allocation, YTD metrics, and aggregated crypto/lending/car/P2P sections are read from this file; raw ledger is never read by the report.
 - `--ibkr-ytd N` / `--sp500-ytd N` - override the YTD figures from `final_data.json`.
 - `--output PATH` - custom output location.
 - `--open` - open the result in a browser.

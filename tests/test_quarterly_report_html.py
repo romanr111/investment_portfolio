@@ -22,6 +22,7 @@ from analyze_portfolio_reports import (  # noqa: E402
 from generate_quarterly_report import (  # noqa: E402
     _quarter_month_range_uk,
     build_allocation_rows,
+    build_alternative_asset_tables,
     build_footnotes,
     build_kpis,
     find_main_change,
@@ -33,6 +34,7 @@ from generate_quarterly_report import (  # noqa: E402
 )
 from quarterly_report_html import (  # noqa: E402
     AllocationRow,
+    DetailTable,
     KpiCard,
     PositionRow,
     ReportData,
@@ -151,6 +153,13 @@ class TestRenderer(unittest.TestCase):
                     weight_pct=31.42,
                 )
             ],
+            alternative_asset_tables=[
+                DetailTable(
+                    title="Криптовалюти",
+                    headers=["Актив", "Фініш", "Coverage"],
+                    rows=[["BTC", "$1,300", "complete"]],
+                )
+            ],
         )
 
     def test_report_contains_data_and_structure(self):
@@ -178,6 +187,13 @@ class TestRenderer(unittest.TestCase):
     def test_report_is_self_contained(self):
         html = render_report(self._report_data())
         self.assertIsNone(EXTERNAL_REF_RE.search(html))
+
+    def test_report_renders_aggregated_alternative_asset_tables(self):
+        html = render_report(self._report_data())
+
+        self.assertIn("Альтернативні активи", html)
+        self.assertIn("Криптовалюти", html)
+        self.assertIn("$1,300", html)
 
     def test_stock_rows_keep_column_count_without_pl(self):
         data = self._report_data()
@@ -419,6 +435,97 @@ class TestDerivations(unittest.TestCase):
         self.assertEqual(len(footnotes), 2)
         self.assertIn("(~29% капіталу)", footnotes[1])
         self.assertEqual(len(build_footnotes({"Stocks": 100.0})), 1)
+
+    def test_alternative_asset_tables_hide_partial_crypto_movements(self):
+        after_data = {
+            "POSITION_DATA": {
+                "crypto_lending": [
+                    {
+                        "asset": "USDT",
+                        "principal_usd": 1000,
+                        "expected_apy": 0.05,
+                    }
+                ],
+                "other_assets": [
+                    {
+                        "name": "Ioniq 5",
+                        "status": "active",
+                        "carrying_value_usd": 22000,
+                        "capitalized_cost_usd": 22000,
+                        "coverage": "complete",
+                    }
+                ],
+                "p2p": [
+                    {
+                        "account": "EstateGuru",
+                        "balance_usd": 0,
+                        "status": "closed",
+                        "as_of_date": "2026-06-30",
+                    }
+                ],
+            },
+            "ACTIVITY_DATA": {
+                "quarters": {
+                    "2026-Q2": {
+                        "crypto": [
+                            {
+                                "asset": "BTC",
+                                "start_value_usd": 1000,
+                                "buys_usd": 200,
+                                "sells_usd": 0,
+                                "rewards_usd": 10,
+                                "net_change_quantity": 0.01,
+                                "end_value_usd": 1300,
+                                "status": "increased",
+                                "coverage": "complete",
+                            },
+                            {
+                                "asset": "ETH",
+                                "start_value_usd": 500,
+                                "buys_usd": None,
+                                "sells_usd": None,
+                                "rewards_usd": None,
+                                "net_change_quantity": 0.2,
+                                "end_value_usd": 700,
+                                "status": "increased",
+                                "coverage": "partial",
+                            },
+                        ],
+                        "crypto_lending": {
+                            "end_principal_usd": 1000,
+                            "deposits_usd": 100,
+                            "withdrawals_usd": 0,
+                            "income_usd": 20,
+                            "return_pct": 2.0,
+                            "coverage": "complete",
+                            "volatile_rewards": [
+                                {
+                                    "asset": "BTC",
+                                    "quantity": 0.001,
+                                    "usd_value": 60,
+                                    "coverage": "complete",
+                                }
+                            ],
+                        },
+                        "sold_cars": [],
+                    }
+                }
+            },
+        }
+
+        tables = build_alternative_asset_tables(after_data, "2026-Q2")
+
+        crypto = next(table for table in tables if table.title == "Криптовалюти")
+        lending = next(
+            table for table in tables if table.title == "Криптокредитування"
+        )
+        volatile_rewards = next(
+            table for table in tables if table.title == "Earn rewards (volatile)"
+        )
+        self.assertIn("$200", crypto.rows[0])
+        self.assertEqual(crypto.rows[1][2], "-")
+        self.assertIn("2.00%", lending.rows[0])
+        self.assertEqual(volatile_rewards.rows[0][0], "BTC")
 
 
 if __name__ == "__main__":

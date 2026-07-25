@@ -43,6 +43,13 @@ class PositionRow:
 
 
 @dataclass
+class DetailTable:
+    title: str
+    headers: List[str]
+    rows: List[List[str]]
+
+
+@dataclass
 class ReportData:
     period_title: str  # e.g. "2-й квартал 2026 року"
     quarter_label: str  # e.g. "Q2"
@@ -54,6 +61,7 @@ class ReportData:
     core_satellite: Tuple[float, float]
     china_rest: Tuple[float, float]
     special_asset_rows: List[PositionRow] = field(default_factory=list)
+    alternative_asset_tables: List[DetailTable] = field(default_factory=list)
 
 
 CSS = """
@@ -397,7 +405,7 @@ def _render_allocation_table(rows: List[AllocationRow]) -> str:
         chip = (
             f'<span class="chip {chip_tone}">{arrow} {_fmt_signed_pct2(delta)}</span>'
             if abs(delta) >= 0.005
-            else '<span class="chip">—</span>'
+            else '<span class="chip">-</span>'
         )
         body.append(
             "<tr>"
@@ -479,6 +487,19 @@ def _render_special_table(rows: List[PositionRow]) -> str:
     )
 
 
+def _render_detail_table(table: DetailTable) -> str:
+    headers = "".join(f"<th>{_esc(header)}</th>" for header in table.headers)
+    rows = "".join(
+        "<tr>" + "".join(f"<td>{_esc(value)}</td>" for value in row) + "</tr>"
+        for row in table.rows
+    )
+    return (
+        f"<h3>{_esc(table.title)}</h3>"
+        '<div class="table-scroll"><table><thead><tr>'
+        f"{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
+    )
+
+
 def _render_split(label: str, a_pct: float, b_pct: float) -> str:
     return (
         '<div class="split">'
@@ -502,6 +523,21 @@ def render_report(data: ReportData) -> str:
             "\n  <h3>Облігації, золото та товарні активи</h3>\n  "
             + _render_special_table(data.special_asset_rows)
         )
+    alternative_section = ""
+    if data.alternative_asset_tables:
+        detail_tables = "\n".join(
+            _render_detail_table(table) for table in data.alternative_asset_tables
+        )
+        alternative_section = f"""
+<section>
+  <div class="sec-label">
+    <span class="sec-num">04</span>
+    <h2 class="sec-title">Альтернативні активи</h2>
+    <span class="sec-rule"></span>
+  </div>
+  {detail_tables}
+</section>
+"""
 
     return f"""<!DOCTYPE html>
 <html lang="uk">
@@ -556,6 +592,8 @@ def render_report(data: ReportData) -> str:
   {_render_split("Співвідношення Китай/Інші", china_pct, rest_pct)}
 {special_section}
 </section>
+
+{alternative_section}
 
 <footer>
   <span>Квартальний звіт · {_esc(data.quarter_label)} {_esc(data.year_label)}</span>
