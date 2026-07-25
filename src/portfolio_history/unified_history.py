@@ -157,6 +157,9 @@ def combined_data_to_unified_snapshot_rows(
     for bucket in CORE_BUCKETS:
         performance = performance_buckets.get(bucket, {})
         return_pct = _parse_number(performance.get("return_pct"))
+        return_method = performance.get("return_method", "unavailable")
+        if return_method == "modified_dietz" and return_pct is not None:
+            return_pct /= 100.0
         net_flow_usd = _parse_number(performance.get("net_flow_usd"))
         rows.append(
             {
@@ -167,7 +170,7 @@ def combined_data_to_unified_snapshot_rows(
                 "net_flow_usd": (
                     net_flow_usd if net_flow_usd is not None else pd.NA
                 ),
-                "return_method": performance.get("return_method", "unavailable"),
+                "return_method": return_method,
                 "data_quality": performance.get("data_quality", "partial"),
                 "currency": currency.upper(),
                 "source_type": "combined_data",

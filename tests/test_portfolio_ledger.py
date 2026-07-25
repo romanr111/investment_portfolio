@@ -269,6 +269,32 @@ class PortfolioLedgerTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "partial")
 
+    def test_partial_cursor_does_not_advance_incremental_window(self) -> None:
+        class PartialCoverageSource:
+            source_name = "partial-cursor"
+
+            def __init__(self) -> None:
+                self.event_cursors = []
+
+            def fetch_events(self, start_at, end_at, cursor=None):
+                self.event_cursors.append(cursor)
+                return [], {"last_end_ms": 999, "coverage": "partial"}
+
+            def fetch_lending_events(self, start_at, end_at, cursor=None):
+                return [], {"last_end_ms": 999, "coverage": "complete"}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            source = PartialCoverageSource()
+            start = datetime(2026, 4, 1, tzinfo=timezone.utc)
+            end = datetime(2026, 6, 30, tzinfo=timezone.utc)
+
+            sync_crypto_sources(ledger, [source], start, end)
+            sync_crypto_sources(ledger, [source], start, end)
+
+            self.assertEqual(source.event_cursors, [None, {}])
+            self.assertEqual(ledger.load_import_state()["partial-cursor"]["coverage"], "partial")
+
     def test_binance_activity_source_fetches_configured_symbol_trades(self) -> None:
         class FakeApi:
             def get_symbol_info(self, symbol):
@@ -305,6 +331,51 @@ class PortfolioLedgerTests(unittest.TestCase):
         self.assertEqual(events[0]["remote_id"], "BTCUSDT:7")
         self.assertEqual(cursor["symbols"], ["BTCUSDT"])
         self.assertEqual(cursor["coverage"], "complete")
+
+    def test_activity_sources_preserve_transfer_ids_for_reconciliation(self) -> None:
+        class BinanceApi:
+            def get_deposit_history(self, **kwargs):
+                return [
+                    {
+                        "coin": "BTC",
+                        "amount": "0.5",
+                        "txId": "on-chain-1",
+                        "insertTime": 1776240000000,
+                    }
+                ]
+
+            def get_withdraw_history(self, **kwargs):
+                return []
+
+        binance = BinanceActivitySource(
+            type("Wrapper", (), {"client": BinanceApi()})(), symbols=[]
+        )
+        binance_events, _ = binance.fetch_events(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+
+        class OKXApi:
+            def _send_request(self, method, endpoint, params=None):
+                if endpoint == "/asset/withdrawal-history":
+                    return [
+                        {
+                            "ccy": "BTC",
+                            "amt": "0.5",
+                            "fee": "0",
+                            "txId": "on-chain-1",
+                            "ts": "1776240000000",
+                        }
+                    ]
+                return []
+
+        okx_events, _ = OKXActivitySource(OKXApi()).fetch_events(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(binance_events[0]["transfer_id"], "on-chain-1")
+        self.assertEqual(okx_events[0]["transfer_id"], "on-chain-1")
 
     def test_binance_lending_history_uses_thirty_day_windows_and_reward_type(self) -> None:
         class FakeClient:

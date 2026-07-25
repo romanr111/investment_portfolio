@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Any, Iterable, Optional
 
 from .sources import (
     BinanceActivitySource,
@@ -12,6 +12,15 @@ from .storage import PortfolioLedger
 
 
 logger = logging.getLogger(__name__)
+
+
+def _persisted_cursor(
+    previous_cursor: Optional[dict[str, Any]], fetched_cursor: dict[str, Any]
+) -> dict[str, Any]:
+    """Advance an incremental cursor only after complete source coverage."""
+    if fetched_cursor.get("coverage", "complete") == "complete":
+        return fetched_cursor
+    return dict(previous_cursor or {})
 
 
 def build_activity_sources(brokers: Iterable, config: dict | None = None) -> list:
@@ -78,6 +87,12 @@ def sync_crypto_sources(
             and event_cursor.get("coverage") == "complete"
             and lending_cursor.get("coverage") == "complete"
         )
+        persisted_event_cursor = _persisted_cursor(
+            source_state.get("events"), event_cursor
+        )
+        persisted_lending_cursor = _persisted_cursor(
+            source_state.get("lending"), lending_cursor
+        )
         if dry_run:
             imported_count = len(combined_events)
             duplicate_count = 0
@@ -87,8 +102,8 @@ def sync_crypto_sources(
             duplicate_count = import_result.duplicate_count
             now = datetime.now(timezone.utc).isoformat()
             next_state = {
-                "events": event_cursor,
-                "lending": lending_cursor,
+                "events": persisted_event_cursor,
+                "lending": persisted_lending_cursor,
                 "coverage": "complete" if coverage_complete else "partial",
                 "last_attempt_at": now,
                 "coverage_start": start_at.isoformat(),

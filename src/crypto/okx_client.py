@@ -240,10 +240,16 @@ class OKXFiltered(OKXClient):
         return crypto_balances
 
     def get_all_crypto_balances(self) -> Dict[str, float]:
-        # TODO: To check this method
         """Get aggregated crypto balances from spot and savings."""
-        crypto_spot = self.get_crypto_balances()
-        return crypto_spot
+        crypto_balances = dict(self.get_crypto_balances())
+        savings_positions = self.get_savings_positions().get("okx", {})
+        stablecoins = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
+        for asset, (principal, _) in savings_positions.items():
+            if asset not in stablecoins:
+                crypto_balances[asset] = (
+                    crypto_balances.get(asset, 0.0) + float(principal)
+                )
+        return crypto_balances
 
     def get_cash_balance(self) -> int:
         """
@@ -262,18 +268,18 @@ class OKXFiltered(OKXClient):
 
         return sum(stablecoin_balances.values()) if stablecoin_balances else 0
 
-    def get_simple_earn_positions(self) -> Dict[str, Tuple[int, float]]:
+    def get_simple_earn_positions(self) -> Dict[str, Tuple[float, float]]:
         """
         Processes simple earn lending products to extract principal and effective yield.
 
         Returns:
-            Dict[str, Tuple[int, float]]: A dictionary with assets as keys and a tuple of
+            Dict[str, Tuple[float, float]]: A dictionary with assets as keys and a
             (principal, effective_yield) as values.
         """
         lending_positions = {}
         for product in self.simple_earn_data:
             asset = product.get("ccy")
-            principal = int(Decimal(product.get("amt", 0)))
+            principal = float(Decimal(product.get("amt", 0)))
             # Convert rate from decimal to percentage (e.g., 0.0005 -> 0.055 for 5.5%)
             yield_rate = float(product.get("rate", 0)) * 100
             if principal > 0:
@@ -454,7 +460,8 @@ class OKXFiltered(OKXClient):
         Combines all earning positions from Simple Earn and DeFi products with detailed logging.
 
         Returns:
-            Dict[str, Tuple[int, float]]: Dictionary with assets as keys and (principal, yield_rate) as values
+            Dict[str, Tuple[float, float]]: Dictionary with assets as keys and
+            (principal, yield_rate) as values.
         """
         print("\n=== Aggregated Earnings Report ===\n")
         combined_positions = {}
@@ -483,7 +490,7 @@ class OKXFiltered(OKXClient):
 
         for position_key, position_data in defi_positions.items():
             asset = position_key.split("-")[0]
-            principal = int(position_data["invested_amount"])
+            principal = float(position_data["invested_amount"])
             yield_rate = float(position_data["apy"])
 
             print()
@@ -500,7 +507,7 @@ class OKXFiltered(OKXClient):
         print("Final OKX Lending Combined Positions:")
         print("" + "=" * 40)
         final_positions = {
-            asset: (int(principal), yield_rate)
+            asset: (float(principal), yield_rate)
             for asset, (principal, yield_rate) in combined_positions.items()
         }
         for asset, (principal, rate) in final_positions.items():

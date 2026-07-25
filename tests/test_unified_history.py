@@ -60,7 +60,7 @@ class UnifiedHistoryTests(unittest.TestCase):
         self.assertEqual(by_bucket["Stocks"]["market_value"], 60)
         self.assertEqual(by_bucket["Other Bets"]["market_value"], 11)
         self.assertEqual(by_bucket["P2P Lending"]["market_value"], 40)
-        self.assertEqual(by_bucket["Crypto Lending"]["return_pct"], 5.2)
+        self.assertAlmostEqual(by_bucket["Crypto Lending"]["return_pct"], 0.052)
         self.assertEqual(by_bucket["Crypto Lending"]["net_flow_usd"], 100)
         self.assertEqual(
             by_bucket["Crypto Lending"]["return_method"], "modified_dietz"

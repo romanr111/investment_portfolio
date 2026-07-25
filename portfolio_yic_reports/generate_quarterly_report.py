@@ -385,13 +385,33 @@ def select_before_snapshot(
 
 
 def select_after_snapshot(
-    snapshots_dir: Path, quarter_end: datetime
+    snapshots_dir: Path, quarter_end: datetime, quarter_key: Optional[str] = None
 ) -> Optional[Path]:
     """
     Newest dated combined_data snapshot that carries allocation data, dated
     on or before quarter end (plus grace days). Used for the "Стало" column
     and YTD metrics instead of the always-current final_data.json.
     """
+    if quarter_key:
+        cutoff = quarter_end.date() + timedelta(days=SNAPSHOT_GRACE_DAYS)
+        dated = [
+            (snapshot_date, path.name, path)
+            for path in snapshots_dir.glob("combined_data_*.json")
+            if (snapshot_date := snapshot_date_from_name(path.name)) is not None
+            and snapshot_date <= cutoff
+        ]
+        for _, _, path in sorted(
+            dated, key=lambda item: (item[0], item[1]), reverse=True
+        ):
+            try:
+                with path.open(encoding="utf-8") as handle:
+                    payload = json.load(handle)
+                data = payload.get("data", payload)
+                quarters = data.get("ACTIVITY_DATA", {}).get("quarters", {})
+                if read_allocations(payload) and quarter_key in quarters:
+                    return path
+            except (OSError, json.JSONDecodeError):
+                continue
     return select_before_snapshot(snapshots_dir, quarter_end)
 
 
@@ -618,7 +638,9 @@ def main() -> int:
     if args.after:
         after_path = args.after
     else:
-        after_path = select_after_snapshot(snapshots_dir, quarter_end_dt)
+        after_path = select_after_snapshot(
+            snapshots_dir, quarter_end_dt, f"{args.year}-Q{args.quarter}"
+        )
     if after_path is None or not after_path.exists():
         if args.after:
             print(f"Error: end-of-quarter snapshot not found: {args.after}")

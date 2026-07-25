@@ -29,6 +29,7 @@ from generate_quarterly_report import (  # noqa: E402
     read_allocation_values,
     read_allocations,
     read_net_worth,
+    select_after_snapshot,
     select_before_snapshot,
     snapshot_date_from_name,
 )
@@ -278,6 +279,29 @@ class TestSnapshotSelection(unittest.TestCase):
             )
             selected = select_before_snapshot(tmp_path, datetime(2026, 4, 1))
             self.assertEqual(selected.name, "combined_data_2026-03-31_manual.json")
+
+    def test_after_snapshot_prefers_selected_quarter_activity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "combined_data_2026-06-30_end.json").write_text(
+                json.dumps(
+                    {
+                        "data": {
+                            "ASSET_ALLOCATION": {"allocations": {"Stocks": {"percentage": 30}}},
+                            "ACTIVITY_DATA": {"quarters": {"2026-Q2": {}}},
+                        }
+                    }
+                )
+            )
+            (tmp_path / "combined_data_2026-07-03_later.json").write_text(
+                _snapshot_json()
+            )
+
+            selected = select_after_snapshot(
+                tmp_path, datetime(2026, 6, 30), "2026-Q2"
+            )
+
+            self.assertEqual(selected.name, "combined_data_2026-06-30_end.json")
 
     def test_read_allocations_unwraps_snapshot_data_key(self):
         # final_data.json is flat; archived snapshots wrap it under "data".

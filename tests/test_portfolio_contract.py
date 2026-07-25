@@ -53,6 +53,59 @@ class CryptoContractTests(unittest.TestCase):
         self.assertEqual(rows[0]["unexplained_quantity"], 0.0)
         self.assertEqual(rows[0]["coverage"], "complete")
 
+    def test_matching_transfer_legs_do_not_change_crypto_return(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            ledger.import_events(
+                [
+                    {
+                        "occurred_at": "2026-05-01T12:00:00Z",
+                        "source": "binance",
+                        "account": "spot",
+                        "remote_id": "withdrawal-1",
+                        "event_type": "withdrawal",
+                        "asset": "BTC",
+                        "quantity": 0.5,
+                        "usd_value": 500.0,
+                        "transfer_id": "on-chain-1",
+                    },
+                    {
+                        "occurred_at": "2026-06-01T12:00:00Z",
+                        "source": "okx",
+                        "account": "funding",
+                        "remote_id": "deposit-1",
+                        "event_type": "deposit",
+                        "asset": "BTC",
+                        "quantity": 0.5,
+                        "usd_value": 500.0,
+                        "transfer_id": "on-chain-1",
+                    },
+                ]
+            )
+            contract = build_portfolio_contract(
+                ledger=ledger,
+                live_crypto_quantities={"BTC": 1.0},
+                live_crypto_market_values={"BTC": 1100.0},
+                savings_positions=[],
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
+                start_snapshot={
+                    "data": {
+                        "POSITION_DATA": {
+                            "crypto": [
+                                {"asset": "BTC", "quantity": 1.0, "value_usd": 1000.0}
+                            ]
+                        }
+                    }
+                },
+            )
+
+            crypto = contract["ACTIVITY_DATA"]["quarters"]["2026-Q2"]
+            self.assertEqual(crypto["crypto_performance"]["return_pct"], 10.0)
+            self.assertEqual(crypto["crypto"][0]["external_transfers_quantity"], 0.0)
+            self.assertEqual(crypto["crypto"][0]["internal_transfers_quantity"], 1.0)
+
     def test_crypto_materiality_checks_both_quarter_boundaries(self) -> None:
         rows = aggregate_crypto_quarter(
             events=[],

@@ -16,6 +16,7 @@
 - D002 ACTIVE 2026-04-28 [USER] Fresh clones require private local `data/` files; commit only `data/README.md` under `data/`.
 
 ## Done (recent)
+- 2026-07-25 [CODE] Repaired post-review ledger correctness issues locally: Modified Dietz history is stored as a decimal, partial API cursors do not advance, OKX volatile Earn principal including fractional amounts is retained in Crypto Coins, matched on-chain transfer legs have zero portfolio return impact, and the quarterly HTML selects a snapshot carrying the requested quarter activity. `just test` and a Q2 HTML fixture generation passed.
 - 2026-07-25 [CODE] Added the private git-ignored portfolio ledger, exchange activity adapters, additive v2 combined_data contract, Modified Dietz performance, car/P2P models, automatic history upsert, and quarterly alternative-asset tables.
 - 2026-07-25 [DATA] Imported Q2 2026 API history locally: 7,520 Binance records and 128 OKX records; repeat sync imported zero duplicates. WhiteBit fallback and manual Telegram/cold-storage history remain partial.
 - 2026-07-25 [TOOL] Final `just test` passed 165 tests. `just report 2026 2` passed and generated a self-contained HTML report from a local v2 Q2 snapshot. Raw ledger fields were absent from tracked HTML.

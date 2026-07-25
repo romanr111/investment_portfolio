@@ -60,6 +60,41 @@ def modified_dietz_return(
     return (float(end_value) - float(start_value) - total_flows) / denominator
 
 
+def classify_internal_transfer_legs(
+    events: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Mark matching on-chain deposit and withdrawal legs as internal transfers."""
+    normalized = [dict(event) for event in events]
+    legs_by_transfer: dict[tuple[str, str], list[int]] = {}
+    for index, event in enumerate(normalized):
+        transfer_id = event.get("transfer_id")
+        if not transfer_id or event.get("event_type") not in {"deposit", "withdrawal"}:
+            continue
+        key = (str(transfer_id), str(event.get("asset", "")).upper())
+        legs_by_transfer.setdefault(key, []).append(index)
+
+    for indices in legs_by_transfer.values():
+        deposits = [
+            index for index in indices if normalized[index]["event_type"] == "deposit"
+        ]
+        withdrawals = [
+            index for index in indices if normalized[index]["event_type"] == "withdrawal"
+        ]
+        if len(deposits) != 1 or len(withdrawals) != 1:
+            continue
+        deposit = normalized[deposits[0]]
+        withdrawal = normalized[withdrawals[0]]
+        if abs(
+            float(deposit.get("quantity", 0.0))
+            - float(withdrawal.get("quantity", 0.0))
+        ) > QUANTITY_TOLERANCE:
+            continue
+        deposit["event_type"] = "internal_transfer"
+        withdrawal["event_type"] = "internal_transfer"
+
+    return normalized
+
+
 def calculate_crypto_performance(
     *,
     start_value_usd: float,
@@ -581,7 +616,7 @@ def build_portfolio_contract(
     crypto_freshness: str = "live",
 ) -> dict[str, Any]:
     period_start, period_end, quarter_key = _quarter_bounds(as_of_date)
-    events = ledger.load_crypto_events()
+    events = classify_internal_transfer_legs(ledger.load_crypto_events())
     import_state = ledger.load_import_state()
     start_quantities, start_values = _snapshot_crypto_positions(start_snapshot)
     boundary_complete = bool(start_quantities or start_values)
