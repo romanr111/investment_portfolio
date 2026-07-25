@@ -30,7 +30,7 @@
 - 2026-04-28T19:27Z [TOOL] Pushed cleanup to `origin/master` and verified GitHub lists only `data/README.md` under `data/`.
 
 ## Now
-- 2026-07-25 [CODE] Implementation and local Q2 migration are complete on `agent/portfolio-ledger-v2`; draft PR #19 targets `master`. Quarterly HTML renders aggregated crypto/lending/volatile Earn/car/P2P tables and accepts an explicit `--after` contract snapshot without reading raw ledger.
+- 2026-07-25 [CODE] Implementation and local Q2 migration are complete on `agent/portfolio-ledger-v2`; PR #19 targets `master` and is ready for human review at commit `6c7d5dc`. Quarterly HTML renders aggregated crypto/lending/volatile Earn/car/P2P tables and accepts an explicit `--after` contract snapshot without reading raw ledger.
 - 2026-05-06T23:02+03:00 [DOC] README refresh is implemented; code changes from dividend-fetch optimization remain in the working tree.
 
 ## Next
