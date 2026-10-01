@@ -1,6 +1,7 @@
 # Continuity Ledger
 
 ## Snapshot
+- 2026-10-01 [TOOL] Shared quarterly-report skill migrated to `.agents/skills/quarterly-report` with a relative Claude symlink; project references updated. PR prepared from `master` separately from existing ledger work.
 - 2026-06-13T07:01Z [TOOL] Adopted CodeGraph + Headroom agent-tooling setup from Cash Runway: added `.mcp.json`, `justfile` with graph recipes, `Scripts/codegraph-bootstrap.sh`, `Scripts/test-codegraph-bootstrap.sh`, `AGENTS.md`, and ignored `.codegraph/`. Initialized CodeGraph index for the current worktree.
 - 2026-05-06T23:02+03:00 [DOC] Replaced stale long `README.md` with a concise current guide for `python -m src.portfolio_sync`, local-only data, common runs, outputs, and tests.
 - 2026-05-06T22:51+03:00 [CODE] Optimized the dividend fetch path so `forward_dividend()` is only called once per ticker in `src/brokers/data_fetchers/yfinance_fetcher.py`; added regression coverage in `tests/test_yfinance_fetcher.py`.

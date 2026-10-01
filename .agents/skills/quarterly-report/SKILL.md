@@ -21,7 +21,7 @@ Produces two files in `portfolio_yic_reports/`: `portfolio_report_YYYY_qN.md` (t
 ## Generate
 
 ```bash
-just report
+just report YEAR QUARTER
 ```
 
 `generate_quarterly_report.py` options:
