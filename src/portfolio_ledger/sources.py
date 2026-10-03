@@ -3,8 +3,7 @@ from typing import Any, Optional, Protocol
 
 import requests
 
-
-USD_STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "PAX"}
+from .contract import STABLECOINS
 
 
 class CryptoActivitySource(Protocol):
@@ -54,10 +53,10 @@ def normalize_binance_trade(
         "quantity": float(trade["qty"]),
         "quote_asset": quote,
         "quote_quantity": quote_quantity,
-        "usd_value": quote_quantity if quote in USD_STABLECOINS else None,
+        "usd_value": quote_quantity if quote in STABLECOINS else None,
         "fee_asset": fee_asset,
         "fee_quantity": fee_quantity,
-        "fee_usd": fee_quantity if fee_asset in USD_STABLECOINS else None,
+        "fee_usd": fee_quantity if fee_asset in STABLECOINS else None,
         "from_location": None,
         "to_location": account,
     }
@@ -83,10 +82,10 @@ def normalize_okx_fill(
         "quantity": quantity,
         "quote_asset": quote.upper(),
         "quote_quantity": quote_quantity,
-        "usd_value": quote_quantity if quote.upper() in USD_STABLECOINS else None,
+        "usd_value": quote_quantity if quote.upper() in STABLECOINS else None,
         "fee_asset": fee_asset,
         "fee_quantity": fee_quantity,
-        "fee_usd": fee_quantity if fee_asset in USD_STABLECOINS else None,
+        "fee_usd": fee_quantity if fee_asset in STABLECOINS else None,
         "from_location": account,
         "to_location": account,
     }
@@ -116,10 +115,10 @@ def normalize_whitebit_trade(
         "quantity": quantity,
         "quote_asset": quote.upper(),
         "quote_quantity": quote_quantity,
-        "usd_value": quote_quantity if quote.upper() in USD_STABLECOINS else None,
+        "usd_value": quote_quantity if quote.upper() in STABLECOINS else None,
         "fee_asset": fee_asset,
         "fee_quantity": fee_quantity,
-        "fee_usd": fee_quantity if fee_asset in USD_STABLECOINS else None,
+        "fee_usd": fee_quantity if fee_asset in STABLECOINS else None,
         "from_location": account,
         "to_location": account,
     }
@@ -219,7 +218,7 @@ class BinanceActivitySource:
                     "quantity": quantity,
                     "quote_asset": None,
                     "quote_quantity": None,
-                    "usd_value": quantity if asset in USD_STABLECOINS else None,
+                    "usd_value": quantity if asset in STABLECOINS else None,
                     "fee_asset": None,
                     "fee_quantity": 0.0,
                     "from_location": "external",
@@ -241,12 +240,12 @@ class BinanceActivitySource:
                     "quantity": quantity,
                     "quote_asset": None,
                     "quote_quantity": None,
-                    "usd_value": quantity if asset in USD_STABLECOINS else None,
+                    "usd_value": quantity if asset in STABLECOINS else None,
                     "fee_asset": asset,
                     "fee_quantity": abs(float(withdrawal.get("transactionFee", 0))),
                     "fee_usd": (
                         abs(float(withdrawal.get("transactionFee", 0)))
-                        if asset in USD_STABLECOINS
+                        if asset in STABLECOINS
                         else None
                     ),
                     "from_location": "binance",
@@ -349,7 +348,7 @@ class BinanceActivitySource:
                                 "asset": asset,
                                 "quantity": quantity,
                                 "usd_value": (
-                                    quantity if asset in USD_STABLECOINS else None
+                                    quantity if asset in STABLECOINS else None
                                 ),
                                 "from_location": from_location,
                                 "to_location": to_location,
@@ -411,11 +410,11 @@ class OKXActivitySource:
                         "event_type": event_type,
                         "asset": asset,
                         "quantity": quantity,
-                        "usd_value": quantity if asset in USD_STABLECOINS else None,
+                        "usd_value": quantity if asset in STABLECOINS else None,
                         "fee_asset": asset if event_type == "withdrawal" else None,
                         "fee_quantity": fee_quantity,
                         "fee_usd": (
-                            fee_quantity if asset in USD_STABLECOINS else None
+                            fee_quantity if asset in STABLECOINS else None
                         ),
                         "from_location": "okx" if event_type == "withdrawal" else "external",
                         "to_location": "external" if event_type == "withdrawal" else "okx",
@@ -463,7 +462,7 @@ class OKXActivitySource:
                     "event_type": "reward",
                     "asset": asset,
                     "quantity": quantity,
-                    "usd_value": quantity if asset in USD_STABLECOINS else None,
+                    "usd_value": quantity if asset in STABLECOINS else None,
                     "from_location": "simple_earn",
                     "to_location": "simple_earn",
                 }

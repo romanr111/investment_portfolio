@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 import time
 import traceback
@@ -62,10 +62,17 @@ class CryptoData:
         return positions
 
     @staticmethod
-    def get_all_crypto_quantity(brokers: List[ExchangeBase]) -> Dict[str, float]:
+    def get_all_crypto_quantity(
+        brokers: List[ExchangeBase],
+        source_status: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, float]:
         """
         Retrieve all cryptocurrency quantities from multiple brokers and add external balances.
         Returns quantities sorted by INITIAL_TOKENS order, followed by remaining tokens.
+
+        When `source_status` is given, it records "ok"/"failed" per broker class
+        name so callers can distinguish a genuinely empty aggregate from one
+        whose data is incomplete because a balance source failed.
 
         Args:
             brokers: List of broker instances implementing ExchangeBase.
@@ -91,11 +98,15 @@ class CryptoData:
                 logger.debug(
                     f"Retrieved {len(broker_crypto)} tokens from {broker.__class__.__name__}"
                 )
+                if source_status is not None:
+                    source_status[broker.__class__.__name__] = "ok"
             except Exception as e:
                 logger.error(
                     f"Error getting crypto balances from {broker.__class__.__name__}: {str(e)}"
                 )
                 logger.error(f"Stack trace: {traceback.format_exc()}")
+                if source_status is not None:
+                    source_status[broker.__class__.__name__] = "failed"
 
         # Add cold storage crypto balances
         logger.debug("Adding cold storage balances")
@@ -207,6 +218,7 @@ class CryptoEndpoint:
         # Initialize with default empty values
         self.brokers: List[ExchangeBase] = []
         self.quantities = {}
+        self.balance_source_status: Dict[str, str] = {}
         self.crypto_market_values = {}
         self.free_cash = 0
         self.all_crypto_savings = []
@@ -229,7 +241,11 @@ class CryptoEndpoint:
             logger.debug("Getting all crypto quantities - start")
             start_time = time.time()
             try:
-                self.quantities = CryptoData.get_all_crypto_quantity(self.brokers)
+                fetch_status: Dict[str, str] = {}
+                self.quantities = CryptoData.get_all_crypto_quantity(
+                    self.brokers, fetch_status
+                )
+                self.balance_source_status.update(fetch_status)
                 logger.debug(
                     f"Crypto quantities retrieved in {time.time() - start_time:.2f} seconds"
                 )
@@ -318,6 +334,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing BinanceClient: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without BinanceClient")
+            self.balance_source_status["BinanceClient"] = "failed"
 
     def _safe_init_okx(self):
         """Initialize OKXFiltered with error handling."""
@@ -333,6 +350,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing OKXFiltered: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without OKXFiltered")
+            self.balance_source_status["OKXFiltered"] = "failed"
 
     def _safe_init_bybit(self):
         """Bybit initialization is disabled."""
@@ -371,6 +389,7 @@ class CryptoEndpoint:
                 )
                 logger.error(f"Stack trace: {traceback.format_exc()}")
                 logger.warning("Continuing without WhiteBit")
+                self.balance_source_status["WhiteBit"] = "failed"
 
     def _safe_init_telegram(self):
         """Initialize TelegramClient with error handling."""
@@ -386,6 +405,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing TelegramClient: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without TelegramClient")
+            self.balance_source_status["TelegramClient"] = "failed"
 
     def get_total_crypto_value(self) -> int:
         logger.debug("Calculating total crypto value")

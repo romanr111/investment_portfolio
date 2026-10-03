@@ -183,10 +183,12 @@ class DataSource:
                     latest_snapshot = json.load(handle)
             except (OSError, json.JSONDecodeError) as error:
                 logger.warning("Could not read latest combined_data snapshot: %s", error)
+        balance_sources = dict(getattr(self.crypto, "balance_source_status", {}) or {})
         crypto_quantities, crypto_values, crypto_freshness = recover_crypto_positions(
             self.crypto.quantities,
             self.crypto.crypto_market_values,
             latest_snapshot,
+            balance_sources=balance_sources,
         )
         legacy_p2p = self.fi_data.get("group_weighted_interest", {}).get(
             "p2p_lending", (0, 0)
@@ -205,6 +207,7 @@ class DataSource:
                 start_snapshot_result["data"] if start_snapshot_result else None
             ),
             crypto_freshness=crypto_freshness,
+            crypto_balance_sources=balance_sources,
         )
 
     def _sync_crypto_activity(self) -> None:

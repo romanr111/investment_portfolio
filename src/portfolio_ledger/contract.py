@@ -492,7 +492,9 @@ def select_contract_start_snapshot(
     snapshot_dir: Path, as_of_date: date, grace_days: int = 5
 ) -> Optional[dict[str, Any]]:
     period_start, _, _ = _quarter_bounds(as_of_date)
-    cutoff = period_start.date().toordinal() + grace_days
+    start_date = period_start.date().toordinal()
+    lower_cutoff = start_date - grace_days
+    upper_cutoff = start_date + grace_days
     candidates = []
     for path in snapshot_dir.glob("combined_data_*.json"):
         match = _SNAPSHOT_DATE_RE.match(path.name)
@@ -502,7 +504,7 @@ def select_contract_start_snapshot(
             snapshot_date = date.fromisoformat(match.group(1))
         except ValueError:
             continue
-        if snapshot_date.toordinal() <= cutoff:
+        if lower_cutoff <= snapshot_date.toordinal() <= upper_cutoff:
             candidates.append((snapshot_date, path.name, path))
 
     for _, _, path in sorted(candidates, reverse=True):
@@ -574,9 +576,21 @@ def recover_crypto_positions(
     live_quantities: dict[str, float],
     live_values_usd: dict[str, float],
     latest_snapshot: Optional[dict[str, Any]],
+    *,
+    balance_sources: Optional[dict[str, str]] = None,
 ) -> tuple[dict[str, float], dict[str, float], str]:
     snapshot_quantities, snapshot_values = _snapshot_crypto_positions(latest_snapshot)
-    if live_quantities and all(asset in live_values_usd for asset in live_quantities):
+    # A nonempty aggregate is not automatically complete: when a balance source
+    # failed or had its balances dropped by filters, live data covers only part
+    # of the portfolio and must not be labeled "live".
+    sources_failed = balance_sources is not None and any(
+        source not in (None, "", "ok") for source in balance_sources.values()
+    )
+    if (
+        live_quantities
+        and not sources_failed
+        and all(asset in live_values_usd for asset in live_quantities)
+    ):
         return dict(live_quantities), dict(live_values_usd), "live"
     if not live_quantities and snapshot_quantities:
         return snapshot_quantities, snapshot_values, "stale"
@@ -585,6 +599,16 @@ def recover_crypto_positions(
             asset: float(live_values_usd.get(asset, snapshot_values.get(asset, 0.0)))
             for asset in live_quantities
         }
+        if sources_failed:
+            # Keep the snapshot holdings of assets the live fetch could not
+            # see; losing a failed exchange's balances would understate the
+            # portfolio even though its accounts were not actually empty.
+            recovered_quantities = dict(live_quantities)
+            for asset, quantity in snapshot_quantities.items():
+                if asset not in recovered_quantities:
+                    recovered_quantities[asset] = float(quantity)
+                    recovered_values[asset] = float(snapshot_values.get(asset, 0.0))
+            return recovered_quantities, recovered_values, "partial"
         return dict(live_quantities), recovered_values, "partial"
     return {}, {}, "partial"
 
@@ -614,8 +638,16 @@ def build_portfolio_contract(
     as_of_date: date,
     start_snapshot: Optional[dict[str, Any]] = None,
     crypto_freshness: str = "live",
+    crypto_balance_sources: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
-    period_start, period_end, quarter_key = _quarter_bounds(as_of_date)
+    period_start, quarter_end, quarter_key = _quarter_bounds(as_of_date)
+    # Cap the performance period at the as-of date: when the pipeline runs
+    # before the last day of the quarter, weighting cash flows against the
+    # future calendar quarter end would assume a horizon that has not elapsed
+    # and understate the recorded return.
+    period_end = min(
+        quarter_end, datetime.combine(as_of_date, time.max, timezone.utc)
+    )
     events = classify_internal_transfer_legs(ledger.load_crypto_events())
     import_state = ledger.load_import_state()
     start_quantities, start_values = _snapshot_crypto_positions(start_snapshot)
@@ -802,6 +834,9 @@ def build_portfolio_contract(
                 "coverage": crypto_performance["coverage"],
                 "freshness": crypto_freshness,
                 "sources": import_state,
+                "balance_sources": (
+                    dict(crypto_balance_sources) if crypto_balance_sources else None
+                ),
             },
             "crypto_lending": {"coverage": lending_performance["coverage"]},
             "other_assets": {"coverage": car_quality},

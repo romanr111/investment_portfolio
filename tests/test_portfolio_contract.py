@@ -709,6 +709,103 @@ class CryptoContractTests(unittest.TestCase):
         self.assertEqual(values, {"BTC": 70000.0})
         self.assertEqual(freshness, "stale")
 
+    def test_failed_balance_source_recovers_missing_exchange_holdings(self) -> None:
+        snapshot = {
+            "data": {
+                "POSITION_DATA": {
+                    "crypto": [
+                        {"asset": "BTC", "quantity": 1.0, "value_usd": 70000.0},
+                        {"asset": "ETH", "quantity": 2.0, "value_usd": 7000.0},
+                    ]
+                }
+            }
+        }
+
+        quantities, values, freshness = recover_crypto_positions(
+            {"BTC": 1.1},
+            {"BTC": 77000.0},
+            snapshot,
+            balance_sources={"BinanceClient": "ok", "WhiteBit": "failed"},
+        )
+
+        # A failed source must never be labeled "live" and its missing
+        # holdings must be recovered from the snapshot instead of dropped.
+        self.assertEqual(freshness, "partial")
+        self.assertEqual(quantities, {"BTC": 1.1, "ETH": 2.0})
+        self.assertEqual(values, {"BTC": 77000.0, "ETH": 7000.0})
+
+    def test_mid_quarter_performance_period_caps_at_as_of_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            ledger.import_events(
+                [
+                    {
+                        "occurred_at": "2026-07-08T12:00:00Z",
+                        "source": "binance",
+                        "account": "spot",
+                        "remote_id": "buy-1",
+                        "event_type": "buy",
+                        "asset": "BTC",
+                        "quantity": 0.05,
+                        "usd_value": 3500.0,
+                    }
+                ]
+            )
+            start_snapshot = {
+                "data": {
+                    "POSITION_DATA": {
+                        "crypto": [
+                            {"asset": "BTC", "quantity": 1.0, "value_usd": 60000.0}
+                        ]
+                    }
+                }
+            }
+
+            contract = build_portfolio_contract(
+                ledger=ledger,
+                live_crypto_quantities={"BTC": 1.05},
+                live_crypto_market_values={"BTC": 80850.0},
+                savings_positions=[],
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 7, 15, tzinfo=UTC).date(),
+                start_snapshot=start_snapshot,
+                crypto_freshness="live",
+                crypto_balance_sources={"BinanceClient": "ok"},
+            )
+
+            quarter = contract["ACTIVITY_DATA"]["quarters"]["2026-Q3"]
+            self.assertEqual(quarter["period_start"], "2026-07-01")
+            # A mid-quarter run must not report the future calendar quarter
+            # end as the measurement end of its weighted return.
+            self.assertEqual(quarter["period_end"], "2026-07-15")
+            bucket = contract["PERFORMANCE_DATA"]["buckets"]["Crypto Coins"]
+            # Modified Dietz over the elapsed period only (flow on Jul 8 is
+            # weighted ~0.5): 17350 / (60000 + 3500 * 0.5) ~= 28.097%.
+            # Against the uncapped quarter end the weight would be ~7.5/92
+            # days and the return ~27.45%.
+            self.assertEqual(bucket["return_method"], "modified_dietz")
+            self.assertAlmostEqual(bucket["return_pct"], 28.0972, places=3)
+            self.assertEqual(
+                contract["DATA_QUALITY"]["crypto"]["balance_sources"],
+                {"BinanceClient": "ok"},
+            )
+
+    def test_contract_start_snapshot_rejects_snapshot_outside_boundary_window(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            snapshot_dir = Path(temp_dir)
+            payload = '{"data":{"DATA_CONTRACT_VERSION":2,"POSITION_DATA":{}}}'
+            (snapshot_dir / "combined_data_2026-03-20_old.json").write_text(payload)
+            (snapshot_dir / "combined_data_2026-08-01_new.json").write_text(payload)
+
+            self.assertIsNone(
+                select_contract_start_snapshot(
+                    snapshot_dir, datetime(2026, 6, 30, tzinfo=UTC).date()
+                )
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
