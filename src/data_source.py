@@ -381,7 +381,17 @@ class DataSource:
             projected["crypto_lending_value_usd"],
             legacy_crypto_rate,
         )
-        group_interest["p2p_lending"] = (projected["p2p_value_usd"], 0.0)
+        legacy_p2p_rate = group_interest.get("p2p_lending", (0, 0))
+        legacy_p2p_rate = (
+            legacy_p2p_rate[1]
+            if isinstance(legacy_p2p_rate, (list, tuple))
+            and len(legacy_p2p_rate) > 1
+            else 0
+        )
+        group_interest["p2p_lending"] = (
+            projected["p2p_value_usd"],
+            legacy_p2p_rate,
+        )
         canonical_crypto_positions = contract.get("POSITION_DATA", {}).get("crypto", [])
         canonical_crypto_values = {
             position["asset"]: position.get("value_usd", 0.0)

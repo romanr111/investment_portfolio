@@ -220,5 +220,59 @@ class TestPortfolioTotals(unittest.TestCase):
         self.assertEqual(_sum_allocation_row_values(rows), data["TOTAL_ASSETS"])
 
 
+
+    def test_get_combined_data_preserves_legacy_p2p_rate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_source = DataSource.__new__(DataSource)
+            data_source._data_timestamp = 1.0
+            data_source.ib_data = {"Total Stocks Value": 0}
+            data_source.ib = SimpleNamespace(
+                performance_ytd={}, get_stock_positions_analytics=lambda: {}
+            )
+            data_source.index_performance_data = {}
+            data_source.crypto = SimpleNamespace(
+                get_total_crypto_value=lambda: 40,
+                crypto_market_values={"BTC": 40},
+                quantities={"BTC": 0.001},
+            )
+            data_source.crypto_savings = []
+            data_source.fi_data = {
+                "group_weighted_interest": {
+                    "Crypto Landing": (80, 0.05),
+                    "p2p_lending": (30, 0.11),
+                }
+            }
+            data_source.cash = SimpleNamespace(total_cash=Decimal("0"), as_dict=lambda: {})
+            data_source.ff_progress = "0%"
+            data_source._calculate_asset_allocation = lambda: {
+                "net_worth": 130,
+                "allocations": {},
+            }
+            data_source._save_combined_data_to_json = lambda data: None
+            data_source.portfolio_contract = build_portfolio_contract(
+                ledger=PortfolioLedger(Path(temp_dir)),
+                live_crypto_quantities={"BTC": 0.001},
+                live_crypto_market_values={"BTC": 40},
+                savings_positions=[],
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=30,
+                as_of_date=__import__("datetime").date(2026, 6, 30),
+            )
+            data_source.total_assets = 130
+
+            combined = data_source.get_combined_data()
+
+            # The v2 projection replaces the P2P balance but must keep the
+            # legacy weighted rate; zeroing it blanked the rate column in
+            # Google Sheets.
+            p2p = combined["FIXED_INCOME_DATA"]["group_weighted_interest"][
+                "p2p_lending"
+            ]
+            self.assertEqual(p2p[0], 30)
+            self.assertAlmostEqual(p2p[1], 0.11)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()

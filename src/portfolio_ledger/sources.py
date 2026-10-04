@@ -184,6 +184,9 @@ class BinanceActivitySource:
         for symbol in symbols:
             symbol_info = api.get_symbol_info(symbol)
             if not symbol_info:
+                # Trading activity for this symbol would be silently skipped;
+                # the events fetched so far are not the full picture.
+                coverage_complete = False
                 continue
             trades = api.get_my_trades(
                 symbol=symbol,

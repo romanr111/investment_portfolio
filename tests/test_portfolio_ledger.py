@@ -332,6 +332,38 @@ class PortfolioLedgerTests(unittest.TestCase):
         self.assertEqual(cursor["symbols"], ["BTCUSDT"])
         self.assertEqual(cursor["coverage"], "complete")
 
+    def test_binance_activity_source_marks_coverage_partial_on_missing_symbol_info(
+        self,
+    ) -> None:
+        class FakeApi:
+            def get_symbol_info(self, symbol):
+                # Exchange metadata lookup returns nothing for this pair.
+                return None if symbol == "BADUSDT" else {
+                    "baseAsset": "BTC",
+                    "quoteAsset": "USDT",
+                }
+
+            def get_my_trades(self, **kwargs):
+                return []
+
+            def get_deposit_history(self, **kwargs):
+                return []
+
+            def get_withdraw_history(self, **kwargs):
+                return []
+
+        wrapper = type("Wrapper", (), {"client": FakeApi()})()
+        source = BinanceActivitySource(wrapper, symbols=["BTCUSDT", "BADUSDT"])
+
+        events, cursor = source.fetch_events(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+
+        # Skipping a symbol without metadata silently drops its trading
+        # activity, so the cursor must not claim complete coverage.
+        self.assertEqual(cursor["coverage"], "partial")
+
     def test_activity_sources_preserve_transfer_ids_for_reconciliation(self) -> None:
         class BinanceApi:
             def get_deposit_history(self, **kwargs):

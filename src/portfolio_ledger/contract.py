@@ -8,7 +8,10 @@ from typing import Any, Iterable, Optional
 
 
 MATERIALITY_USD = 100.0
-QUANTITY_TOLERANCE = 1e-8
+# Quantities round to 4 decimals on every aggregation pass, so two views of
+# the same holding can legitimately differ by up to 5e-5. 1e-8 turned that
+# harmless rounding dust into failed reconciliations.
+QUANTITY_TOLERANCE = 1e-4
 STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "PAX", "EURI"}
 _SNAPSHOT_DATE_RE = re.compile(r"^combined_data_(\d{4}-\d{2}-\d{2})_")
 
@@ -84,10 +87,18 @@ def classify_internal_transfer_legs(
             continue
         deposit = normalized[deposits[0]]
         withdrawal = normalized[withdrawals[0]]
-        if abs(
-            float(deposit.get("quantity", 0.0))
-            - float(withdrawal.get("quantity", 0.0))
-        ) > QUANTITY_TOLERANCE:
+        # Exchanges deduct network fees inside the withdrawal amount, so the
+        # amount received is the amount debited minus the leg's own fee (paid
+        # in the same asset). Each leg's fee must come off its quantity before
+        # the legs can match; the fee is still counted once in fees_quantity
+        # by the quantity projection.
+        deposit_net = float(deposit.get("quantity", 0.0))
+        if str(deposit.get("fee_asset") or "").upper() == key[1]:
+            deposit_net -= abs(float(deposit.get("fee_quantity") or 0.0))
+        withdrawal_net = float(withdrawal.get("quantity", 0.0))
+        if str(withdrawal.get("fee_asset") or "").upper() == key[1]:
+            withdrawal_net -= abs(float(withdrawal.get("fee_quantity") or 0.0))
+        if abs(deposit_net - withdrawal_net) > QUANTITY_TOLERANCE:
             continue
         deposit["event_type"] = "internal_transfer"
         withdrawal["event_type"] = "internal_transfer"
@@ -618,12 +629,33 @@ def _snapshot_lending_principal(snapshot: Optional[dict[str, Any]]) -> Optional[
     positions = payload.get("POSITION_DATA", {}).get("crypto_lending", [])
     if positions:
         return sum(float(position.get("principal_usd", 0.0)) for position in positions)
-    group_interest = payload.get("FIXED_INCOME_DATA", {}).get(
-        "group_weighted_interest", {}
+    # The v1 "Crypto Landing" total mixes stablecoin earn with volatile
+    # holdings (e.g. WhiteBit ETH), while the v2 lending model tracks
+    # stablecoins only. Returning that mixed total as a stablecoin start
+    # principal manufactures a phantom gain or loss for the period. Sum the
+    # stablecoin assets only; when none are present, report no start
+    # principal so lending coverage downgrades to partial instead of lying.
+    platforms = (
+        payload.get("FIXED_INCOME_DATA", {})
+        .get("fixed_income_full_data", {})
+        .get("Crypto Landing", {})
     )
-    legacy_lending = group_interest.get("Crypto Landing")
-    if isinstance(legacy_lending, (list, tuple)) and legacy_lending:
-        return float(legacy_lending[0])
+    found = False
+    stablecoin_principal = 0.0
+    if isinstance(platforms, dict):
+        for assets in platforms.values():
+            if not isinstance(assets, dict):
+                continue
+            for raw_asset, values in assets.items():
+                asset = str(raw_asset).upper()
+                if not asset or asset == "NONE" or asset not in STABLECOINS:
+                    continue
+                if not isinstance(values, (list, tuple)) or len(values) < 2:
+                    continue
+                stablecoin_principal = stablecoin_principal + float(values[0])
+                found = True
+    if found:
+        return stablecoin_principal
     return None
 
 
@@ -656,11 +688,19 @@ def build_portfolio_contract(
         start_quantities = dict(live_crypto_quantities)
         start_values = dict(live_crypto_market_values)
 
-    source_coverage = {
-        source: str(details.get("coverage", "complete"))
-        for source, details in import_state.items()
-        if isinstance(details, dict)
-    }
+    # Per-capability cursors carry their own coverage: a source can import
+    # events completely while lending still backfills (or vice versa). The
+    # top-level "coverage" key mixes both capabilities, so read the events
+    # cursor whenever it exists and fall back to the top level otherwise.
+    source_coverage = {}
+    for source, details in import_state.items():
+        if not isinstance(details, dict):
+            continue
+        events_cursor = details.get("events")
+        if isinstance(events_cursor, dict) and "coverage" in events_cursor:
+            source_coverage[source] = str(events_cursor.get("coverage") or "complete")
+        else:
+            source_coverage[source] = str(details.get("coverage", "complete"))
     crypto_activity = aggregate_crypto_quarter(
         events=events,
         start_quantities=start_quantities,

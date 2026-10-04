@@ -9,6 +9,7 @@ from src.portfolio_ledger.contract import (
     calculate_car_assets,
     calculate_crypto_performance,
     calculate_lending_performance,
+    classify_internal_transfer_legs,
     classify_lending_positions,
     modified_dietz_return,
     normalize_p2p_positions,
@@ -805,6 +806,293 @@ class CryptoContractTests(unittest.TestCase):
                     snapshot_dir, datetime(2026, 6, 30, tzinfo=UTC).date()
                 )
             )
+
+
+    def test_legacy_lending_boundary_ignores_non_stablecoin_earn(self) -> None:
+        # v1 "Crypto Landing" totals mix stablecoin earn with volatile
+        # holdings; using that total as the v2 stablecoin start principal
+        # manufactures a phantom period return.
+        stablecoin_snapshot = {
+            "data": {
+                "FIXED_INCOME_DATA": {
+                    "group_weighted_interest": {"Crypto Landing": (160, 0.05)},
+                    "fixed_income_full_data": {
+                        "Crypto Landing": {
+                            "whitebit": {"ETH": [30, 0.0], "USDT": [100, 0.05]},
+                            "binance": {"USDC": [30, 0.04]},
+                        }
+                    },
+                }
+            }
+        }
+        volatile_only_snapshot = {
+            "data": {
+                "FIXED_INCOME_DATA": {
+                    "group_weighted_interest": {"Crypto Landing": (30, 0.05)},
+                    "fixed_income_full_data": {
+                        "Crypto Landing": {"whitebit": {"ETH": [30, 0.0]}}
+                    },
+                }
+            }
+        }
+        savings_positions = [
+            {"whitebit": {"USDT": (100.0, 0.05)}},
+            {"binance": {"USDC": (30.0, 0.04)}},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            ledger.save_import_state(
+                {
+                    "whitebit": {
+                        "lending": {"coverage": "complete"},
+                        "coverage": "complete",
+                    },
+                    "binance": {
+                        "lending": {"coverage": "complete"},
+                        "coverage": "complete",
+                    },
+                }
+            )
+            contract = build_portfolio_contract(
+                ledger=ledger,
+                live_crypto_quantities={},
+                live_crypto_market_values={},
+                savings_positions=list(savings_positions),
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
+                start_snapshot=stablecoin_snapshot,
+                crypto_freshness="snapshot",
+            )
+            lending = contract["PERFORMANCE_DATA"]["buckets"]["Crypto Lending"]
+            # Start principal counts only USDT/USDC (130, not 160): with the
+            # legacy mixed total the same quarter would report ~-18.75%.
+            self.assertEqual(lending["return_method"], "modified_dietz")
+            self.assertAlmostEqual(lending["return_pct"], 0.0, places=6)
+            self.assertEqual(lending["data_quality"], "complete")
+
+            contract = build_portfolio_contract(
+                ledger=PortfolioLedger(Path(temp_dir)),
+                live_crypto_quantities={},
+                live_crypto_market_values={},
+                savings_positions=list(savings_positions),
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
+                start_snapshot=volatile_only_snapshot,
+                crypto_freshness="snapshot",
+            )
+            lending = contract["PERFORMANCE_DATA"]["buckets"]["Crypto Lending"]
+            # No stablecoin assets in the boundary snapshot: coverage must
+            # downgrade to partial instead of claiming a real return.
+            self.assertIsNone(lending["return_pct"])
+            self.assertEqual(lending["data_quality"], "partial")
+
+    def test_fee_bearing_transfer_legs_match_on_net_quantity(self) -> None:
+        # Exchanges deduct network fees inside the withdrawal amount, so the
+        # received quantity is the debited quantity minus the leg's fee. The
+        # legs must still match, and the fee must be counted exactly once.
+        events = classify_internal_transfer_legs(
+            [
+                {
+                    "event_id": "wd-1",
+                    "occurred_at": "2026-05-01T12:00:00Z",
+                    "source": "okx",
+                    "account": "funding",
+                    "remote_id": "wd-1",
+                    "event_type": "withdrawal",
+                    "asset": "USDT",
+                    "quantity": 1.0,
+                    "usd_value": 1.0,
+                    "fee_asset": "USDT",
+                    "fee_quantity": 0.001,
+                    "fee_usd": 0.001,
+                    "transfer_id": "on-chain-1",
+                },
+                {
+                    "event_id": "dp-1",
+                    "occurred_at": "2026-05-01T13:00:00Z",
+                    "source": "binance",
+                    "account": "spot",
+                    "remote_id": "dp-1",
+                    "event_type": "deposit",
+                    "asset": "USDT",
+                    "quantity": 0.999,
+                    "usd_value": 0.999,
+                    "fee_asset": None,
+                    "fee_quantity": 0.0,
+                    "fee_usd": None,
+                    "transfer_id": "on-chain-1",
+                },
+            ]
+        )
+
+        self.assertEqual(events[0]["event_type"], "internal_transfer")
+        self.assertEqual(events[1]["event_type"], "internal_transfer")
+
+        rows = aggregate_crypto_quarter(
+            events=events,
+            start_quantities={"USDT": 1.0},
+            end_quantities={"USDT": 0.999},
+            start_values_usd={"USDT": 1.0},
+            end_values_usd={"USDT": 0.999},
+            period_start=datetime(2026, 4, 1, tzinfo=UTC),
+            period_end=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+            # Default $100 materiality would skip these $1 positions.
+            materiality_usd=0.0,
+        )
+
+        self.assertEqual(rows[0]["external_transfers_quantity"], 0.0)
+        # The network fee leaves the portfolio, so it surfaces once as fees.
+        self.assertAlmostEqual(rows[0]["fees_quantity"], 0.001, places=9)
+        self.assertAlmostEqual(rows[0]["net_change_quantity"], -0.001, places=9)
+        self.assertEqual(rows[0]["unexplained_quantity"], 0.0)
+        self.assertEqual(rows[0]["coverage"], "complete")
+
+    def test_fee_bearing_legs_stay_external_when_quantities_disagree(self) -> None:
+        events = classify_internal_transfer_legs(
+            [
+                {
+                    "event_id": "wd-1",
+                    "occurred_at": "2026-05-01T12:00:00Z",
+                    "source": "okx",
+                    "account": "funding",
+                    "remote_id": "wd-1",
+                    "event_type": "withdrawal",
+                    "asset": "ETH",
+                    "quantity": 1.0,
+                    "fee_asset": "ETH",
+                    "fee_quantity": 0.5,
+                    "transfer_id": "on-chain-2",
+                },
+                {
+                    "event_id": "dp-1",
+                    "occurred_at": "2026-05-01T13:00:00Z",
+                    "source": "binance",
+                    "account": "spot",
+                    "remote_id": "dp-1",
+                    "event_type": "deposit",
+                    "asset": "ETH",
+                    "quantity": 0.999,
+                    "fee_asset": None,
+                    "fee_quantity": 0.0,
+                    "transfer_id": "on-chain-2",
+                },
+            ]
+        )
+
+        # Net of its 0.5 fee the withdrawal moved 0.5, not 0.999: the legs
+        # describe different quantities and must stay external.
+        self.assertEqual(events[0]["event_type"], "withdrawal")
+        self.assertEqual(events[1]["event_type"], "deposit")
+
+    def test_four_decimal_rounding_does_not_break_reconciliation(self) -> None:
+        # Positions round to 4 decimals on every pass, so a 0.000054321 token
+        # reward can round the end balance up by a full 0.0001. That dust must
+        # not fail reconciliation, which previously required 1e-8 precision.
+        rows = aggregate_crypto_quarter(
+            events=[
+                {
+                    "event_id": "reward-1",
+                    "occurred_at": "2026-05-01T12:00:00Z",
+                    "source": "binance",
+                    "account": "spot",
+                    "remote_id": "reward-1",
+                    "event_type": "reward",
+                    "asset": "ETH",
+                    "quantity": 0.000054321,
+                    "usd_value": 0.1,
+                }
+            ],
+            start_quantities={"ETH": 1.0},
+            end_quantities={"ETH": 1.0001},
+            start_values_usd={"ETH": 3000.0},
+            end_values_usd={"ETH": 3000.3},
+            period_start=datetime(2026, 4, 1, tzinfo=UTC),
+            period_end=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+        )
+
+        self.assertAlmostEqual(rows[0]["rewards_quantity"], 0.000054321, places=9)
+        self.assertEqual(rows[0]["unexplained_quantity"], 0.0)
+        self.assertEqual(rows[0]["coverage"], "complete")
+
+    def test_events_cursor_coverage_gates_activity_rows_in_both_directions(
+        self,
+    ) -> None:
+        # A source can import events completely while lending backfill is
+        # still partial (or the reverse). The top-level "coverage" mixes both
+        # capabilities, so activity rows must follow the events cursor.
+        buy_event = [
+            {
+                "occurred_at": "2026-05-01T12:00:00Z",
+                "source": "okx",
+                "account": "funding",
+                "remote_id": "buy-1",
+                "event_type": "buy",
+                "asset": "BTC",
+                "quantity": 0.01,
+                "usd_value": 50.0,
+            }
+        ]
+        start_snapshot = {
+            "data": {
+                "POSITION_DATA": {
+                    "crypto": [
+                        {"asset": "BTC", "quantity": 1.0, "value_usd": 5000.0}
+                    ]
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            ledger.import_events(buy_event)
+
+            ledger.save_import_state(
+                {
+                    "okx": {
+                        "events": {"coverage": "partial"},
+                        "coverage": "complete",
+                    }
+                }
+            )
+            contract = build_portfolio_contract(
+                ledger=ledger,
+                live_crypto_quantities={"BTC": 1.01},
+                live_crypto_market_values={"BTC": 5100.0},
+                savings_positions=[],
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
+                start_snapshot=start_snapshot,
+                crypto_freshness="live",
+            )
+            row = contract["ACTIVITY_DATA"]["quarters"]["2026-Q2"]["crypto"][0]
+            self.assertEqual(row["coverage"], "partial")
+
+            ledger.save_import_state(
+                {
+                    "okx": {
+                        "events": {"coverage": "complete"},
+                        "lending": {"coverage": "partial"},
+                        "coverage": "partial",
+                    }
+                }
+            )
+            contract = build_portfolio_contract(
+                ledger=ledger,
+                live_crypto_quantities={"BTC": 1.01},
+                live_crypto_market_values={"BTC": 5100.0},
+                savings_positions=[],
+                legacy_other_assets_usd=0,
+                legacy_p2p_balance_usd=0,
+                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
+                start_snapshot=start_snapshot,
+                crypto_freshness="live",
+            )
+            row = contract["ACTIVITY_DATA"]["quarters"]["2026-Q2"]["crypto"][0]
+            self.assertEqual(row["coverage"], "complete")
 
 
 if __name__ == "__main__":
