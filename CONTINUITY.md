@@ -26,8 +26,11 @@
 
 ## Now
 - 2026-05-06T23:02+03:00 [DOC] README refresh is implemented; code changes from dividend-fetch optimization remain in the working tree.
+- 2026-10-05 [CODE] Issue #21 insight tabs are implemented in `/Users/roman/agent/ip-issue-21` on `feat/issue-21-sheets-insights`; `just test` passes 144 tests. No live Sheets writeback has been attempted. Commits, PR, CI, and test-workbook review remain pending.
 
 ## Next
+- 2026-10-05 [TOOL] Commit the reviewed issue #21 source and test changes, push the branch, create the PR, and watch CI.
+- 2026-10-05 [USER] Review the generated test workbook before any live Sheets writeback.
 - 2026-05-06T22:51+03:00 [ASSUMPTION] No further code changes are needed unless you want me to push the fix or trim the noisy Yahoo retry handling further.
 - 2026-04-28 [USER] Rotate any credentials or tokens that were previously exposed in Git history, if applicable.
 
@@ -39,8 +42,11 @@
 - 2026-04-28 [CODE] `data/README.md`
 - 2026-04-28 [CODE] `CONTINUITY.md`
 - 2026-04-28 [CODE] Git index entries under `data/`
+- 2026-10-05 [CODE] `src/google_sheets/insights_*.py` and `tests/*insights*.py`
+- 2026-10-05 [CODE] `src/data_source.py`, `src/google_sheets/spreadsheet_structure.py`, and `data/README.md`
 
 ## Receipts
+- 2026-10-05 [TOOL] `PYTHONPATH=/Users/roman/Documents/Development/investment_portfolio just test` passed all 144 tests on `feat/issue-21-sheets-insights` using the shared Python 3.10.18 environment.
 - 2026-04-28T19:22Z [TOOL] `rsync -a data/ /Users/roman/Documents/Development/investment_portfolio_data_backup_20260428T192224Z/data/` completed with 34 files.
 - 2026-04-28T19:24Z [TOOL] `git check-ignore -v` matched `/data/**` for private data files.
 - 2026-04-28T19:25Z [TOOL] `git commit -m "Stop tracking local portfolio data"` created the local cleanup commit.

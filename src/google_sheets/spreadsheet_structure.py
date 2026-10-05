@@ -638,6 +638,12 @@ class PortfolioUpdater:
         # Update timeline
         self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))
 
+        # Build insights from the same combined_data snapshot. This writer does
+        # not fetch new broker data and leaves unowned tabs untouched.
+        from src.google_sheets.insights_refresh import refresh_insights
+
+        refresh_insights(self.spreadsheet, data)
+
     def _enrich_with_enhanced_stock_data(self, data: Dict[str, Any]) -> None:
         """
         Enrich the data dictionary with enhanced stock data if available.

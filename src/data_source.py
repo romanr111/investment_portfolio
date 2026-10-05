@@ -281,6 +281,7 @@ class DataSource:
                 "Other Bets": int(OTHER_BETS),
             },
             "TOTAL_ASSETS": self.total_assets,
+            "FINANCIAL_FREEDOM_GOAL_TARGET": FINANCIAL_FREEDOM_GOAL,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
             "ASSET_ALLOCATION": asset_allocation,
             "DATA_METADATA": {
