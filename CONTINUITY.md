@@ -26,10 +26,10 @@
 
 ## Now
 - 2026-05-06T23:02+03:00 [DOC] README refresh is implemented; code changes from dividend-fetch optimization remain in the working tree.
-- 2026-10-05 [CODE] Issue #21 insight tabs are implemented in `/Users/roman/agent/ip-issue-21` on `feat/issue-21-sheets-insights`; `just test` passes 144 tests. No live Sheets writeback has been attempted. Commits, PR, CI, and test-workbook review remain pending.
+- 2026-10-05 [CODE] Issue #21 insight tabs are implemented on `feat/issue-21-sheets-insights`; commits `69092c8` and `347228d` contain source and tests. `just test` passes 144 tests. No live Sheets writeback has been attempted. Push, PR, CI, and test-workbook review remain pending.
 
 ## Next
-- 2026-10-05 [TOOL] Commit the reviewed issue #21 source and test changes, push the branch, create the PR, and watch CI.
+- 2026-10-05 [TOOL] Push the issue #21 branch, create the PR, and watch CI.
 - 2026-10-05 [USER] Review the generated test workbook before any live Sheets writeback.
 - 2026-05-06T22:51+03:00 [ASSUMPTION] No further code changes are needed unless you want me to push the fix or trim the noisy Yahoo retry handling further.
 - 2026-04-28 [USER] Rotate any credentials or tokens that were previously exposed in Git history, if applicable.
