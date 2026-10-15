@@ -10,24 +10,16 @@ from types import SimpleNamespace
 from data.assets_data import OTHER_BETS
 from src.allocation_calculator import AllocationCalculator
 from src.data_source import DataSource
-from src.google_sheets.spreadsheet_structure import PortfolioTableBuilder
+from src.google_sheets.insights_tables import build_portfolio_tab
 
 
-def _extract_allocation_rows(table):
-    rows = {}
-    for row in table:
-        if (
-            len(row) > 8
-            and row[6]
-            and row[6] != "Net worth"
-            and str(row[8]).endswith("%")
-        ):
-            rows[row[6]] = row[7]
-    return rows
+def _extract_allocation_rows(tab):
+    block = next(block for block in tab.blocks if block.name == "allocation")
+    return {row[0]: row[1].value for row in block.rows[2:]}
 
 
 def _sum_allocation_row_values(rows):
-    return sum(int(float(value)) for value in rows.values())
+    return sum(value for value in rows.values() if isinstance(value, (int, float)))
 
 
 class TestPortfolioTotals(unittest.TestCase):
@@ -86,12 +78,12 @@ class TestPortfolioTotals(unittest.TestCase):
             "OTHER_ASSETS": {"Other Bets": 0},
         }
 
-        table = PortfolioTableBuilder(data).build_central_columns([])
+        table = build_portfolio_tab(data, current_date="2026-09-30")
         rows = _extract_allocation_rows(table)
 
-        self.assertEqual(rows["Stocks"], "400")
-        self.assertEqual(rows["Bonds"], "300")
-        self.assertEqual(rows["Cash"], "50")
+        self.assertEqual(rows["Stocks"], 400)
+        self.assertEqual(rows["Bonds"], 300)
+        self.assertEqual(rows["Cash"], 50)
 
     def test_allocation_rows_reconcile_with_net_worth_using_actual_category_values(self):
         data = {
@@ -118,18 +110,18 @@ class TestPortfolioTotals(unittest.TestCase):
         }
         data["ALLOCATIONS"] = AllocationCalculator(data).get_sorted_sector_allocations()
 
-        table = PortfolioTableBuilder(data).build_central_columns([])
+        table = build_portfolio_tab(data, current_date="2026-09-30")
         rows = _extract_allocation_rows(table)
 
-        self.assertEqual(rows["Stocks"], "400")
-        self.assertEqual(rows["Bonds"], "300")
-        self.assertEqual(rows["Other Bets"], "70")
-        self.assertEqual(rows["Crypto Lending"], "80")
-        self.assertEqual(rows["Precious Metals"], "50")
-        self.assertEqual(rows["Cash"], "260")
-        self.assertEqual(rows["Crypto Coins"], "40")
-        self.assertEqual(rows["Commodities"], "100")
-        self.assertEqual(rows["P2P Lending"], "30")
+        self.assertEqual(rows["Stocks"], 400)
+        self.assertEqual(rows["Bonds"], 300)
+        self.assertEqual(rows["Other Bets"], 70)
+        self.assertEqual(rows["Crypto Lending"], 80)
+        self.assertEqual(rows["Precious Metals"], 50)
+        self.assertEqual(rows["Cash"], 260)
+        self.assertEqual(rows["Crypto Coins"], 40)
+        self.assertEqual(rows["Commodities"], 100)
+        self.assertEqual(rows["P2P Lending"], 30)
         self.assertEqual(_sum_allocation_row_values(rows), data["TOTAL_ASSETS"])
 
 

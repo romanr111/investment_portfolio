@@ -33,7 +33,9 @@ class InsightsRefreshTests(unittest.TestCase):
         self.assertEqual(snapshot.as_of_date, "2026-09-30")
         self.assertEqual(snapshot.data["FINANCIAL_FREEDOM_GOAL_TARGET"], 1000)
 
-    def test_previous_snapshot_is_strictly_earlier_and_same_date_choice_is_deterministic(self):
+    def test_previous_snapshot_is_strictly_earlier_and_same_date_choice_is_deterministic(
+        self,
+    ):
         with tempfile.TemporaryDirectory() as temp_dir:
             directory = Path(temp_dir)
             snapshots = (
@@ -82,6 +84,65 @@ class InsightsRefreshTests(unittest.TestCase):
         self.assertEqual(config["essential_monthly_spending_usd"], 2000)
         self.assertNotIn("base_currency", config)
         self.assertNotIn("credentials", config)
+
+
+class SnapshotReplayIntegrationTests(unittest.TestCase):
+    def test_envelope_only_date_replays_the_original_day_without_broker_access(self):
+        from src.google_sheets.insights_refresh import (
+            refresh_from_snapshot,
+            refresh_insights,
+        )
+        from tests.fake_sheets import FakeSpreadsheet
+        from tests.fixtures_insights import current_snapshot
+
+        data = current_snapshot()
+        data.pop("as_of_date")
+        data.pop("DATA_METADATA")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "envelope.json"
+            path.write_text(json.dumps({"as_of_date": "2026-09-30", "data": data}))
+            book = FakeSpreadsheet()
+            refresh_from_snapshot(book, path, snapshot_dir=directory)
+            self.assertEqual(book.sheets[0].title, "30 Sep 2026")
+            self.assertIsInstance(
+                book.worksheet("net_worth_timeline").cell(1, 2).value, int
+            )
+            replay_finance = {
+                coord: value
+                for coord, value in book.sheets[0].values.items()
+                if isinstance(value, (int, float))
+            }
+            live = FakeSpreadsheet()
+            refresh_insights(
+                live,
+                data,
+                config={},
+                snapshot_dir=directory,
+                valuation_date="2026-09-30",
+            )
+            self.assertEqual(
+                replay_finance,
+                {
+                    coord: value
+                    for coord, value in live.sheets[0].values.items()
+                    if isinstance(value, (int, float))
+                },
+            )
+
+    def test_missing_or_invalid_explicit_date_is_rejected_without_mutations(self):
+        from src.google_sheets.insights_refresh import refresh_insights
+        from tests.fake_sheets import FakeSpreadsheet
+        from tests.fixtures_insights import current_snapshot
+
+        for data, override in (
+            ({"TOTAL_ASSETS": 1}, None),
+            (current_snapshot(), "bad-date"),
+        ):
+            book = FakeSpreadsheet()
+            with self.assertRaises(ValueError):
+                refresh_insights(book, data, config={}, valuation_date=override)
+            self.assertFalse(book.sheets)
+            self.assertFalse(book.batch_updates)
 
 
 if __name__ == "__main__":

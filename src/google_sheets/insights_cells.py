@@ -7,8 +7,8 @@ import math
 from typing import Any, Iterable
 
 
-_NUMERIC_KINDS = {"money", "percent", "pp", "number"}
-_SUPPORTED_KINDS = _NUMERIC_KINDS | {"date", "status"}
+_NUMERIC_KINDS = {"money", "percent", "pp", "number", "native_amount"}
+_SUPPORTED_KINDS = _NUMERIC_KINDS | {"date", "status", "link", "formula"}
 _SHEETS_DATE_EPOCH = date(1899, 12, 30)
 
 
@@ -40,6 +40,10 @@ def _date_serial(value: Any) -> int:
 
 def _render_value(cell: CellValue) -> Any:
     value = cell.value
+    if cell.kind == "link":
+        return str(value[0])
+    if cell.kind == "formula":
+        return str(value)
     if cell.kind == "status":
         return "Unavailable" if value is None else str(value)
     if cell.kind == "date":

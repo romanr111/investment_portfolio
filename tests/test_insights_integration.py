@@ -1,36 +1,31 @@
 import unittest
-from unittest.mock import Mock, patch
-
+from unittest.mock import Mock
+from tests.fake_sheets import FakeSpreadsheet
+from tests.fixtures_insights import current_snapshot
 from src.google_sheets.spreadsheet_structure import PortfolioUpdater
 
 
 class InsightsIntegrationTests(unittest.TestCase):
-    @patch("src.google_sheets.spreadsheet_structure.PortfolioFormatter")
-    @patch("src.google_sheets.spreadsheet_structure.PortfolioTableBuilder")
-    @patch("src.google_sheets.insights_refresh.refresh_insights")
-    def test_portfolio_update_refreshes_insights_from_same_combined_data(
-        self, refresh_insights, table_builder_class, formatter_class
-    ):
+    def test_actual_updater_uses_saved_values_and_only_two_tabs_on_repeated_run(self):
+        book = FakeSpreadsheet()
         updater = object.__new__(PortfolioUpdater)
-        updater.spreadsheet = object()
-        worksheet = object()
-        updater.portfolio_sheet = Mock()
-        updater.portfolio_sheet.create_tab_at_left.return_value = worksheet
-        updater._enrich_with_enhanced_stock_data = Mock()
-        updater._write_fixed_income_percentage = Mock()
-        updater.update_net_worth_timeline = Mock()
-        table_builder = table_builder_class.return_value
-        table_builder.build_left_columns.return_value = []
-        table_builder.build_central_columns.return_value = []
-        table_builder.category_header_rows = []
-        data = {"TOTAL_ASSETS": 123.0}
-
+        updater.spreadsheet = book
+        data = current_snapshot()
+        broker = Mock()
+        broker.get_stock_positions_analytics.side_effect = AssertionError(
+            "Rendering must not query broker"
+        )
+        data["IB_CLIENT"] = broker
         updater.update_portfolio(data)
-
-        refresh_insights.assert_called_once_with(updater.spreadsheet, data)
-        updater.update_net_worth_timeline.assert_called_once_with(123.0)
-        formatter_class.return_value.format_portfolio_table.assert_called_once()
-
-
-if __name__ == "__main__":
-    unittest.main()
+        ids = [s.id for s in book.sheets]
+        updater.update_portfolio(data)
+        self.assertEqual(
+            [s.title for s in book.sheets], ["04 Oct 2026", "net_worth_timeline"]
+        )
+        self.assertEqual([s.id for s in book.sheets], ids)
+        broker.get_stock_positions_analytics.assert_not_called()
+        data["as_of_date"] = "2026-12-31"
+        updater.update_portfolio(data)
+        self.assertEqual(len(book.sheets), 3)
+        self.assertEqual(book.worksheet("04 Oct 2026").id, ids[0])
+        self.assertEqual(book.worksheet("net_worth_timeline").id, ids[1])

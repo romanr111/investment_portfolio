@@ -1,16 +1,8 @@
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
 from decimal import Decimal
-from typing import List, Dict, Any, Optional, Union, Tuple
-import logging
-from .formatting import (
-    DataFormatter,
-    PortfolioFormatter,
-    TimelineFormatter,
-    SpreadsheetFormatter,
-)
-from data.assets_data import OTHER_BETS
+from typing import List, Dict, Any
+from .formatting import DataFormatter
 
 
 class GoogleSheetsClient:
@@ -34,36 +26,6 @@ class GoogleSheetsClient:
     def open_spreadsheet(self, spreadsheet_name: str) -> gspread.Spreadsheet:
         """Open and return a spreadsheet by name."""
         return self.client.open(spreadsheet_name)
-
-
-class PortfolioSpreadsheet:
-    """Manages portfolio data in Google Sheets."""
-
-    def __init__(self, spreadsheet: gspread.Spreadsheet):
-        self.spreadsheet = spreadsheet
-
-    def create_tab_at_left(self, sheet_title: str) -> gspread.Worksheet:
-        """Create or replace a worksheet at index=1."""
-        try:
-            existing = self.spreadsheet.worksheet(sheet_title)
-            self.spreadsheet.del_worksheet(existing)
-        except gspread.exceptions.WorksheetNotFound:
-            pass
-
-        worksheet = self.spreadsheet.add_worksheet(title=sheet_title, rows=200, cols=30)
-        self.spreadsheet.batch_update(
-            {
-                "requests": [
-                    {
-                        "updateSheetProperties": {
-                            "properties": {"sheetId": worksheet.id, "index": 1},
-                            "fields": "index",
-                        }
-                    }
-                ]
-            }
-        )
-        return worksheet
 
 
 class PortfolioDataParser:
@@ -118,620 +80,46 @@ class PortfolioDataParser:
         return rows
 
 
-class PortfolioTableBuilder:
-    """Builds complete portfolio tables."""
-
-    def __init__(self, data: Dict[str, Any]):
-        self.data = data
-        self.category_header_rows = []  # Track rows with category headers
-
-    def build_left_columns(self) -> List[List[str]]:
-        """Build columns D/E data with enhanced stock percentage display."""
-        rows = []
-        self.category_header_rows = []  # Reset the tracker
-
-        ib_data = self.data.get("IB_DATA", {})
-        enhanced_stocks = self.data.get("ENHANCED_STOCKS", {})
-
-        if ib_data:
-            # Calculate stock values and percentages
-            china_stocks = ib_data.get("China Stocks", {})
-            regular_stocks = ib_data.get("Stocks", {})
-            china_stocks_value = sum(china_stocks.values()) if china_stocks else 0
-            regular_stocks_value = sum(regular_stocks.values()) if regular_stocks else 0
-            total_stocks_value = china_stocks_value + regular_stocks_value
-
-            # Calculate percentages of total stocks
-            if total_stocks_value > 0:
-                china_pct = china_stocks_value / total_stocks_value * 100
-                regular_pct = regular_stocks_value / total_stocks_value * 100
-
-                # Format the percentage strings
-                china_pct_str = DataFormatter.format_percentage(china_pct)
-                regular_pct_str = DataFormatter.format_percentage(regular_pct)
-
-                # Process categories
-                for subcat, contents in ib_data.items():
-                    if isinstance(contents, dict) and not contents:
-                        continue
-
-                    if isinstance(contents, dict):
-                        # Special handling for China Stocks and Stocks categories
-                        if subcat == "China Stocks":
-                            # Track the row index for the category header
-                            self.category_header_rows.append(len(rows))
-
-                            # Add category header with percentage - removed P&L calculation
-                            category_row = DataFormatter.row_left(
-                                f"{subcat} / {china_pct_str}",
-                                DataFormatter.format_currency(china_stocks_value),
-                            )
-
-                            # No longer adding P&L percentage to category headers
-                            rows.append(category_row)
-
-                            # Add individual positions
-                            enhanced_china_stocks = (
-                                enhanced_stocks.get(subcat, {})
-                                if enhanced_stocks
-                                else {}
-                            )
-
-                            for sym, val in contents.items():
-                                position_row = DataFormatter.row_left(
-                                    sym, DataFormatter.format_currency(val)
-                                )
-
-                                # Add P&L for individual position if available
-                                if (
-                                    sym in enhanced_china_stocks
-                                    and "unrealized_pnl_percentage"
-                                    in enhanced_china_stocks[sym]
-                                ):
-                                    pnl_percent = enhanced_china_stocks[sym][
-                                        "unrealized_pnl_percentage"
-                                    ]
-                                    position_row.append(
-                                        DataFormatter.format_pnl_percentage(pnl_percent)
-                                    )
-
-                                rows.append(position_row)
-
-                            rows.append(DataFormatter.row_left())
-
-                        elif subcat == "Stocks":
-                            # Track the row index for the category header
-                            self.category_header_rows.append(len(rows))
-
-                            # Add category header with percentage - removed P&L calculation
-                            category_row = DataFormatter.row_left(
-                                f"{subcat} / {regular_pct_str}",
-                                DataFormatter.format_currency(regular_stocks_value),
-                            )
-
-                            # No longer adding P&L percentage to category headers
-                            rows.append(category_row)
-
-                            # Add individual positions
-                            enhanced_regular_stocks = (
-                                enhanced_stocks.get(subcat, {})
-                                if enhanced_stocks
-                                else {}
-                            )
-
-                            for sym, val in contents.items():
-                                position_row = DataFormatter.row_left(
-                                    sym, DataFormatter.format_currency(val)
-                                )
-
-                                # Add P&L for individual position if available
-                                if (
-                                    sym in enhanced_regular_stocks
-                                    and "unrealized_pnl_percentage"
-                                    in enhanced_regular_stocks[sym]
-                                ):
-                                    pnl_percent = enhanced_regular_stocks[sym][
-                                        "unrealized_pnl_percentage"
-                                    ]
-                                    position_row.append(
-                                        DataFormatter.format_pnl_percentage(pnl_percent)
-                                    )
-
-                                rows.append(position_row)
-
-                            rows.append(DataFormatter.row_left())
-
-                        elif subcat == "Precious Metals":
-                            # Track the row index for the category header
-                            self.category_header_rows.append(len(rows))
-                            rows.append(DataFormatter.row_left(subcat))
-
-                            # Add individual positions with purchase-price delta if available
-                            enhanced_precious_metals = (
-                                enhanced_stocks.get(subcat, {})
-                                if enhanced_stocks
-                                else {}
-                            )
-
-                            for sym, val in contents.items():
-                                position_row = DataFormatter.row_left(
-                                    sym, DataFormatter.format_currency(val)
-                                )
-
-                                if (
-                                    sym in enhanced_precious_metals
-                                    and "unrealized_pnl_percentage"
-                                    in enhanced_precious_metals[sym]
-                                ):
-                                    pnl_percent = enhanced_precious_metals[sym][
-                                        "unrealized_pnl_percentage"
-                                    ]
-                                    position_row.append(
-                                        DataFormatter.format_pnl_percentage(pnl_percent)
-                                    )
-
-                                rows.append(position_row)
-
-                            rows.append(DataFormatter.row_left())
-
-                        else:
-                            # Track the row index for any other category header
-                            self.category_header_rows.append(len(rows))
-                            rows.append(DataFormatter.row_left(subcat))
-
-                            # Add individual components
-                            for sym, val in contents.items():
-                                rows.append(
-                                    DataFormatter.row_left(
-                                        sym, DataFormatter.format_currency(val)
-                                    )
-                                )
-
-                            rows.append(DataFormatter.row_left())
-                    else:
-                        rows.append(
-                            DataFormatter.row_left(
-                                subcat, DataFormatter.format_currency(contents)
-                            )
-                        )
-                        rows.append(DataFormatter.row_left())
-            else:
-                # Fallback if no stock values are available
-                rows.extend(self._parse_ib_data_with_tracking(ib_data))
-        else:
-            # Fallback if IB data is missing
-            rows.extend(self._parse_ib_data_with_tracking(ib_data))
-
-        # Handle CRYPTO_DATA and track its header
-        crypto_data = self.data.get("CRYPTO_DATA", {})
-        if crypto_data:
-            self.category_header_rows.append(len(rows))  # Track CRYPTO_DATA header
-            rows.append(DataFormatter.row_left("CRYPTO_DATA"))
-
-            total_crypto = crypto_data.get("Total_Crypto_Value", 0)
-            rows.append(
-                DataFormatter.row_left(
-                    "Total Crypto Value", DataFormatter.format_currency(total_crypto)
-                )
-            )
-            rows.append(DataFormatter.row_left())
-
-            market_vals = crypto_data.get("Crypto_Market_Values", {})
-            if market_vals:
-                self.category_header_rows.append(
-                    len(rows)
-                )  # Track Market Values header
-                rows.append(DataFormatter.row_left("Market Values"))
-                for sym, val in market_vals.items():
-                    rows.append(
-                        DataFormatter.row_left(sym, DataFormatter.format_currency(val))
-                    )
-                rows.append(DataFormatter.row_left())
-
-        # Handle CASH_DATA and track its header
-        cash_data = self.data.get("CASH_DATA", {})
-        if cash_data:
-            total_val = cash_data.get("Total", 0)
-            if isinstance(total_val, Decimal):
-                total_val = float(total_val)
-            self.category_header_rows.append(len(rows))  # Track CASH_DATA header
-            rows.append(
-                DataFormatter.row_left(
-                    "CASH_DATA (total)", DataFormatter.format_currency(total_val)
-                )
-            )
-            rows.append(DataFormatter.row_left())
-
-        other_assets = self.data.get("OTHER_ASSETS")
-        if not other_assets:
-            try:
-                other_assets = {"Other": float(OTHER_BETS)}
-            except Exception:
-                other_assets = {}
-
-        for label, raw_val in other_assets.items():
-            try:
-                other_val = float(raw_val)
-            except (TypeError, ValueError):
-                continue
-
-            if other_val:
-                self.category_header_rows.append(len(rows))
-                rows.append(
-                    DataFormatter.row_left(
-                        label, DataFormatter.format_currency(other_val)
-                    )
-                )
-                rows.append(DataFormatter.row_left())
-
-        return rows
-
-    def _parse_ib_data_with_tracking(self, ib_data: Dict) -> List[List[str]]:
-        """Parse IB data and track category header rows."""
-        rows = []
-        for subcat, contents in ib_data.items():
-            if isinstance(contents, dict) and not contents:
-                continue
-
-            if isinstance(contents, dict):
-                # Track the row index for the category header
-                self.category_header_rows.append(len(rows))
-                rows.append(DataFormatter.row_left(subcat))
-                for sym, val in contents.items():
-                    rows.append(
-                        DataFormatter.row_left(sym, DataFormatter.format_currency(val))
-                    )
-                rows.append(DataFormatter.row_left())
-            else:
-                rows.append(
-                    DataFormatter.row_left(
-                        subcat, DataFormatter.format_currency(contents)
-                    )
-                )
-                rows.append(DataFormatter.row_left())
-        return rows
-
-    def _set_cell(self, final_table: List[List[str]], r: int, c: int, val: str) -> None:
-        """Ensure cell exists and set its value."""
-        while len(final_table) <= r:
-            final_table.append([])
-        while len(final_table[r]) <= c:
-            final_table[r].append("")
-        final_table[r][c] = val
-
-    def _add_index_performance_rows(
-        self, final_table: List[List[str]], index_perf: Dict[str, Any]
-    ) -> None:
-        """Add index performance comparison rows to the table."""
-        index_configs = [
-            ("SP500", "S&P 500"),
-            ("NASDAQ", "NASDAQ"),
-            ("EURO_STOXX_50", "Euro Stoxx 50"),
-            ("HANG_SENG", "Hang Seng"),
-        ]
-
-        for row_offset, (key, label) in enumerate(index_configs, start=4):
-            data = index_perf.get(key, {})
-            pct = data.get("rate_of_return_pct")
-
-            self._set_cell(final_table, row_offset, 0, label)
-            if pct is not None:
-                self._set_cell(final_table, row_offset, 1, f"{pct:.2f}%")
-            else:
-                self._set_cell(final_table, row_offset, 1, data.get("error") or "N/A")
-
-    def build_central_columns(self, left_table: List[List[str]]) -> List[List[str]]:
-        """Build complete table including right columns."""
-        final_table = left_table[:]
-
-        # Financial Freedom (A/B) - top left
-        freedom = self.data.get("FIN_FREEDOM_GOAL_PROGRESS", "")
-        self._set_cell(final_table, 0, 0, "FIRE Goal")
-        self._set_cell(final_table, 0, 1, freedom)
-
-        # Blank row
-        self._set_cell(final_table, 1, 0, "")
-        self._set_cell(final_table, 1, 1, "")
-
-        # Performance section (A/B)
-        self._set_cell(final_table, 2, 0, "Performance")
-        self._set_cell(final_table, 2, 1, "")
-
-        ib_perf = self.data.get("IB_PERFORMANCE") or {}
-        pct = ib_perf.get("rate_of_return_pct")
-        self._set_cell(final_table, 3, 0, "IB")
-        if pct is not None:
-            self._set_cell(final_table, 3, 1, f"{pct:.2f}%")
-        else:
-            self._set_cell(
-                final_table,
-                3,
-                1,
-                ib_perf.get("error") or "N/A",
-            )
-
-        # Index Performance Comparison
-        self._add_index_performance_rows(
-            final_table, self.data.get("INDEX_PERFORMANCE", {})
-        )
-
-        # Net worth (TOTAL_ASSETS already includes OTHER_BETS)
-        total_assets = self.data.get("TOTAL_ASSETS", 0)
-        self._set_cell(final_table, 2, 6, "Net worth")
-        self._set_cell(
-            final_table,
-            2,
-            7,
-            DataFormatter.format_currency(total_assets),
-        )
-        self._set_cell(final_table, 2, 8, "%")
-
-        # Allocations
-        alloc_data = self.data.get("ALLOCATIONS", {}).get("allocation_breakdown", {})
-
-        def _to_float(value: Any) -> float:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return 0.0
-
-        def _sum_dict_values(values: Any) -> float:
-            if not isinstance(values, dict):
-                return 0.0
-            return sum(_to_float(v) for v in values.values())
-
-        ib_data = self.data.get("IB_DATA", {})
-
-        other_assets = self.data.get("OTHER_ASSETS")
-        if other_assets:
-            try:
-                other_val = sum(float(v) for v in other_assets.values())
-            except (TypeError, ValueError):
-                other_val = 0.0
-        else:
-            try:
-                from data.assets_data import OTHER_BETS
-
-                other_val = float(OTHER_BETS)
-            except Exception:
-                other_val = 0.0
-
-        actual_stocks_value = _to_float(ib_data.get("Total Stocks Value", 0))
-        if actual_stocks_value <= 0:
-            actual_stocks_value = _sum_dict_values(ib_data.get("China Stocks", {})) + (
-                _sum_dict_values(ib_data.get("Stocks", {}))
-            )
-
-        actual_values = {
-            "Bonds": _sum_dict_values(ib_data.get("Bonds", {})),
-            "Stocks": actual_stocks_value,
-            "Commodities": _sum_dict_values(ib_data.get("Commodities", {})),
-            "Precious Metals": _sum_dict_values(ib_data.get("Precious Metals", {})),
-            "Crypto Coins": _to_float(
-                self.data.get("CRYPTO_DATA", {}).get("Total_Crypto_Value", 0)
-            ),
-            "Crypto Lending": _to_float(
-                self.data.get("FIXED_INCOME_DATA", {})
-                .get("group_weighted_interest", {})
-                .get("Crypto Landing", (0,))[0]
-            ),
-            "P2P Lending": _to_float(
-                self.data.get("FIXED_INCOME_DATA", {})
-                .get("group_weighted_interest", {})
-                .get("p2p_lending", (0,))[0]
-            ),
-            "REIT": _sum_dict_values(ib_data.get("REIT", {})),
-            "Cash": _to_float(self.data.get("CASH_DATA", {}).get("Total", 0)),
-            "Other Bets": other_val,
-        }
-
-        # Start writing allocation rows from row index 3, skipping small categories
-        current_row_idx = 3
-        for cat, pct in alloc_data.items():
-            val = round(actual_values.get(cat, total_assets * (pct / 100)))
-
-            # Skip categories with negligible size (< 1 unit or < 1%)
-            if val < 1:
-                continue
-
-            self._set_cell(final_table, current_row_idx, 6, cat)
-            self._set_cell(
-                final_table, current_row_idx, 7, DataFormatter.format_currency(val)
-            )
-            self._set_cell(
-                final_table, current_row_idx, 8, DataFormatter.format_percentage(pct)
-            )
-            current_row_idx += 1
-
-        # Fixed Income Data (K/L)
-        self._build_fixed_income_section(final_table)
-
-        return final_table
-
-    def _build_fixed_income_section(self, final_table: List[List[str]]) -> None:
-        """Build fixed income section in columns K/L."""
-        fid = self.data.get("FIXED_INCOME_DATA", {})
-        gwi = fid.get("group_weighted_interest", {})
-        fipi = fid.get("fixed_inc_principal_and_interest", {})
-
-        self._set_cell(final_table, 2, 10, "Fixed Income % of NW")
-        row_gwi = 3
-
-        if fipi:
-            principal = fipi.get("principal", 0)
-            interest_raw = fipi.get("interest", 0)
-            combined_val = DataFormatter.format_fixed_income(principal, interest_raw)
-            self._set_cell(final_table, row_gwi, 10, "Total")
-            self._set_cell(final_table, row_gwi, 11, combined_val)
-            row_gwi += 1
-
-        if gwi:
-            for label, (principal, rate) in gwi.items():
-                text_val = DataFormatter.format_fixed_income(principal, rate)
-                self._set_cell(final_table, row_gwi, 10, label)
-                self._set_cell(final_table, row_gwi, 11, text_val)
-                row_gwi += 1
-
-                if label == "p2p_lending":
-                    row_gwi += 1
-                    monthly_div = fid.get("total_monthly", 0)
-                    yearly_div = fid.get("total_yearly", 0)
-
-                    self._set_cell(final_table, row_gwi, 10, "Monthly Dividend")
-                    self._set_cell(
-                        final_table,
-                        row_gwi,
-                        11,
-                        DataFormatter.format_currency(monthly_div),
-                    )
-                    row_gwi += 1
-
-                    self._set_cell(final_table, row_gwi, 10, "Yearly Dividend")
-                    self._set_cell(
-                        final_table,
-                        row_gwi,
-                        11,
-                        DataFormatter.format_currency(yearly_div),
-                    )
-
-
 class PortfolioUpdater:
     """Main class for updating portfolio spreadsheet."""
 
     def __init__(self, credentials_path: str, spreadsheet_name: str):
         self.sheets_client = GoogleSheetsClient(credentials_path)
         self.spreadsheet = self.sheets_client.open_spreadsheet(spreadsheet_name)
-        self.portfolio_sheet = PortfolioSpreadsheet(self.spreadsheet)
 
-    def update_portfolio(self, data: Dict[str, Any]) -> None:
-        """Update portfolio with new data."""
-        date_title = datetime.now().strftime("%d %b %Y")
-        worksheet = self.portfolio_sheet.create_tab_at_left(date_title)
+    def update_portfolio(
+        self,
+        data: Dict[str, Any],
+        *,
+        valuation_date=None,
+        config=None,
+        adoptions=None,
+        dry_run=False,
+    ) -> dict:
+        """Render saved data into one dated tab and the shared timeline."""
+        from .insights_refresh import refresh_insights
 
-        # Enrich data with enhanced stock positions if available
-        self._enrich_with_enhanced_stock_data(data)
-
-        table_builder = PortfolioTableBuilder(data)
-        left_table = table_builder.build_left_columns()
-        final_table = table_builder.build_central_columns(left_table)
-
-        # Use the new PortfolioFormatter for formatting
-        portfolio_formatter = PortfolioFormatter(worksheet)
-        portfolio_formatter.format_portfolio_table(
-            final_table, table_builder.category_header_rows
+        return refresh_insights(
+            self.spreadsheet,
+            data,
+            config=config,
+            valuation_date=valuation_date,
+            adoptions=adoptions,
+            dry_run=dry_run,
         )
-        # Expand columns D and K for better fit
-        portfolio_formatter.expand_columns_for_portfolio(
-            col_d_width=200, col_k_width=180
-        )
-        # Apply bold+large font to Performance title (row 2, cols 0-1)
-        portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 0, 1, font_size=14)
-        # Apply bold+large font to FIRE Goal (row 0, cols 0-1)
-        portfolio_formatter.apply_bold_and_large_font_to_range(0, 1, 0, 1, font_size=14)
-        # Apply bold+large font to Net Worth cells G3:I3 (row 2, cols 6-9)
-        portfolio_formatter.apply_bold_and_large_font_to_range(2, 3, 6, 9, font_size=14)
-        # Apply bold to FIXED_INCOME_DATA cell K3 (row 2, col 10)
-        portfolio_formatter.apply_bold_to_cell(2, 10)
-        # Calculate and display percent of fixed income of total assets
-        self._write_fixed_income_percentage(worksheet)
-
-        # Update timeline
-        self.update_net_worth_timeline(data.get("TOTAL_ASSETS", 0))
-
-        # Build insights from the same combined_data snapshot. This writer does
-        # not fetch new broker data and leaves unowned tabs untouched.
-        from src.google_sheets.insights_refresh import refresh_insights
-
-        refresh_insights(self.spreadsheet, data)
-
-    def _enrich_with_enhanced_stock_data(self, data: Dict[str, Any]) -> None:
-        """
-        Enrich the data dictionary with enhanced stock data if available.
-
-        This method checks if there's an InteractiveBrokers instance available in the data
-        and extracts enhanced stock positions data to include in the spreadsheet.
-        """
-        # If enhanced stock data is already provided, no need to extract it
-        if "ENHANCED_STOCKS" in data:
-            return
-
-        # Try to import the InteractiveBrokers class
-        try:
-            from src.brokers.ib import InteractiveBrokers
-
-            # Check if IB_CLIENT is provided in the data
-            ib_client = data.get("IB_CLIENT")
-            if ib_client and isinstance(ib_client, InteractiveBrokers):
-                # Get enhanced stock positions
-                enhanced_stocks = ib_client.get_stock_positions_analytics()
-                if enhanced_stocks:
-                    data["ENHANCED_STOCKS"] = enhanced_stocks
-
-                    # Log success
-                    logging.getLogger(__name__).info(
-                        "Successfully enriched data with enhanced stock positions"
-                    )
-        except (ImportError, AttributeError) as e:
-            # Log the error but continue without enhanced data
-            logging.getLogger(__name__).warning(
-                f"Could not enrich data with enhanced stock positions: {str(e)}"
-            )
-
-    def _write_fixed_income_percentage(self, worksheet: gspread.Worksheet) -> None:
-        """Compute % of fixed income principal relative to total assets and write next to header.
-
-        Cells (1-based indices):
-        - Net worth value at H3
-        - Fixed Income header at K3; percentage should go to L3
-        - Fixed income total value string at L4 (formatted like '88345 @ 7.6%')
-        """
-        # 1-based indices for clarity
-        NET_WORTH_ROW, NET_WORTH_COL = 3, 8  # H3
-        FI_HEADER_ROW, FI_PCT_COL = 3, 12  # L3
-        FI_TOTAL_ROW, FI_TOTAL_VALUE_COL = 4, 12  # L4
-
-        try:
-            # Read total assets (H3), stripping thousands separators
-            raw_total_assets = worksheet.cell(NET_WORTH_ROW, NET_WORTH_COL).value or "0"
-            total_assets = float(str(raw_total_assets).replace(",", ""))
-
-            # Read fixed income combined value (L4) like '88345 @ 7.6%'
-            fixed_income_value = worksheet.cell(FI_TOTAL_ROW, FI_TOTAL_VALUE_COL).value
-            import re
-
-            match = re.match(r"(\d+)", str(fixed_income_value))
-            fixed_income_principal = float(match.group(1)) if match else 0.0
-
-            pct_str = SpreadsheetFormatter.calc_fixed_income_pct_of_total(
-                fixed_income_principal, total_assets
-            )
-            # Write percentage to L3
-            worksheet.update_cell(FI_HEADER_ROW, FI_PCT_COL, pct_str)
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                f"Could not calculate/write fixed income percent: {e}"
-            )
-
-    def update_net_worth_timeline(self, total_assets: Union[int, float]) -> None:
-        """Update net worth timeline worksheet."""
-        try:
-            worksheet = self.spreadsheet.worksheet("net_worth_timeline")
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet = self.spreadsheet.add_worksheet(
-                title="net_worth_timeline", rows=200, cols=2
-            )
-
-        # Get current date
-        date_str = datetime.now().strftime("%d %b %Y")
-
-        # Use the new TimelineFormatter for formatting
-        timeline_formatter = TimelineFormatter(worksheet)
-        timeline_formatter.format_timeline_entry(total_assets, date_str)
 
 
 def update_portfolio_spreadsheet(
-    data: Dict[str, Any], credentials_path: str, spreadsheet_name: str, ib_client=None
-) -> None:
+    data: Dict[str, Any],
+    credentials_path: str,
+    spreadsheet_name: str,
+    ib_client=None,
+    *,
+    valuation_date=None,
+    config=None,
+    adoptions=None,
+    dry_run=False,
+) -> dict:
     """
     Convenience function for updating portfolio.
 
@@ -739,14 +127,17 @@ def update_portfolio_spreadsheet(
         data: Dictionary containing portfolio data
         credentials_path: Path to the Google API credentials file
         spreadsheet_name: Name of the Google Sheet to update
-        ib_client: Optional InteractiveBrokers client instance to extract enhanced stock data
+        ib_client: Accepted for compatibility; saved analytics are used instead
     """
-    # If IB client is provided, add it to the data for enhanced stock positions
-    if ib_client:
-        data["IB_CLIENT"] = ib_client
-
+    # ib_client remains accepted for caller compatibility; rendering never uses it.
     updater = PortfolioUpdater(credentials_path, spreadsheet_name)
-    updater.update_portfolio(data)
+    return updater.update_portfolio(
+        data,
+        valuation_date=valuation_date,
+        config=config,
+        adoptions=adoptions,
+        dry_run=dry_run,
+    )
 
 
 def create_enhanced_stocks_data(
