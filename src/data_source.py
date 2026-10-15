@@ -265,6 +265,11 @@ class DataSource:
 
         data = {
             "IB_DATA": self.ib_data,
+            "ENHANCED_STOCKS": (
+                self.ib.get_stock_positions_analytics()
+                if callable(getattr(self.ib, "get_stock_positions_analytics", None))
+                else {}
+            ),
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
             "INDEX_PERFORMANCE": getattr(self, "index_performance_data", {}),
             "CRYPTO_DATA": {

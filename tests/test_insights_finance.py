@@ -15,6 +15,66 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsFinanceTests(unittest.TestCase):
+    def test_fire_uses_saved_principal_once_for_each_eligible_category(self):
+        data = current_snapshot()
+        data["FIXED_INCOME_DATA"]["group_weighted_interest"]["Bonds"] = (225.0, 0.04)
+        fire = fire_progress(data, {"fire_eligible_categories": ["Bonds", "Bonds"]})
+        self.assertEqual(fire["included_categories"], ["Bonds"])
+        self.assertEqual(fire["eligible_value"], 225)
+
+    def test_reit_is_in_every_reconciled_view(self):
+        data = current_snapshot()
+        data["IB_DATA"]["REIT"] = {"SIM-REIT": 30.0}
+        data["TOTAL_ASSETS"] += 30
+        categories = {row["category"]: row for row in category_rows(data)}
+        self.assertIn("REIT", categories)
+        self.assertEqual(categories["REIT"]["value"], 30)
+        self.assertIn(
+            "SIM-REIT", {row["symbol"] for row in holdings_table(data)["rows"]}
+        )
+        self.assertAlmostEqual(
+            concentration_views(data)["total_value"], data["TOTAL_ASSETS"]
+        )
+        self.assertAlmostEqual(
+            fire_progress(data)["eligible_value"], data["TOTAL_ASSETS"]
+        )
+        reit = next(
+            row
+            for row in snapshot_comparison(data, current_snapshot())["rows"]
+            if row["category"] == "REIT"
+        )
+        self.assertEqual((reit["state"], reit["change"]), ("new", 30))
+        del data["IB_DATA"]["REIT"]
+        self.assertIsNone(
+            next(row for row in category_rows(data) if row["category"] == "REIT")[
+                "value"
+            ]
+        )
+
+    def test_closed_balance_is_in_headline_but_legacy_subtotal_is_preserved(self):
+        previous = current_snapshot()
+        current = current_snapshot()
+        current["CRYPTO_DATA"]["Total_Crypto_Value"] = 0
+        current["TOTAL_ASSETS"] -= 50
+        comparison = snapshot_comparison(current, previous)
+        closed = next(
+            row for row in comparison["rows"] if row["category"] == "Crypto Coins"
+        )
+        self.assertEqual(closed["state"], "closed")
+        self.assertIsNone(closed["change"])
+        self.assertEqual(comparison["change_total"], 0)
+        self.assertEqual(comparison.get("closed_balance_adjustment"), -50)
+        self.assertEqual(comparison.get("balance_change_total"), -50)
+        self.assertEqual(comparison["reconciliation_difference"], 0)
+
+    def test_saved_totals_are_preserved_when_category_changes_do_not_reconcile(self):
+        previous, current = current_snapshot(), current_snapshot()
+        current["TOTAL_ASSETS"] += 10
+        comparison = snapshot_comparison(current, previous)
+        self.assertEqual(comparison["balance_change_total"], 10)
+        self.assertEqual(comparison["change_total"], 0)
+        self.assertEqual(comparison["reconciliation_difference"], 10)
+
     def test_category_rows_reconcile_and_use_total_assets_weights(self):
         rows = category_rows(current_snapshot())
 
@@ -45,7 +105,9 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertEqual(comparison["previous_date"], "2026-09-30")
         self.assertEqual(comparison["interval_days"], 4)
 
-    def test_snapshot_deltas_do_not_treat_incomplete_activity_or_transfers_as_profit(self):
+    def test_snapshot_deltas_do_not_treat_incomplete_activity_or_transfers_as_profit(
+        self,
+    ):
         current = current_snapshot()
         current["ACTIVITY_DATA"] = {
             "net_external_contributions": 75.0,
@@ -85,7 +147,9 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertIsNone(comparison["change_total"])
         self.assertEqual(comparison["state"], "Incomplete")
         self.assertEqual(
-            next(row for row in comparison["rows"] if row["category"] == "Bonds")["state"],
+            next(row for row in comparison["rows"] if row["category"] == "Bonds")[
+                "state"
+            ],
             "Incomplete",
         )
 
@@ -95,7 +159,9 @@ class InsightsFinanceTests(unittest.TestCase):
 
         values = {row["category"]: row["value"] for row in category_rows(data)}
         holdings = holdings_table(data)
-        other_bets = [row for row in holdings["rows"] if row["category"] == "Other Bets"]
+        other_bets = [
+            row for row in holdings["rows"] if row["category"] == "Other Bets"
+        ]
 
         self.assertEqual(values["Other Bets"], 100.0)
         self.assertEqual([row["symbol"] for row in other_bets], ["Other Bets"])
@@ -132,7 +198,9 @@ class InsightsFinanceTests(unittest.TestCase):
             sum(row["value_usd"] for row in holdings["rows"]), 900.003
         )
 
-    def test_liquidity_requires_explicit_classification_and_distinguishes_zero_liabilities(self):
+    def test_liquidity_requires_explicit_classification_and_distinguishes_zero_liabilities(
+        self,
+    ):
         unknown = liquidity_ladder(current_snapshot(), {})
         self.assertIsNone(unknown["cash_available_now"])
         self.assertIsNone(unknown["runway_months"])
@@ -153,11 +221,14 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertEqual(configured["net_worth_after_known_liabilities"], 900.003)
 
         invalid_spending = liquidity_ladder(
-            current_snapshot(), {"cash_available_now_usd": 1000, "essential_monthly_spending_usd": 0}
+            current_snapshot(),
+            {"cash_available_now_usd": 1000, "essential_monthly_spending_usd": 0},
         )
         self.assertIsNone(invalid_spending["runway_months"])
 
-    def test_fire_progress_uses_saved_target_and_only_reports_income_coverage_with_spending(self):
+    def test_fire_progress_uses_saved_target_and_only_reports_income_coverage_with_spending(
+        self,
+    ):
         data = current_snapshot()
         progress = fire_progress(data, {})
 
@@ -178,7 +249,9 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertIsNone(unconfigured["target"])
         self.assertEqual(unconfigured["state"], "Target not configured")
 
-    def test_fire_income_coverage_is_unavailable_when_any_income_source_is_incomplete(self):
+    def test_fire_income_coverage_is_unavailable_when_any_income_source_is_incomplete(
+        self,
+    ):
         data = current_snapshot()
         data["FIXED_INCOME_DATA"].pop("stocks_principal_and_interest")
         data["FIXED_INCOME_DATA"].pop("stocks_yearly")
@@ -188,7 +261,9 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertIsNone(progress["income_coverage_fraction"])
         self.assertEqual(progress["income_coverage_state"], "Unavailable")
 
-    def test_targets_remain_unconfigured_until_supplied_and_report_percentage_points(self):
+    def test_targets_remain_unconfigured_until_supplied_and_report_percentage_points(
+        self,
+    ):
         unconfigured = targets_and_deviations(current_snapshot(), {})
         self.assertIsNone(unconfigured[0]["target_weight"])
         self.assertIsNone(unconfigured[0]["deviation_pp"])
@@ -228,6 +303,11 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertEqual(cached["overall_key"], "Cached")
         self.assertEqual(cached["overall"], "Cached - data age 900s")
         self.assertEqual(source_statuses({})["overall_key"], "Unknown")
+
+
+class ReconciliationPrecisionTests(unittest.TestCase):
+    def test_detail_total_does_not_create_a_floating_point_residual(self):
+        self.assertEqual(holdings_table(current_snapshot())["reconciliation_delta"], 0)
 
 
 if __name__ == "__main__":

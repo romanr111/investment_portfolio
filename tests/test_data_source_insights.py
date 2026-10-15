@@ -10,7 +10,8 @@ class DataSourceInsightsTests(unittest.TestCase):
         source = object.__new__(DataSource)
         source._data_timestamp = 1791115200
         source._calculate_asset_allocation = lambda: {}
-        source.ib = SimpleNamespace(performance_ytd={})
+        analytics = {"Stocks": {"SYNTH": {"unrealized_pnl_percentage": 7.05}}}
+        source.ib = SimpleNamespace(performance_ytd={}, get_stock_positions_analytics=lambda: analytics)
         source.index_performance_data = {}
         source.ib_data = {}
         source.crypto = SimpleNamespace(
@@ -30,6 +31,7 @@ class DataSourceInsightsTests(unittest.TestCase):
         self.assertEqual(
             combined_data["FINANCIAL_FREEDOM_GOAL_TARGET"], FINANCIAL_FREEDOM_GOAL
         )
+        self.assertEqual(combined_data.get("ENHANCED_STOCKS"), analytics)
         source._save_combined_data_to_json.assert_called_once_with(combined_data)
 
 

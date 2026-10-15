@@ -1,4 +1,4 @@
-"""Financial derivations for the generated insights tabs."""
+"""Financial derivations for sections of the generated portfolio snapshot."""
 
 from datetime import date
 import math
@@ -15,6 +15,7 @@ CATEGORIES = (
     "Commodities",
     "Cash",
     "P2P Lending",
+    "REIT",
 )
 
 
@@ -127,6 +128,7 @@ def _category_values(data: Optional[dict]) -> dict[str, Optional[float]]:
         "Commodities": commodities,
         "Cash": cash,
         "P2P Lending": _group_principal(data, ("P2P Lending", "p2p_lending")),
+        "REIT": _sum_mapping(ib_data["REIT"]) if "REIT" in ib_data else None,
     }
 
 
@@ -245,6 +247,18 @@ def snapshot_comparison(
         if current_day is not None and previous_day is not None
         else None
     )
+    complete = previous is not None and not has_incomplete_rows
+    closed_adjustment = (
+        -sum(row["previous"] for row in rows if row["state"] == "closed")
+        if complete else None
+    )
+    current_tracked = _number(current.get("TOTAL_ASSETS"))
+    previous_tracked = _number(previous.get("TOTAL_ASSETS")) if previous else None
+    balance_change = (
+        current_tracked - previous_tracked
+        if complete and current_total is not None and previous_total is not None
+        and current_tracked is not None and previous_tracked is not None else None
+    )
 
     return {
         "current_date": current_date,
@@ -252,6 +266,12 @@ def snapshot_comparison(
         "interval_days": interval_days,
         "previous_total": previous_total,
         "current_total": current_total,
+        "balance_change_total": balance_change,
+        "closed_balance_adjustment": closed_adjustment,
+        "reconciliation_difference": (
+            balance_change - sum(changes) - closed_adjustment
+            if balance_change is not None else None
+        ),
         "change_total": (
             sum(changes)
             if previous is not None and not has_incomplete_rows
@@ -445,6 +465,7 @@ def holdings_table(
         ("Bonds", "Bonds"),
         ("Precious Metals", "Precious Metals"),
         ("Commodities", "Commodities"),
+        ("REIT", "REIT"),
     )
     for source_category, display_category in ib_categories:
         positions = ib_data.get(source_category)
@@ -557,9 +578,9 @@ def holdings_table(
         "tiny_total": sum(row["value_usd"] for row in tiny_rows),
         "tiny_threshold_usd": tiny_threshold_usd,
         "tiny_threshold_note": f"Positions below USD {tiny_threshold_usd:g} are grouped; detail remains listed.",
-        "total_value": sum(known_values) if known_values else None,
+        "total_value": math.fsum(known_values) if known_values else None,
         "reconciliation_delta": (
-            total_assets - sum(known_values)
+            total_assets - math.fsum(known_values)
             if total_assets is not None and len(known_values) == len(rows)
             else None
         ),
@@ -615,6 +636,17 @@ def liquidity_ladder(combined_data: dict, config: Optional[dict] = None) -> dict
     }
 
 
+def _fire_value_rows(combined_data: dict) -> dict[str, Optional[float]]:
+    values = _category_values(combined_data)
+    for category, names in (
+        ("Bonds", ("Bonds",)),
+        ("Crypto Lending", ("Crypto Lending", "Crypto Landing")),
+        ("P2P Lending", ("P2P Lending", "p2p_lending")),
+    ):
+        values[category] = _group_principal(combined_data, names)
+    return values
+
+
 def fire_progress(combined_data: dict, config: Optional[dict] = None) -> dict[str, Any]:
     """Calculate FIRE progress from explicitly included tracked asset categories."""
     config = config if isinstance(config, dict) else {}
@@ -626,7 +658,8 @@ def fire_progress(combined_data: dict, config: Optional[dict] = None) -> dict[st
         eligible_value = None
         state = "Invalid eligible category configuration"
     else:
-        values = _category_values(combined_data)
+        included = list(dict.fromkeys(included))
+        values = _fire_value_rows(combined_data)
         selected_values = [values[category] for category in included]
         if selected_values and all(value is not None for value in selected_values):
             eligible_value = sum(value for value in selected_values if value is not None)
@@ -662,6 +695,7 @@ def fire_progress(combined_data: dict, config: Optional[dict] = None) -> dict[st
 
     return {
         "eligible_value": eligible_value,
+        "category_values": _fire_value_rows(combined_data),
         "target": target,
         "remaining": remaining,
         "progress_fraction": progress,
