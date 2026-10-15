@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 
-from src.google_sheets.insights_cells import CellBlock, CellValue
+from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
 from src.google_sheets.insights_finance import (
     CATEGORIES,
     category_rows,
@@ -33,6 +33,7 @@ class InsightTab:
     freeze_rows: int = 2
     freeze_columns: int = 0
     row_groups: tuple[tuple[str, int, int], ...] = ()
+    column_widths: tuple[int, ...] = ()
 
 
 _CATEGORY_COLORS = {
@@ -665,6 +666,9 @@ def build_portfolio_tab(
     valuation_date = _current_date(combined_data, current_date)
     if valuation_date is None:
         raise ValueError("A valid valuation date is required before writing Sheets")
+    previous_date = (
+        _current_date(previous_snapshot, previous_date) if previous_snapshot else None
+    )
     comparison = snapshot_comparison(
         combined_data, previous_snapshot, valuation_date, previous_date
     )
@@ -673,66 +677,140 @@ def build_portfolio_tab(
     fire = fire_progress(combined_data, settings)
     statuses = source_statuses(combined_data)
     twr = _number((combined_data.get("IB_PERFORMANCE") or {}).get("rate_of_return_pct"))
-    summary = CellBlock(
-        "summary",
+    holdings = holdings_table(combined_data)
+    positions = sorted(
+        holdings["regular_rows"], key=lambda row: -(row["value_usd"] or 0)
+    )
+    holding_rows = [
+        ("Holdings - USD",),
+        ("Asset", "Value USD", "% of assets", LBL_UNREALIZED_PNL),
+    ]
+    holding_rows.extend(
         (
-            ("Portfolio snapshot", valuation_date),
+            row["symbol"],
+            _cell(row["value_usd"], "amount"),
+            _cell(row["pct_total_assets"], "weight"),
+            _percent(row["pnl_pct"]) if row["pnl_pct"] is not None else "",
+        )
+        for row in positions
+    )
+    if holdings["tiny_rows"]:
+        holding_rows.append(
+            ("Other holdings (<$100)", _cell(holdings["tiny_total"], "amount"))
+        )
+
+    summary_rows = [
+        (
+            "Portfolio",
+            _date_cell(valuation_date),
+            "USD",
+            CellValue(("History", "timeline"), "link"),
+        ),
+        ("Tracked assets", _cell(combined_data.get("TOTAL_ASSETS"), "amount")),
+    ]
+    if comparison["balance_change_total"] is not None:
+        summary_rows.append(
             (
-                "Valuation date",
-                _date_cell(valuation_date),
-                "Base currency",
-                "USD",
-                "Source status",
-                _status(statuses["overall"]),
-            ),
-            (
-                "Tracked asset value",
-                _money(combined_data.get("TOTAL_ASSETS")),
                 "Balance change",
                 _money(comparison["balance_change_total"]),
-                "Cash available now",
-                _money(liquidity["cash_available_now"]),
-            ),
+                _date_cell(previous_date),
+            )
+        )
+    if liquidity["cash_available_now"] is not None:
+        summary_rows.append(
+            ("Accessible cash", _cell(liquidity["cash_available_now"], "amount"))
+        )
+    elif (
+        isinstance(combined_data.get("CASH_DATA"), dict)
+        and combined_data["CASH_DATA"].get("Total") is not None
+    ):
+        summary_rows.append(
+            ("Cash", _cell(combined_data["CASH_DATA"]["Total"], "amount"))
+        )
+    summary_rows.extend(
+        (
+            (LBL_IB_RETURN, _percent(twr / 100 if twr is not None else None)),
             (
-                "Monthly income estimate",
-                _money(income["monthly_average"]),
-                "FIRE progress",
-                _percent(fire["progress_fraction"]),
-                "IB YTD TWR",
-                _percent(twr / 100 if twr is not None else None),
+                "Estimated income / month"
+                + (" (partial)" if income["state"] == "Incomplete" else ""),
+                _cell(income["monthly_average"], "amount"),
             ),
-            (
-                "Last successful refresh",
-                statuses["last_successful_refresh"],
-                "Income coverage",
-                income["state"],
-                "History",
-                CellValue(("Open timeline", "timeline"), "link"),
-            ),
-            (
-                "Jump to",
-                *(
-                    CellValue((label, block), "link")
-                    for label, block in (
-                        ("Allocation", "allocation"),
-                        ("Comparison", "comparison"),
-                        ("Income", "income"),
-                        ("Liquidity", "liquidity"),
-                        ("FIRE", "summary_fire"),
-                        ("Exposure", "provider"),
-                        ("Notes", "methodology"),
-                    )
-                ),
-            ),
-        ),
+        )
     )
+    if fire["target"] is not None:
+        summary_rows.append(
+            (
+                "FIRE assets / target",
+                _cell(fire["eligible_value"], "amount"),
+                _cell(fire["target"], "amount"),
+                _cell(fire["progress_fraction"], "weight"),
+            )
+        )
+    summary_rows.append(
+        ("Data status", _status(statuses["overall"]))
+        if statuses["overall_key"] != "Current"
+        else ("",)
+    )
+    if (
+        holdings["reconciliation_delta"] is not None
+        and abs(holdings["reconciliation_delta"]) > 0.01
+    ):
+        summary_rows.append(
+            (
+                "Unreconciled assets",
+                _money(holdings["reconciliation_delta"]),
+                "See details",
+            )
+        )
+
+    allocation_section = _allocation_section(combined_data, settings)
+    allocation_rows = [("Allocation",), ("Category", "Value USD", "Weight", "")]
+    allocation_rows.extend(
+        (row[0], _cell(row[1].value, "amount"), _cell(row[2].value, "weight"), row[7])
+        for row in allocation_section.blocks[0].rows[2:]
+        if _number(row[1].value) not in (None, 0)
+    )
+    if any(row["value"] is None for row in category_rows(combined_data)):
+        allocation_rows[0] = ("Allocation (partial)",)
+    income_rows = [
+        ("Income / month (est.)",),
+        ("Source", "Monthly USD", "Est. rate", ""),
+    ]
+    income_rows.extend(
+        (
+            item["source"],
+            _cell(item["monthly_average"], "amount"),
+            _cell(item["annual_rate"], "weight"),
+        )
+        for item in income["items"]
+        if item["monthly_average"] not in (None, 0)
+    )
+    allocation_start = len(summary_rows) + 1
+    income_start = allocation_start + len(allocation_rows) + 1
     original = _holdings_section(combined_data)
-    holdings_block = CellBlock("holdings", original.blocks[0].rows)
-    blocks = [summary, holdings_block]
-    headers = {"holdings": 0}
-    groups = list(original.row_groups)
+    blocks = [
+        CellBlock("holdings", tuple(holding_rows), start_row=0),
+        CellBlock("summary", tuple(summary_rows), start_row=0, start_column=5),
+        CellBlock(
+            "compact_allocation",
+            tuple(allocation_rows),
+            start_row=allocation_start,
+            start_column=5,
+        ),
+        CellBlock(
+            "compact_income", tuple(income_rows), start_row=income_start, start_column=5
+        ),
+        CellBlock("details", (("Details",),)),
+        CellBlock("holding_details", (("Full holdings",), *original.blocks[0].rows)),
+    ]
+    headers = {
+        "holdings": 1,
+        "holding_details": 1,
+        "compact_allocation": 1,
+        "compact_income": 1,
+    }
     for section in (
-        _allocation_section(combined_data, settings),
+        allocation_section,
         _comparison_section(
             combined_data, previous_snapshot, valuation_date, previous_date
         ),
@@ -750,20 +828,6 @@ def build_portfolio_tab(
             blocks.append(CellBlock(name, block.rows))
             if block.name in section.header_offsets:
                 headers[name] = section.header_offsets[block.name]
-            if (
-                name
-                in {
-                    "receipts",
-                    "provider",
-                    "trading_currency",
-                    "underlying_geography",
-                    "other_bets",
-                    "eligibility",
-                }
-                and len(block.rows) > 2
-            ):
-                groups.append((name, 2, len(block.rows)))
-    holdings = holdings_table(combined_data)
     benchmarks = [
         ("Saved benchmark returns - comparability is not established",),
         (
@@ -863,14 +927,17 @@ def build_portfolio_tab(
             ),
         )
     )
-    groups.append(("methodology", 1, len(blocks[-1].rows)))
+    grid, _, ranges = render_blocks(blocks)
+    groups = (("details", 1, len(grid) - ranges["details"][0]),)
     return InsightTab(
         title=date.fromisoformat(valuation_date).strftime("%d %b %Y"),
         blocks=tuple(blocks),
         header_offsets=headers,
-        filter_block_name="holdings",
-        filter_end_offset=original.filter_end_offset,
-        freeze_rows=8,
-        freeze_columns=2,
-        row_groups=tuple(groups),
+        # Sheets filters hide entire rows; keep them below the adjacent summary panels.
+        filter_block_name="holding_details",
+        filter_end_offset=1 + original.filter_end_offset,
+        freeze_rows=2,
+        freeze_columns=1,
+        row_groups=groups,
+        column_widths=(240, 115, 100, 160, 100, 240, 120, 100, 90),
     )

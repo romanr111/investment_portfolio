@@ -34,6 +34,16 @@ supporting tab is `net_worth_timeline`. Same-date reruns update the same sheet
 IDs. Allocation, comparison, income, liquidity, FIRE, and exposure are sections
 on the main tab. Tiny holdings below USD 100 remain in expandable detail.
 
+The default view follows the original side-by-side layout: four holdings
+columns on the left, and totals, allocation, and estimated monthly income on
+the right. Headers are in row 2. Accounts, native P&L amounts/currency, IB
+weights, comparisons, targets, liquidity, exposure, and methodology sit under
+one collapsed `Details` section. The filter is on the full holdings table
+inside that section, so filtering does not hide adjacent summary panels.
+Asset values and allocation weights omit redundant plus signs; balance changes
+and returns keep explicit signs. Zero and unknown coverage remain distinct in
+the detailed tables, and source warnings still appear in the summary.
+
 `refresh_from_snapshot(spreadsheet, snapshot_path, config_path=None,
 snapshot_dir="data/snapshots", *, adoptions=None, dry_run=False)` replays a saved
 snapshot without broker access. Its envelope date determines the main tab,

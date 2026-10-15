@@ -67,7 +67,9 @@ class TestSpreadsheetPreciousMetalsRendering(unittest.TestCase):
             ),
         }
         tab = build_portfolio_tab(data, current_date="2026-09-30")
-        rows = next(block.rows for block in tab.blocks if block.name == "holdings")
+        rows = next(
+            block.rows for block in tab.blocks if block.name == "holding_details"
+        )
         gld_row = next(row for row in rows if row[0] == "GLD")
         self.assertEqual(gld_row[2].value, 1500)
         self.assertEqual(gld_row[7].value, 0.055)

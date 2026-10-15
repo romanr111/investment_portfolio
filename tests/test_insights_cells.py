@@ -5,6 +5,25 @@ from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
 
 
 class InsightsCellsTests(unittest.TestCase):
+    def test_side_by_side_blocks_keep_values_and_ranges_at_their_positions(self):
+        grid, typed, ranges = render_blocks(
+            [
+                CellBlock("holdings", (("AAA", CellValue(100, "money")),)),
+                CellBlock(
+                    "summary",
+                    (("Assets", CellValue(900, "money")),),
+                    start_row=0,
+                    start_column=5,
+                ),
+                CellBlock("details", (("Details",),)),
+            ]
+        )
+        self.assertEqual(grid[0][1], 100)
+        self.assertEqual(grid[0][6], 900)
+        self.assertEqual(typed[(0, 6)].value, 900)
+        self.assertEqual(ranges["summary"], (0, 1, 5, 7))
+        self.assertEqual(ranges["details"][0], 2)
+
     def test_render_blocks_preserves_numeric_values_and_typed_coordinates(self):
         grid, typed_cells, ranges = render_blocks(
             [
@@ -37,7 +56,11 @@ class InsightsCellsTests(unittest.TestCase):
 
     def test_unavailable_status_remains_text_instead_of_becoming_zero(self):
         grid, typed_cells, _ = render_blocks(
-            [CellBlock("liquidity", rows=(("Runway", CellValue("Unavailable", "status")),))]
+            [
+                CellBlock(
+                    "liquidity", rows=(("Runway", CellValue("Unavailable", "status")),)
+                )
+            ]
         )
 
         self.assertEqual(grid[0][1], "Unavailable")

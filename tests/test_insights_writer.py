@@ -5,6 +5,36 @@ from src.google_sheets.insights_refresh import refresh_insights
 
 
 class InsightsWriterTests(unittest.TestCase):
+    def test_moving_details_unhides_previously_generated_rows(self):
+        book = FakeSpreadsheet()
+        refresh_insights(book, current_snapshot(), config={})
+        main = book.worksheet("04 Oct 2026")
+        old_start = next(iter(main.groups))[0]
+        self.assertIn(old_start, main.hidden_rows)
+        data = current_snapshot()
+        data["IB_DATA"]["Stocks"].update({f"NEW{i}": 200 for i in range(40)})
+        refresh_insights(book, data, config={})
+        self.assertNotIn(old_start, main.hidden_rows)
+
+    def test_compact_view_formats_levels_quietly_and_limits_filter_to_holdings(self):
+        book = FakeSpreadsheet()
+        refresh_insights(book, current_snapshot(), config={})
+        main = book.worksheet("04 Oct 2026")
+        self.assertNotIn("+", main.formats[(3, 2)]["numberFormat"]["pattern"])
+        self.assertNotIn("+", main.formats[(3, 3)]["numberFormat"]["pattern"])
+        self.assertNotIn(".", main.formats[(3, 2)]["numberFormat"]["pattern"])
+        self.assertEqual(main.basic_filter["range"]["endColumnIndex"], 8)
+        self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
+        self.assertEqual(main.properties["frozenRowCount"], 2)
+        self.assertEqual(len(main.groups), 1)
+        self.assertTrue(
+            any(
+                request.get("repeatCell", {}).get("range", {}).get("startColumnIndex")
+                == 5
+                for request in book.batch_updates[-1]["requests"]
+            )
+        )
+
     def test_supported_partial_receipts_keep_native_currency_and_coverage(self):
         data = current_snapshot()
         data["INCOME_RECEIPTS"] = {
@@ -134,8 +164,8 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertEqual(main.cell(1, 12).value, "manual note")
         self.assertIn(main.cell(old_rows, 1).value, ("", None))
         self.assertEqual([s.id for s in book.sheets], ids)
-        self.assertEqual(main.properties["frozenRowCount"], 8)
-        self.assertEqual(main.basic_filter["range"]["startRowIndex"], 7)
+        self.assertEqual(main.properties["frozenRowCount"], 2)
+        self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
 
     def test_main_uses_wrapping_and_bounded_resize_for_readable_labels(self):
         book = FakeSpreadsheet()
@@ -172,9 +202,17 @@ class InsightsWriterTests(unittest.TestCase):
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
         main = book.worksheet("04 Oct 2026")
-        self.assertTrue(main.formats[(9, 6)]["numberFormat"]["pattern"].startswith("+"))
+        full_row = next(
+            r
+            for (r, c), value in main.values.items()
+            if c == 1 and value == "Synthetic Alpha (AAA)"
+        )
+        self.assertTrue(
+            main.formats[(full_row, 6)]["numberFormat"]["pattern"].startswith("+")
+        )
         self.assertEqual(
-            main.formats[(9, 4)]["numberFormat"]["pattern"], "+0.00%;-0.00%;0.00%"
+            main.formats[(full_row, 4)]["numberFormat"]["pattern"],
+            "+0.00%;-0.00%;0.00%",
         )
         tiny_row = next(
             r for (r, c), value in main.values.items() if c == 1 and value == "TINY"
@@ -198,7 +236,7 @@ class InsightsWriterTests(unittest.TestCase):
         )
         self.assertEqual(main.cell(1, 13).value, "user note")
         self.assertIn(main.cell(3, 12).value, ("", None))
-        self.assertEqual(main.cell(3, 2).value, 900.003)
+        self.assertEqual(main.cell(2, 7).value, 900.003)
 
     def test_helper_collision_and_duplicate_dates_abort_before_any_write(self):
         from src.google_sheets.insights_writer import (
@@ -246,14 +284,21 @@ class InsightsWriterTests(unittest.TestCase):
         from src.google_sheets.insights_writer import write_portfolio_snapshot
 
         tab = build_portfolio_tab(current_snapshot())
-        rows = list(tab.blocks[0].rows)
-        row = list(rows[2])
+        summary = next(block for block in tab.blocks if block.name == "summary")
+        rows = list(summary.rows)
+        row = list(rows[1])
         row[1] = CellValue(None, "money")
-        rows[2] = tuple(row)
-        tab = replace(tab, blocks=(CellBlock("summary", tuple(rows)), *tab.blocks[1:]))
+        rows[1] = tuple(row)
+        tab = replace(
+            tab,
+            blocks=tuple(
+                replace(block, rows=tuple(rows)) if block is summary else block
+                for block in tab.blocks
+            ),
+        )
         book = FakeSpreadsheet()
         write_portfolio_snapshot(book, tab, "2026-10-04", 900.003)
-        self.assertEqual(book.worksheet("04 Oct 2026").cell(3, 2).value, "Unavailable")
+        self.assertEqual(book.worksheet("04 Oct 2026").cell(2, 7).value, "Unavailable")
 
     def test_new_reporting_date_is_created_at_the_front(self):
         book = FakeSpreadsheet()

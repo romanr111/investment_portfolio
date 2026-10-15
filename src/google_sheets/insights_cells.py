@@ -6,8 +6,15 @@ from decimal import Decimal
 import math
 from typing import Any, Iterable
 
-
-_NUMERIC_KINDS = {"money", "percent", "pp", "number", "native_amount"}
+_NUMERIC_KINDS = {
+    "money",
+    "percent",
+    "pp",
+    "number",
+    "native_amount",
+    "amount",
+    "weight",
+}
 _SUPPORTED_KINDS = _NUMERIC_KINDS | {"date", "status", "link", "formula"}
 _SHEETS_DATE_EPOCH = date(1899, 12, 30)
 
@@ -26,6 +33,8 @@ class CellValue:
 class CellBlock:
     name: str
     rows: tuple[tuple[Any, ...], ...]
+    start_row: int | None = None
+    start_column: int = 0
 
 
 def _date_serial(value: Any) -> int:
@@ -58,13 +67,16 @@ def _render_value(cell: CellValue) -> Any:
     return value
 
 
-def render_blocks(
-    blocks: Iterable[CellBlock], gap_rows: int = 1
-) -> tuple[list[list[Any]], dict[tuple[int, int], CellValue], dict[str, tuple[int, int, int, int]]]:
+def render_blocks(blocks: Iterable[CellBlock], gap_rows: int = 1) -> tuple[
+    list[list[Any]],
+    dict[tuple[int, int], CellValue],
+    dict[str, tuple[int, int, int, int]],
+]:
     """Render named blocks into a padded grid and retain typed cell coordinates.
 
     Returned coordinates and ranges are zero-based, with range end indices
-    exclusive to match the Google Sheets API.
+    exclusive to match the Google Sheets API. Explicit positions allow adjacent
+    blocks; implicit blocks start below all preceding blocks.
     """
     if gap_rows < 0:
         raise ValueError("gap_rows must be non-negative")
@@ -79,22 +91,33 @@ def render_blocks(
             raise ValueError(f"Duplicate block name: {block.name}")
         if not block.rows:
             continue
-        if grid:
-            grid.extend([[] for _ in range(gap_rows)])
-
-        start_row = len(grid)
+        start_row = (
+            block.start_row
+            if block.start_row is not None
+            else len(grid) + (gap_rows if grid else 0)
+        )
+        start_column = block.start_column
+        if start_row < 0 or start_column < 0:
+            raise ValueError("Block coordinates must be non-negative")
         block_width = max(len(row) for row in block.rows)
+        end_row, end_column = start_row + len(block.rows), start_column + block_width
+        if any(
+            start_row < r1 and r0 < end_row and start_column < c1 and c0 < end_column
+            for r0, r1, c0, c1 in block_ranges.values()
+        ):
+            raise ValueError(f"Overlapping block: {block.name}")
+        grid.extend([[] for _ in range(max(0, end_row - len(grid)))])
         for row_offset, row in enumerate(block.rows):
-            rendered_row = []
+            rendered_row = grid[start_row + row_offset]
+            rendered_row.extend([""] * max(0, end_column - len(rendered_row)))
             for column, value in enumerate(row):
                 if isinstance(value, CellValue):
-                    typed_cells[(start_row + row_offset, column)] = value
-                    rendered_row.append(_render_value(value))
+                    typed_cells[(start_row + row_offset, start_column + column)] = value
+                    rendered_row[start_column + column] = _render_value(value)
                 else:
-                    rendered_row.append(value)
+                    rendered_row[start_column + column] = value
             max_columns = max(max_columns, len(rendered_row))
-            grid.append(rendered_row)
-        block_ranges[block.name] = (start_row, len(grid), 0, block_width)
+        block_ranges[block.name] = (start_row, end_row, start_column, end_column)
 
     for row in grid:
         row.extend([""] * (max_columns - len(row)))

@@ -34,6 +34,15 @@ _NUMBER_FORMATS = {
     },
     "number": {"type": "NUMBER", "pattern": "#,##0.00#####"},
     "date": {"type": "DATE", "pattern": "yyyy-mm-dd"},
+    "amount": {"type": "CURRENCY", "pattern": '"$"#,##0;-"$"#,##0;"$"0'},
+    "amount_fraction": {"type": "CURRENCY", "pattern": '"$"#,##0.00;-"$"#,##0.00;"$"0'},
+    "amount_tiny": {
+        "type": "CURRENCY",
+        "pattern": '"$"#,##0.##########;-"$"#,##0.##########;"$"0',
+    },
+    "weight": {"type": "PERCENT", "pattern": "0%;-0%;0%"},
+    "weight_fraction": {"type": "PERCENT", "pattern": "0.00%;-0.00%;0%"},
+    "weight_tiny": {"type": "PERCENT", "pattern": "0.########%;-0.########%;0%"},
 }
 for _kind in ("money", "percent", "pp"):
     _NUMBER_FORMATS[_kind + "_tiny"] = dict(_NUMBER_FORMATS[_kind])
@@ -68,18 +77,30 @@ def _typed_format_ranges(
     by_row: dict[int, dict[str, list[int]]] = {}
     for (row, column), cell in typed_cells.items():
         kind = "date" if cell.kind == "date" else cell.kind
-        if kind in {"money", "percent", "pp", "native_amount", "number"} and (
+        if kind in {
+            "money",
+            "percent",
+            "pp",
+            "native_amount",
+            "number",
+            "amount",
+            "weight",
+        } and (
             isinstance(cell.value, bool)
             or not isinstance(cell.value, (int, float, Decimal))
             or not math.isfinite(cell.value)
         ):
             continue
-        threshold = 0.00005 if kind == "percent" else 0.005
+        threshold = 0.00005 if kind in {"percent", "weight"} else 0.005
         if (
-            kind in {"money", "percent", "pp", "native_amount"}
+            kind in {"money", "percent", "pp", "native_amount", "amount", "weight"}
             and 0 < abs(cell.value) < threshold
         ):
             kind += "_tiny"
+        if kind in {"amount", "weight"}:
+            units = float(cell.value) * (100 if kind == "weight" else 1)
+            if not round(units, 2).is_integer():
+                kind += "_fraction"
         if kind not in _NUMBER_FORMATS:
             continue
         by_row.setdefault(row, {}).setdefault(kind, []).append(column)
@@ -262,13 +283,13 @@ def _tab_requests(
         }
     )
 
-    for block_name, (start, end, _, width) in block_ranges.items():
+    for block_name, (start, end, first_column, width) in block_ranges.items():
         _append_format_request(
             requests,
             sheet_id,
             start,
             min(start + 1, end),
-            0,
+            first_column,
             width,
             {
                 "backgroundColor": {"red": 0.13, "green": 0.23, "blue": 0.37},
@@ -287,7 +308,7 @@ def _tab_requests(
                 sheet_id,
                 header_row,
                 header_row + 1,
-                0,
+                first_column,
                 width,
                 {
                     "backgroundColor": {"red": 0.85, "green": 0.89, "blue": 0.94},
@@ -403,6 +424,20 @@ def _tab_requests(
             if isinstance(start, int) and isinstance(end, int) and start < end:
                 requests.append(
                     {
+                        "updateDimensionProperties": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                "startIndex": start,
+                                "endIndex": end,
+                            },
+                            "properties": {"hiddenByUser": False},
+                            "fields": "hiddenByUser",
+                        }
+                    }
+                )
+                requests.append(
+                    {
                         "deleteDimensionGroup": {
                             "range": {
                                 "sheetId": sheet_id,
@@ -469,7 +504,7 @@ def _tab_requests(
     )
 
     chart_count = 0
-    widths = (240, 135, 130, 140, 130, 150, 110, 200)
+    widths = tab.column_widths or (240, 135, 130, 140, 130, 150, 110, 200)
     for column, width in enumerate(widths[:column_count]):
         requests.append(
             {

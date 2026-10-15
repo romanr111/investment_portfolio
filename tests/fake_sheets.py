@@ -12,6 +12,7 @@ class FakeWorksheet:
         self.row_count, self.col_count = rows, cols
         self.values, self.formats, self.charts = {}, {}, []
         self.groups, self.hidden_columns, self.properties = set(), set(), {}
+        self.hidden_rows = set()
         self.basic_filter = None
         self.spreadsheet = None
         self.annotations = {}
@@ -160,14 +161,25 @@ class FakeSpreadsheet:
                 else:
                     s.groups.remove(group)
             elif key == "updateDimensionGroup":
-                pass
+                group = value["dimensionGroup"]
+                r = group["range"]
+                if group.get("collapsed"):
+                    by_id[r["sheetId"]].hidden_rows.update(
+                        range(r["startIndex"], r["endIndex"])
+                    )
             elif key == "autoResizeDimensions":
                 pass
             elif key == "updateDimensionProperties":
                 r = value["range"]
                 s = by_id[r["sheetId"]]
-                if value["properties"].get("hiddenByUser"):
-                    s.hidden_columns.update(range(r["startIndex"], r["endIndex"]))
+                if "hiddenByUser" in value["properties"]:
+                    hidden = (
+                        s.hidden_rows if r["dimension"] == "ROWS" else s.hidden_columns
+                    )
+                    if value["properties"]["hiddenByUser"]:
+                        hidden.update(range(r["startIndex"], r["endIndex"]))
+                    else:
+                        hidden.difference_update(range(r["startIndex"], r["endIndex"]))
             elif key == "addChart":
                 chart = deepcopy(value["chart"])
                 sheet_id = chart["position"]["overlayPosition"]["anchorCell"]["sheetId"]

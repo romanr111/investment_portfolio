@@ -10,14 +10,65 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsTablesTests(unittest.TestCase):
+    def test_cached_status_does_not_move_financial_cells(self):
+        current = current_snapshot()
+        cached = current_snapshot()
+        cached["DATA_METADATA"]["source"] = "cached_snapshot"
+        live_grid, _, live_ranges = render_blocks(build_portfolio_tab(current).blocks)
+        cached_grid, _, cached_ranges = render_blocks(
+            build_portfolio_tab(cached).blocks
+        )
+        numeric = lambda grid: {
+            (r, c): value
+            for r, row in enumerate(grid)
+            for c, value in enumerate(row)
+            if isinstance(value, (int, float))
+        }
+        self.assertEqual(numeric(live_grid), numeric(cached_grid))
+        self.assertEqual(live_ranges, cached_ranges)
+
+    def test_default_view_is_a_compact_original_style_portfolio(self):
+        tab = build_portfolio_tab(
+            current_snapshot(), previous_snapshot=previous_snapshot()
+        )
+        grid, typed, ranges = render_blocks(tab.blocks)
+        self.assertEqual(ranges["holdings"][:3], (0, 9, 0))
+        self.assertEqual(ranges["summary"][0], 0)
+        self.assertEqual(ranges["summary"][2], 5)
+        self.assertEqual(len(tab.blocks[0].rows[1]), 4)
+        self.assertEqual(len(tab.row_groups), 1)
+        block, start, end = tab.row_groups[0]
+        hidden_start = ranges[block][0] + start
+        self.assertLessEqual(hidden_start, 32)
+        visible = [str(value) for row in grid[:hidden_start] for value in row]
+        for noise in (
+            "Unknown",
+            "Unavailable",
+            "Unconfigured",
+            "Attribution status",
+            "Definitions and coverage",
+            "Manual estimate",
+        ):
+            self.assertNotIn(noise, visible)
+        self.assertEqual(tab.freeze_rows, 2)
+        self.assertEqual(tab.freeze_columns, 1)
+        self.assertEqual(grid[2][0], "SIM-BOND")
+
+    def test_holdings_filter_sits_below_the_summary_panels(self):
+        tab = build_portfolio_tab(current_snapshot())
+        _, _, ranges = render_blocks(tab.blocks)
+        self.assertGreater(
+            ranges[tab.filter_block_name][0], ranges["compact_income"][1]
+        )
+
     def test_main_snapshot_contains_all_sections_and_compact_holdings_header(self):
         tab = build_portfolio_tab(current_snapshot(), current_date="2026-10-04")
         grid, typed, ranges = render_blocks(tab.blocks)
         self.assertEqual(tab.title, "04 Oct 2026")
-        self.assertEqual(ranges["holdings"][0], 7)
-        self.assertEqual(tab.freeze_rows, 8)
-        self.assertEqual(tab.freeze_columns, 2)
-        self.assertEqual(tab.filter_block_name, "holdings")
+        self.assertEqual(ranges["holdings"][0], 0)
+        self.assertEqual(tab.freeze_rows, 2)
+        self.assertEqual(tab.freeze_columns, 1)
+        self.assertEqual(tab.filter_block_name, "holding_details")
         for section in (
             "allocation",
             "comparison",
@@ -40,14 +91,8 @@ class InsightsTablesTests(unittest.TestCase):
             self.assertIn(label, values)
         self.assertNotIn("CRYPTO_DATA", values)
         self.assertTrue(any(cell.kind == "link" for cell in typed.values()))
-        self.assertIn(
-            (
-                "methodology",
-                1,
-                len(next(b for b in tab.blocks if b.name == "methodology").rows),
-            ),
-            tab.row_groups,
-        )
+        self.assertEqual(tab.row_groups[0][0], "details")
+        self.assertGreater(ranges["methodology"][0], ranges["details"][0])
 
     def test_required_labels_are_verbatim(self):
         self.assertEqual(LBL_IB_RETURN, "IB return - YTD - TWR")
