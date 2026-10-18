@@ -5,6 +5,48 @@ from src.google_sheets.insights_refresh import refresh_insights
 
 
 class InsightsWriterTests(unittest.TestCase):
+    def test_summary_hierarchy_survives_refresh_with_large_portfolio_values(self):
+        book = FakeSpreadsheet()
+        data = current_snapshot()
+        data["TOTAL_ASSETS"] = 12345678.90
+        config = {"fire_target_usd": 1000}
+        for _ in range(2):
+            refresh_insights(book, data, config=config)
+            main = book.worksheet("04 Oct 2026")
+            self.assertEqual(main.values[(1, 8)], 12345678.90)
+            self.assertEqual(main.formats[(1, 8)]["textFormat"]["fontSize"], 20)
+            self.assertTrue(main.formats[(1, 8)]["textFormat"]["bold"])
+            self.assertEqual(main.formats[(1, 2)]["textFormat"]["fontSize"], 16)
+            for coord in ((1, 4), (1, 7), (1, 11)):
+                self.assertEqual(main.formats[coord]["textFormat"]["fontSize"], 11)
+            for coord in ((2, 4), (2, 7), (2, 11)):
+                self.assertEqual(main.formats[coord]["horizontalAlignment"], "LEFT")
+            for label in ("Monthly total", "Yearly total"):
+                row = next(
+                    r
+                    for (r, c), v in main.values.items()
+                    if c == 11 and str(v).startswith(label)
+                )
+                self.assertTrue(main.formats[(row, 12)]["textFormat"]["bold"])
+                self.assertEqual(main.formats[(row, 12)]["textFormat"]["fontSize"], 12)
+            requests = book.batch_updates[-1]["requests"]
+            row_sizes = [
+                v["updateDimensionProperties"]
+                for v in requests
+                if "updateDimensionProperties" in v
+                and v["updateDimensionProperties"]["range"].get("dimension") == "ROWS"
+                and "pixelSize" in v["updateDimensionProperties"]["properties"]
+            ]
+            self.assertTrue(
+                any(
+                    v["range"]["startIndex"] == 0
+                    and v["range"]["endIndex"] == 1
+                    and v["properties"]["pixelSize"] >= 38
+                    for v in row_sizes
+                )
+            )
+            self.assertEqual(len(main.conditional_formats), 1)
+
     def test_return_gradient_updates_without_duplicates_or_removing_user_rules(self):
         from copy import deepcopy
 

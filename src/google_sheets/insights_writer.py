@@ -323,6 +323,22 @@ def _tab_requests(
         }
     )
 
+    # Establish the body style before section and headline overrides.
+    _append_format_request(
+        requests,
+        sheet_id,
+        0,
+        row_count,
+        0,
+        column_count,
+        {
+            "wrapStrategy": "WRAP",
+            "verticalAlignment": "MIDDLE",
+            "textFormat": {"fontFamily": "Arial", "fontSize": 10},
+        },
+        "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.fontFamily,userEnteredFormat.textFormat.fontSize",
+    )
+
     for block_name, (start, end, first_column, width) in block_ranges.items():
         _append_format_request(
             requests,
@@ -336,7 +352,7 @@ def _tab_requests(
                 "textFormat": {
                     "foregroundColor": {"red": 0.12, "green": 0.12, "blue": 0.12},
                     "bold": True,
-                    "fontSize": 12,
+                    "fontSize": 11,
                 },
             },
             "userEnteredFormat(backgroundColor,textFormat)",
@@ -357,6 +373,16 @@ def _tab_requests(
                     "horizontalAlignment": "CENTER",
                 },
                 "userEnteredFormat(backgroundColor,textFormat,wrapStrategy,horizontalAlignment)",
+            )
+            _append_format_request(
+                requests,
+                sheet_id,
+                header_row,
+                header_row + 1,
+                first_column,
+                first_column + 1,
+                {"horizontalAlignment": "LEFT"},
+                "userEnteredFormat.horizontalAlignment",
             )
 
     for block_name, offset in tab.emphasis_rows:
@@ -446,20 +472,6 @@ def _tab_requests(
             "userEnteredFormat.numberFormat,userEnteredFormat.horizontalAlignment",
         )
 
-    _append_format_request(
-        requests,
-        sheet_id,
-        0,
-        row_count,
-        0,
-        column_count,
-        {
-            "wrapStrategy": "WRAP",
-            "verticalAlignment": "MIDDLE",
-            "textFormat": {"fontFamily": "Arial", "fontSize": 10},
-        },
-        "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.fontFamily,userEnteredFormat.textFormat.fontSize",
-    )
     _append_format_request(
         requests,
         sheet_id,
@@ -643,6 +655,57 @@ def _tab_requests(
             }
         }
     )
+    if "compact_allocation" in block_ranges:
+        start, _, first_column, _ = block_ranges["compact_allocation"]
+        _append_format_request(
+            requests,
+            sheet_id,
+            start,
+            start + 1,
+            first_column + 1,
+            first_column + 2,
+            {"textFormat": {"fontSize": 20, "bold": True}},
+            "userEnteredFormat.textFormat(fontSize,bold)",
+        )
+        summary_value = typed_cells.get((0, 1))
+        if summary_value is not None and summary_value.kind == "weight":
+            _append_format_request(
+                requests,
+                sheet_id,
+                0,
+                1,
+                1,
+                2,
+                {"textFormat": {"fontSize": 16, "bold": True}},
+                "userEnteredFormat.textFormat(fontSize,bold)",
+            )
+        _, end, first_column, last_column = block_ranges["compact_income"]
+        _append_format_request(
+            requests,
+            sheet_id,
+            end - 2,
+            end,
+            first_column,
+            last_column,
+            {"textFormat": {"fontSize": 12, "bold": True}},
+            "userEnteredFormat.textFormat(fontSize,bold)",
+        )
+        # Fixed minimums follow auto-resize so repeated refreshes keep the hierarchy.
+        for row, height in ((0, 38), (1, 34)):
+            requests.append(
+                {
+                    "updateDimensionProperties": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": row,
+                            "endIndex": row + 1,
+                        },
+                        "properties": {"pixelSize": height},
+                        "fields": "pixelSize",
+                    }
+                }
+            )
     return requests, metadata, row_count, chart_count
 
 
