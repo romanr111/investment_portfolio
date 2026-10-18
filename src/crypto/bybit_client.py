@@ -19,7 +19,7 @@ class Bybit(ExchangeBase):
     API_VERSION = "/v5"
 
     # Reduced stablecoin set to only confirmed valid ones
-    STABLECOINS = {"USDT", "USDC", "BUSD", "DAI"}
+    STABLECOINS = {"USDT", "USDC", "BUSD", "DAI"} | ExchangeBase.CASH_EQUIVALENTS
 
     def __init__(self) -> None:
         self.api_key = BYBIT_API_KEY
@@ -180,9 +180,12 @@ class BybitFiltered(Bybit):
         self.funding_balances = self.get_funding_balances()
 
     def get_cash_balance(self) -> int:
-        """Get total stablecoin balance in USD cents."""
+        """Get total stablecoin cash balance in USD."""
         combined_balances = {**self.unified_balances, **self.funding_balances}
         val = self.filter_out_stablecoin_balances(combined_balances)
+        self.cash_equivalent_balances = {
+            asset: float(val.get(asset, 0)) for asset in self.CASH_EQUIVALENTS
+        }
         return int(sum(val.values()))
 
 

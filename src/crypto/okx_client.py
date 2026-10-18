@@ -231,7 +231,7 @@ class OKXFiltered(OKXClient):
         Returns:
             Dict[str, float]: Filtered cryptocurrency balances.
         """
-        STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
+        STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"} | self.CASH_EQUIVALENTS
         crypto_balances = {
             asset: balance
             for asset, balance in self.account_balances.items()
@@ -243,7 +243,7 @@ class OKXFiltered(OKXClient):
         """Get aggregated crypto balances from spot and savings."""
         crypto_balances = dict(self.get_crypto_balances())
         savings_positions = self.get_savings_positions().get("okx", {})
-        stablecoins = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
+        stablecoins = {"USDT", "USDC", "DAI", "BUSD", "PAX"} | self.CASH_EQUIVALENTS
         for asset, (principal, _) in savings_positions.items():
             if asset not in stablecoins:
                 crypto_balances[asset] = (
@@ -258,7 +258,7 @@ class OKXFiltered(OKXClient):
         Returns:
             int: Sum of rounded stablecoin balances, or 0 if no qualifying balances exist.
         """
-        STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"}
+        STABLECOINS = {"USDT", "USDC", "DAI", "BUSD", "PAX"} | self.CASH_EQUIVALENTS
 
         stablecoin_balances = {
             asset: round(float(balance))
@@ -266,6 +266,9 @@ class OKXFiltered(OKXClient):
             if asset in STABLECOINS and float(balance) >= 1
         }
 
+        self.cash_equivalent_balances = {
+            asset: float(stablecoin_balances.get(asset, 0)) for asset in self.CASH_EQUIVALENTS
+        }
         return sum(stablecoin_balances.values()) if stablecoin_balances else 0
 
     def get_simple_earn_positions(self) -> Dict[str, Tuple[float, float]]:

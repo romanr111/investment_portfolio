@@ -4,6 +4,7 @@ Verifies that DataSource.calculate_total_assets does not double-count IB cash
 and that PortfolioTableBuilder allocation rows reconcile to net worth.
 """
 import unittest
+import json
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +13,9 @@ import tempfile
 from data.assets_data import OTHER_BETS
 from src.allocation_calculator import AllocationCalculator
 from src.data_source import DataSource
+from src.brokers.ib import InteractiveBrokers
 from src.google_sheets.spreadsheet_structure import PortfolioTableBuilder
+from src.portfolio_history.unified_history import save_combined_data_snapshot_json
 from src.portfolio_ledger.contract import build_portfolio_contract
 from src.portfolio_ledger.storage import PortfolioLedger
 
@@ -40,8 +43,22 @@ class TestPortfolioTotals(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_source = DataSource.__new__(DataSource)
             data_source._data_timestamp = 1.0
-            data_source.ib_data = {"Total Stocks Value": 0}
-            data_source.ib = SimpleNamespace(performance_ytd={})
+            data_source.ib_data = {
+                "China Stocks": {"700": 1100},
+                "Stocks": {"AAPL": 1800},
+                "Precious Metals": {"GLD": 500},
+                "Total Stocks Value": 2900,
+                "IB_Portfolio_Value": 3400,
+            }
+            data_source.ib = InteractiveBrokers.__new__(InteractiveBrokers)
+            data_source.ib._enhanced_stock_data = None
+            data_source.ib._portfolio_positions = data_source.ib_data
+            data_source.ib.performance_ytd = {}
+            data_source.ib.all_portfolio_info = [
+                {"contractDesc": "700", "position": 10, "avgPrice": 100, "mktPrice": 110},
+                {"contractDesc": "AAPL", "position": 6, "avgPrice": 400, "mktPrice": 300},
+                {"contractDesc": "GLD", "position": 2, "avgPrice": 250, "mktPrice": 250},
+            ]
             data_source.index_performance_data = {}
             data_source.crypto = SimpleNamespace(
                 get_total_crypto_value=lambda: 40,
@@ -83,6 +100,15 @@ class TestPortfolioTotals(unittest.TestCase):
             self.assertEqual(combined["CRYPTO_DATA"]["Total_Crypto_Value"], 40)
             self.assertIn("FIXED_INCOME_DATA", combined)
             self.assertIn("OTHER_ASSETS", combined)
+
+            snapshot = save_combined_data_snapshot_json(combined, temp_dir)
+            restored = json.loads(snapshot.read_text())["data"]
+            rows = PortfolioTableBuilder(restored).build_left_columns()
+            for symbol, expected in {"700": 0.10, "AAPL": -0.25, "GLD": 0.0}.items():
+                with self.subTest(symbol=symbol):
+                    row = next(row for row in rows if row[3] == symbol)
+                    self.assertGreater(len(row), 5, "Snapshot rendering lost column F")
+                    self.assertAlmostEqual(row[5], expected)
 
     def test_asset_allocation_uses_canonical_lending_and_p2p_values(self):
         data_source = DataSource.__new__(DataSource)
@@ -220,7 +246,6 @@ class TestPortfolioTotals(unittest.TestCase):
         self.assertEqual(_sum_allocation_row_values(rows), data["TOTAL_ASSETS"])
 
 
-
     def test_get_combined_data_preserves_legacy_p2p_rate(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_source = DataSource.__new__(DataSource)
@@ -270,7 +295,6 @@ class TestPortfolioTotals(unittest.TestCase):
             ]
             self.assertEqual(p2p[0], 30)
             self.assertAlmostEqual(p2p[1], 0.11)
-
 
 
 

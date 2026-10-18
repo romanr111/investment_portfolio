@@ -48,7 +48,11 @@ class CryptoData:
                     f"get_savings_positions for {broker.__class__.__name__} took {time.time() - start_time:.2f} seconds"
                 )
                 if broker_positions:
-                    positions.append(broker_positions)
+                    positions.append({
+                        platform: {asset: values for asset, values in savings.items()
+                                   if asset.upper() not in ExchangeBase.CASH_EQUIVALENTS}
+                        for platform, savings in broker_positions.items()
+                    })
                 logger.debug(
                     f"Retrieved {len(broker_positions) if broker_positions else 0} positions"
                 )
@@ -132,13 +136,23 @@ class CryptoData:
         return sorted_crypto
 
     @staticmethod
-    def calculate_free_cash_balance(brokers: List[ExchangeBase]) -> int:
+    def calculate_free_cash_balance(
+        brokers: List[ExchangeBase], cash_equivalent_values: Optional[Dict[str, float]] = None
+    ) -> int:
         """
         Get total free cash balance across all brokers.
         Sums up integer balances from get_cash_balance().
         """
         logger.debug("Calculating free cash balance from brokers")
-        total_balance = 0
+        if cash_equivalent_values is not None:
+            cash_equivalent_values.clear()
+            cash_equivalent_values.update({asset.upper(): round(float(amount))
+                for asset, amount in COLD_STORAGE.items()
+                if asset.upper() in ExchangeBase.CASH_EQUIVALENTS})
+        total_balance = round(sum(
+            float(amount) for asset, amount in COLD_STORAGE.items()
+            if asset.upper() in ExchangeBase.CASH_EQUIVALENTS
+        ))
 
         for broker in brokers:
             try:
@@ -146,6 +160,25 @@ class CryptoData:
                 balance = broker.get_cash_balance()
                 if balance >= 1:
                     total_balance += balance
+                # USD1 Earn principal is cash, not an interest-bearing bucket.
+                savings_positions = broker.get_savings_positions()
+                cash_earn = sum(
+                    float(values[0])
+                    for savings in savings_positions.values()
+                    for asset, values in savings.items()
+                    if asset.upper() in ExchangeBase.CASH_EQUIVALENTS
+                )
+                total_balance += round(cash_earn)
+                if cash_equivalent_values is not None:
+                    for asset in ExchangeBase.CASH_EQUIVALENTS:
+                        spot = getattr(broker, "cash_equivalent_balances", {}).get(asset, 0)
+                        cash_equivalent_values[asset] = cash_equivalent_values.get(asset, 0) + float(spot)
+                    for savings in savings_positions.values():
+                        for asset, values in savings.items():
+                            if asset.upper() in ExchangeBase.CASH_EQUIVALENTS:
+                                cash_equivalent_values[asset.upper()] = (
+                                    cash_equivalent_values.get(asset.upper(), 0) + round(float(values[0]))
+                                )
                 logger.debug(
                     f"Retrieved cash balance: {balance} from {broker.__class__.__name__}"
                 )
@@ -221,6 +254,7 @@ class CryptoEndpoint:
         self.balance_source_status: Dict[str, str] = {}
         self.crypto_market_values = {}
         self.free_cash = 0
+        self.cash_equivalent_values = {}
         self.all_crypto_savings = []
 
         try:
@@ -292,7 +326,9 @@ class CryptoEndpoint:
             logger.debug("Calculating free cash - start")
             start_time = time.time()
             try:
-                self.free_cash = CryptoData.calculate_free_cash_balance(self.brokers)
+                self.free_cash = CryptoData.calculate_free_cash_balance(
+                    self.brokers, self.cash_equivalent_values
+                )
                 logger.debug(
                     f"Free cash calculated in {time.time() - start_time:.2f} seconds"
                 )

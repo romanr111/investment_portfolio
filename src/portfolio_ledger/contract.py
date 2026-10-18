@@ -12,7 +12,8 @@ MATERIALITY_USD = 100.0
 # the same holding can legitimately differ by up to 5e-5. 1e-8 turned that
 # harmless rounding dust into failed reconciliations.
 QUANTITY_TOLERANCE = 1e-4
-STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "PAX", "EURI"}
+CASH_EQUIVALENTS = {"USD1"}
+STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "PAX", "EURI"} | CASH_EQUIVALENTS
 _SNAPSHOT_DATE_RE = re.compile(r"^combined_data_(\d{4}-\d{2}-\d{2})_")
 
 
@@ -183,6 +184,8 @@ def classify_lending_positions(
             for raw_asset, values in positions.items():
                 asset = str(raw_asset).upper()
                 principal, expected_apy = values
+                if asset in CASH_EQUIVALENTS:
+                    continue
                 if asset in STABLECOINS:
                     stablecoin_positions.append(
                         {
@@ -242,6 +245,8 @@ def calculate_lending_performance(
             "reward",
             "fee",
         }:
+            continue
+        if asset in CASH_EQUIVALENTS:
             continue
         if asset and asset not in STABLECOINS:
             if event_type == "reward":
@@ -569,7 +574,8 @@ def _snapshot_crypto_positions(
             str(position["asset"]).upper(): float(position.get("value_usd", 0.0))
             for position in positions
         }
-        return quantities, values
+        return ({a: q for a, q in quantities.items() if a not in STABLECOINS},
+                {a: v for a, v in values.items() if a not in STABLECOINS})
 
     legacy_crypto = payload.get("CRYPTO_DATA", {})
     quantities = {
@@ -580,7 +586,8 @@ def _snapshot_crypto_positions(
         str(asset).upper(): float(value)
         for asset, value in legacy_crypto.get("Crypto_Market_Values", {}).items()
     }
-    return quantities, values
+    return ({a: q for a, q in quantities.items() if a not in STABLECOINS},
+                {a: v for a, v in values.items() if a not in STABLECOINS})
 
 
 def recover_crypto_positions(
@@ -590,6 +597,8 @@ def recover_crypto_positions(
     *,
     balance_sources: Optional[dict[str, str]] = None,
 ) -> tuple[dict[str, float], dict[str, float], str]:
+    live_quantities = {a: q for a, q in live_quantities.items() if a.upper() not in STABLECOINS}
+    live_values_usd = {a: v for a, v in live_values_usd.items() if a.upper() not in STABLECOINS}
     snapshot_quantities, snapshot_values = _snapshot_crypto_positions(latest_snapshot)
     # A nonempty aggregate is not automatically complete: when a balance source
     # failed or had its balances dropped by filters, live data covers only part
@@ -628,7 +637,8 @@ def _snapshot_lending_principal(snapshot: Optional[dict[str, Any]]) -> Optional[
     payload = _snapshot_payload(snapshot)
     positions = payload.get("POSITION_DATA", {}).get("crypto_lending", [])
     if positions:
-        return sum(float(position.get("principal_usd", 0.0)) for position in positions)
+        return sum(float(position.get("principal_usd", 0.0)) for position in positions
+                   if str(position.get("asset", "")).upper() not in CASH_EQUIVALENTS)
     # The v1 "Crypto Landing" total mixes stablecoin earn with volatile
     # holdings (e.g. WhiteBit ETH), while the v2 lending model tracks
     # stablecoins only. Returning that mixed total as a stablecoin start
@@ -648,7 +658,7 @@ def _snapshot_lending_principal(snapshot: Optional[dict[str, Any]]) -> Optional[
                 continue
             for raw_asset, values in assets.items():
                 asset = str(raw_asset).upper()
-                if not asset or asset == "NONE" or asset not in STABLECOINS:
+                if not asset or asset == "NONE" or asset not in STABLECOINS or asset in CASH_EQUIVALENTS:
                     continue
                 if not isinstance(values, (list, tuple)) or len(values) < 2:
                     continue
@@ -672,6 +682,12 @@ def build_portfolio_contract(
     crypto_freshness: str = "live",
     crypto_balance_sources: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
+    live_crypto_quantities = {
+        a: q for a, q in live_crypto_quantities.items() if a.upper() not in STABLECOINS
+    }
+    live_crypto_market_values = {
+        a: v for a, v in live_crypto_market_values.items() if a.upper() not in STABLECOINS
+    }
     period_start, quarter_end, quarter_key = _quarter_bounds(as_of_date)
     # Cap the performance period at the as-of date: when the pipeline runs
     # before the last day of the quarter, weighting cash flows against the
@@ -948,6 +964,83 @@ def upgrade_legacy_combined_data(
     return upgraded
 
 
+def recover_cash_equivalents(
+    live_values: dict[str, float], latest_snapshot: Optional[dict[str, Any]], *,
+    balance_sources: Optional[dict[str, str]] = None,
+) -> dict[str, float]:
+    values = dict(live_values)
+    if any(status not in (None, "", "ok") for status in (balance_sources or {}).values()):
+        cached = _snapshot_payload(latest_snapshot).get("CASH_DATA", {}).get("Cash_Equivalents", {})
+        for asset, value in cached.items():
+            if asset.upper() in CASH_EQUIVALENTS:
+                values[asset] = max(float(value), float(values.get(asset, 0)))
+    return values
+
+
+def reclassify_cash_equivalents(combined_data: dict[str, Any]) -> dict[str, Any]:
+    """Move saved cash equivalents out of crypto without changing net worth."""
+    result = deepcopy(combined_data)
+    payload = result.get("data", result)
+    crypto = payload.get("CRYPTO_DATA", {})
+    values = crypto.get("Crypto_Market_Values", {})
+    positions = payload.get("POSITION_DATA", {})
+    transfers = {str(asset).upper(): float(value) for asset, value in values.items()
+                 if asset.upper() in CASH_EQUIVALENTS}
+    for position in positions.get("crypto", []):
+        asset = str(position["asset"]).upper()
+        if asset in CASH_EQUIVALENTS and asset not in transfers:
+            transfers[asset] = float(position.get("value_usd", 0))
+    if not transfers:
+        return result
+    amount = sum(transfers.values())
+    crypto["Total_Crypto_Value"] = float(crypto.get("Total_Crypto_Value", 0)) - amount
+    for key in ("Crypto_Market_Values", "Token_Quantities"):
+        crypto[key] = {a: v for a, v in crypto.get(key, {}).items()
+                       if a.upper() not in CASH_EQUIVALENTS}
+    cash = payload.setdefault("CASH_DATA", {})
+    cash["Total"] = float(cash.get("Total", 0)) + amount
+    breakdown = cash.setdefault("Breakdown", {})
+    breakdown["crypto_cash"] = float(breakdown.get("crypto_cash", 0)) + amount
+    cash.setdefault("Cash_Equivalents", {}).update(transfers)
+    for key in ("crypto", "crypto_earn_volatile"):
+        if key in positions:
+            positions[key] = [p for p in positions[key]
+                              if str(p.get("asset", "")).upper() not in CASH_EQUIVALENTS]
+    for quarter in payload.get("ACTIVITY_DATA", {}).get("quarters", {}).values():
+        quarter["crypto"] = [r for r in quarter.get("crypto", [])
+                             if str(r.get("asset", "")).upper() not in CASH_EQUIVALENTS]
+        # Historical returns cannot be attributed again without complete flows.
+        if "crypto_performance" in quarter:
+            quarter["crypto_performance"].update(
+                return_pct=None, return_method="unavailable", coverage="partial",
+                net_flow_usd=None, income_usd=None,
+            )
+        lending = quarter.get("crypto_lending", {})
+        if "volatile_rewards" in lending:
+            lending["volatile_rewards"] = [r for r in lending["volatile_rewards"]
+                if str(r.get("asset", "")).upper() not in CASH_EQUIVALENTS]
+    performance = payload.get("PERFORMANCE_DATA", {}).get("buckets", {}).get("Crypto Coins")
+    if performance is not None:
+        performance.update(return_pct=None, return_method="unavailable",
+                           data_quality="partial", net_flow_usd=None, income_usd=None)
+    quality = payload.get("DATA_QUALITY", {}).get("crypto")
+    if isinstance(quality, dict):
+        quality["coverage"] = "partial"
+    allocations = payload.get("ASSET_ALLOCATION", {}).get("allocations", {})
+    for bucket, delta in (("Cash", amount), ("Crypto Coins", -amount)):
+        entry = allocations.setdefault(bucket, {"value": 0, "percentage": 0})
+        entry["value"] = float(entry.get("value", 0)) + delta
+    net_worth = float(payload.get("ASSET_ALLOCATION", {}).get("net_worth", 0))
+    if net_worth > 0:
+        for entry in allocations.values():
+            entry["percentage"] = round(float(entry.get("value", 0)) / net_worth * 100, 1)
+    allocation_breakdown = payload.get("ALLOCATIONS", {}).get("allocation_breakdown")
+    if isinstance(allocation_breakdown, dict):
+        for bucket, entry in allocations.items():
+            allocation_breakdown[bucket] = entry["percentage"]
+    return result
+
+
 def project_legacy_values(contract: dict[str, Any]) -> dict[str, float]:
     positions = contract["POSITION_DATA"]
     return {
@@ -990,6 +1083,8 @@ def aggregate_crypto_quarter(
     rows = []
 
     for asset in assets:
+        if asset.upper() in CASH_EQUIVALENTS:
+            continue
         start_quantity = float(start_quantities.get(asset, 0.0))
         end_quantity = float(end_quantities.get(asset, 0.0))
         start_value = float(start_values_usd.get(asset, 0.0))

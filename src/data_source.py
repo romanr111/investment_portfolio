@@ -1,5 +1,6 @@
 from typing import Dict, Any
 import copy
+from decimal import Decimal
 import logging
 import json
 import time
@@ -19,6 +20,7 @@ from src.portfolio_ledger.contract import (
     build_portfolio_contract,
     project_legacy_values,
     recover_crypto_positions,
+    recover_cash_equivalents,
     select_contract_start_snapshot,
 )
 from src.portfolio_ledger.storage import PortfolioLedger
@@ -190,6 +192,14 @@ class DataSource:
             latest_snapshot,
             balance_sources=balance_sources,
         )
+        live_cash = dict(getattr(self.crypto, "cash_equivalent_values", {}) or {})
+        recovered_cash = recover_cash_equivalents(
+            live_cash, latest_snapshot, balance_sources=balance_sources
+        )
+        recovered_amount = sum(recovered_cash.values()) - sum(live_cash.values())
+        if recovered_amount > 0:
+            self.cash.crypto_cash += Decimal(str(recovered_amount))
+        self.crypto.cash_equivalent_values = recovered_cash
         legacy_p2p = self.fi_data.get("group_weighted_interest", {}).get(
             "p2p_lending", (0, 0)
         )
@@ -209,6 +219,11 @@ class DataSource:
             crypto_freshness=crypto_freshness,
             crypto_balance_sources=balance_sources,
         )
+
+        if any(status not in (None, "", "ok") for status in balance_sources.values()):
+            self.portfolio_contract["DATA_QUALITY"]["cash"] = {
+                "coverage": "partial", "freshness": "snapshot_fallback"
+            }
 
     def _sync_crypto_activity(self) -> None:
         self.ledger = PortfolioLedger(PORTFOLIO_LEDGER_PATH)
@@ -404,6 +419,7 @@ class DataSource:
 
         data = {
             "IB_DATA": self.ib_data,
+            "ENHANCED_STOCKS": self.ib.get_stock_positions_analytics(),
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
             "INDEX_PERFORMANCE": getattr(self, "index_performance_data", {}),
             "CRYPTO_DATA": {
@@ -415,6 +431,7 @@ class DataSource:
             "CASH_DATA": {
                 "Total": self.cash.total_cash,
                 "Breakdown": self.cash.as_dict(),
+                "Cash_Equivalents": dict(getattr(self.crypto, "cash_equivalent_values", {}) or {}),
             },
             "OTHER_ASSETS": {
                 "Other Bets": projected["other_assets_value_usd"],

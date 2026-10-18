@@ -14,13 +14,12 @@ Personal portfolio automation: IB Gateway live data, dividend income estimates, 
   - `data/final_data.json` written by `just run` (YTD performance, current allocation).
   - Dated snapshots auto-archived to `data/snapshots/` on each pipeline run (start-of-quarter "Було" column).
 - Core/Satellite split is controlled by the hardcoded `CORE_SYMBOLS` set in `portfolio_yic_reports/analyze_portfolio_reports.py`; the bonds/gold table weights use the IBKR subset only (stocks + special assets), not the full portfolio.
-- Step-by-step runbook (preconditions, hardcoded one-off cleanup, CLI flags, verification): the `quarterly-report` skill in `.claude/skills/quarterly-report/SKILL.md`.
+- Step-by-step runbook (preconditions, hardcoded one-off cleanup, CLI flags, verification): the `quarterly-report` skill in `.agents/skills/quarterly-report/SKILL.md`.
 
 ## Python project notes
 
 - Keep `data/` local-only. Only `data/README.md` is tracked. Do not commit credentials, snapshots, or private sheets config.
 - Use Headroom as the primary context-optimization layer for bulky/noisy outputs. Do not default to RTK when Headroom is available.
-- Use CodeGraph before broad text search or raw file-read loops. Run `just graph-bootstrap` before CodeGraph work in every worktree.
 - Prefer `just` for project commands when a recipe exists (see `justfile` or `.agents/references/commands.md`).
 - Quarterly report worktree venvs may lack deps (pandas, numpy, requests); use the primary worktree venv at `/Users/roman/Documents/Development/investment_portfolio/venv/bin/python` when needed.
 - The quarterly report requires IB Flex snapshots in `data/ib_flex_snapshots/`. `load_portfolios()` matches by XML `toDate` with +/-3 day tolerance. Run `just fetch-snapshots` to download CI artifacts.
@@ -34,4 +33,5 @@ Personal portfolio automation: IB Gateway live data, dividend income estimates, 
 
 ## Workflow
 
+- Keep project skills in `.agents/skills/<name>/`; use relative symlinks from provider-specific skill folders (such as `.claude/skills/`) so all agents share one source.
 Use `commit-hygiene`, `code-review`, `self-review` skills for project workflows.

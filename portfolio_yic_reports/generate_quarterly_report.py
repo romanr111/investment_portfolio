@@ -19,6 +19,7 @@ Output: portfolio_report_qN_YYYY.html next to the Markdown report.
 
 import argparse
 import json
+import math
 import re
 import sys
 import webbrowser
@@ -33,6 +34,8 @@ from analyze_portfolio_reports import (
     collect_stock_rows,
     load_portfolios,
 )
+from src.portfolio_ledger.contract import reclassify_cash_equivalents, STABLECOINS
+
 from quarterly_report_html import (
     MINUS,
     AllocationRow,
@@ -51,15 +54,14 @@ SNAPSHOT_GRACE_DAYS = 5
 # boundary, warn - it likely does not reflect the true end of the prior quarter.
 SNAPSHOT_MAX_DRIFT_DAYS = 10
 
-# Minimum |delta $| for the "main change" KPI, as a fraction of net worth.
-# Below this, no category's move is treated as significant enough to report.
-MAIN_CHANGE_MATERIALITY_PCT = 0.01
-
 # ASSET_ALLOCATION category -> (Ukrainian name, genitive form for prose)
 CATEGORY_UK = {
     "Stocks": ("Акції IBKR", "акцій IBKR"),
     "Bonds": ("Облігації", "облігацій"),
-    "Other Bets": ("Інші активи", "інших активів"),
+    "Other Bets": (
+        "Інші активи (Car Resale)",
+        "інших активів (Car Resale)",
+    ),
     "Crypto Lending": ("Криптокредитування", "криптокредитування"),
     "Precious Metals": ("Дорогоцінні метали", "дорогоцінних металів"),
     "Cash": ("Кеш", "кешу"),
@@ -69,12 +71,15 @@ CATEGORY_UK = {
     "REIT": ("REIT", "REIT"),
 }
 
-# Categories excluded from the IBKR YTD performance figure (footnote 2).
-NOT_IN_PERFORMANCE = ["Other Bets", "Crypto Lending", "Crypto Coins", "P2P Lending"]
-
 UK_MONTHS = [
     "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
     "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
+]
+
+
+UK_MONTHS_GENITIVE = [
+    "січня", "лютого", "березня", "квітня", "травня", "червня",
+    "липня", "серпня", "вересня", "жовтня", "листопада", "грудня",
 ]
 
 
@@ -86,19 +91,18 @@ def _quarter_month_range_uk(date_obj: datetime) -> str:
     return f"{UK_MONTHS[start_month - 1]} – {UK_MONTHS[end_month - 1]} {date_obj.year} року"
 
 
+def _fmt_comma_signed1(value: float) -> str:
+    sign = "+" if value > 0 else (MINUS if value < 0 else "")
+    return f"{sign}{abs(value):.1f}".replace(".", ",")
+
+
 def _fmt_comma_pct1(value: float) -> str:
     """Ukrainian prose style: one decimal, comma separator, typographic minus."""
-    sign = "+" if value > 0 else (MINUS if value < 0 else "")
-    return f"{sign}{abs(value):.1f}".replace(".", ",") + "%"
-
-
-def _fmt_signed_pct1(value: float) -> str:
-    sign = "+" if value > 0 else (MINUS if value < 0 else "")
-    return f"{sign}{abs(value):.1f}%"
+    return _fmt_comma_signed1(value) + "%"
 
 
 def _fmt_usd(value: Optional[float]) -> str:
-    if value is None:
+    if value is None or not math.isfinite(float(value)):
         return "-"
     return f"${float(value):,.0f}"
 
@@ -107,141 +111,77 @@ def _fmt_optional_pct(value: Optional[float]) -> str:
     return "-" if value is None else f"{float(value):.2f}%"
 
 
+def _value_change_pct(start: Optional[float], end: Optional[float]) -> Optional[float]:
+    if start is None or end is None:
+        return None
+    start, end = float(start), float(end)
+    if not math.isfinite(start) or not math.isfinite(end) or start <= 0 or end < 0:
+        return None
+    change = (end / start - 1) * 100
+    return change if math.isfinite(change) else None
+
+
 def build_alternative_asset_tables(
     after_data: Dict, quarter_key: str
 ) -> List[DetailTable]:
+    after_data = reclassify_cash_equivalents(after_data)
     payload = after_data.get("data", after_data)
-    positions = payload.get("POSITION_DATA", {})
     quarter = payload.get("ACTIVITY_DATA", {}).get("quarters", {}).get(
         quarter_key, {}
     )
     tables: List[DetailTable] = []
-
-    crypto_rows = []
+    crypto_positions = []
+    crypto_total = read_allocation_values(payload).get("Crypto Coins")
+    partial_assets = []
     for row in quarter.get("crypto", []):
-        complete = row.get("coverage") == "complete"
-        crypto_rows.append(
-            [
-                str(row.get("asset", "")),
-                _fmt_usd(row.get("start_value_usd")),
-                _fmt_usd(row.get("buys_usd")) if complete else "-",
-                _fmt_usd(row.get("sells_usd")) if complete else "-",
-                _fmt_usd(row.get("rewards_usd")) if complete else "-",
-                (
-                    f"{float(row.get('net_change_quantity', 0)):+.8g}"
-                    if complete
-                    else "-"
-                ),
-                _fmt_usd(row.get("end_value_usd")),
-                str(row.get("status", "")),
-                str(row.get("coverage", "partial")),
-            ]
+        if str(row.get("asset", "")).upper() in STABLECOINS:
+            continue
+        end = row.get("end_value_usd")
+        start_qty, end_qty = row.get("start_quantity"), row.get("end_quantity")
+        quantity_change = _value_change_pct(start_qty, end_qty)
+        if (start_qty == 0 and end_qty is not None
+                and math.isfinite(float(end_qty)) and end_qty > 0):
+            kind, activity = "new", "Нова позиція"
+        elif quantity_change is None:
+            kind, activity = "unchanged", "Немає даних"
+        elif end_qty == 0:
+            kind, activity = "closed", "Закрита позиція"
+        elif quantity_change == 0:
+            kind, activity = "unchanged", "Без змін"
+        else:
+            kind = "increased" if quantity_change > 0 else "decreased"
+            activity = f"{quantity_change:+.1f}%"
+        weight = None
+        if (crypto_total is not None and math.isfinite(crypto_total)
+                and crypto_total > 0 and end is not None
+                and math.isfinite(float(end)) and end >= 0):
+            weight = float(end) / crypto_total * 100
+        position = PositionRow(
+            symbol=str(row.get("asset", "")), kind=kind, activity_text=activity,
+            price_text="",
+            weight_pct=weight, pl_pct=None,
         )
-    if crypto_rows:
+        crypto_positions.append(position)
+        if row.get("coverage") != "complete":
+            partial_assets.append(position.symbol)
+    if crypto_positions:
+        note = (
+            "Кількість монет - зміна балансу за квартал, не прибуток. "
+            "Вага - частка у криптовалютній частині портфеля на кінець кварталу."
+        )
+        if partial_assets:
+            note += (" Неповна історія операцій: " + ", ".join(partial_assets)
+                     + "; джерело зміни кількості не визначено.")
         tables.append(
             DetailTable(
                 title="Криптовалюти",
-                headers=[
-                    "Актив",
-                    "Старт",
-                    "Купівлі",
-                    "Продажі",
-                    "Rewards",
-                    "Чиста зміна",
-                    "Фініш",
-                    "Статус",
-                    "Coverage",
-                ],
-                rows=crypto_rows,
-            )
-        )
-
-    lending = quarter.get("crypto_lending")
-    lending_positions = positions.get("crypto_lending", [])
-    if lending or lending_positions:
-        total_principal = sum(
-            float(position.get("principal_usd", 0)) for position in lending_positions
-        )
-        weighted_apy = None
-        if total_principal > 0:
-            weighted_apy = sum(
-                float(position.get("principal_usd", 0))
-                * float(position.get("expected_apy", 0))
-                for position in lending_positions
-            ) / total_principal
-            if abs(weighted_apy) <= 1:
-                weighted_apy *= 100
-        lending = lending or {}
-        complete = lending.get("coverage") == "complete"
-        tables.append(
-            DetailTable(
-                title="Криптокредитування",
-                headers=[
-                    "Principal",
-                    "Внесення",
-                    "Виведення",
-                    "Фактичний income",
-                    "Фактична дохідність",
-                    "Expected APY",
-                    "Coverage",
-                ],
-                rows=[
-                    [
-                        _fmt_usd(lending.get("end_principal_usd", total_principal)),
-                        _fmt_usd(lending.get("deposits_usd")) if complete else "-",
-                        _fmt_usd(lending.get("withdrawals_usd")) if complete else "-",
-                        _fmt_usd(lending.get("income_usd")) if complete else "-",
-                        _fmt_optional_pct(lending.get("return_pct")) if complete else "-",
-                        _fmt_optional_pct(weighted_apy),
-                        str(lending.get("coverage", "partial")),
-                    ]
-                ],
-            )
-        )
-
-        material_crypto_assets = {
-            str(row.get("asset", "")) for row in quarter.get("crypto", [])
-        }
-        volatile_reward_rows = [
-            reward
-            for reward in lending.get("volatile_rewards", [])
-            if str(reward.get("asset", "")) in material_crypto_assets
-        ]
-        if volatile_reward_rows:
-            tables.append(
-                DetailTable(
-                    title="Earn rewards (volatile)",
-                    headers=["Актив", "Кількість", "USD value", "Coverage"],
-                    rows=[
-                        [
-                            str(reward.get("asset", "")),
-                            f"{float(reward.get('quantity', 0)):.8g}",
-                            _fmt_usd(reward.get("usd_value")),
-                            str(reward.get("coverage", "partial")),
-                        ]
-                        for reward in volatile_reward_rows
-                    ],
-                )
-            )
-
-    active_cars = [
-        car for car in positions.get("other_assets", []) if car.get("status") != "sold"
-    ]
-    if active_cars:
-        tables.append(
-            DetailTable(
-                title="Активні автомобілі",
-                headers=["Актив", "Статус", "Carrying value", "Собівартість", "Coverage"],
-                rows=[
-                    [
-                        str(car.get("name", car.get("asset_id", ""))),
-                        str(car.get("status", "")),
-                        _fmt_usd(car.get("carrying_value_usd")),
-                        _fmt_usd(car.get("capitalized_cost_usd")),
-                        str(car.get("coverage", "partial")),
-                    ]
-                    for car in active_cars
-                ],
+                headers=["Позиція", "Зміна кількості монет", "Вага (криптовалюти)"],
+                rows=[[
+                    position.symbol, position.activity_text,
+                    f"{position.weight_pct:.2f}%" if position.weight_pct is not None else "-",
+                ] for position in crypto_positions],
+                position_rows=crypto_positions, note=note, show_price_column=False,
+                show_pl_column=False,
             )
         )
 
@@ -269,23 +209,6 @@ def build_alternative_asset_tables(
             )
         )
 
-    p2p_positions = positions.get("p2p", [])
-    if p2p_positions:
-        tables.append(
-            DetailTable(
-                title="P2P",
-                headers=["Платформа", "Баланс", "Статус", "Станом на"],
-                rows=[
-                    [
-                        str(position.get("account", "")),
-                        _fmt_usd(position.get("balance_usd")),
-                        str(position.get("status", "")),
-                        str(position.get("as_of_date", "")),
-                    ]
-                    for position in p2p_positions
-                ],
-            )
-        )
     return tables
 
 
@@ -434,99 +357,76 @@ def build_allocation_rows(
 
 
 def find_main_change(
-    before_pct: Dict[str, float],
-    after_pct: Dict[str, float],
-    before_value: Dict[str, float],
-    after_value: Dict[str, float],
-    net_worth: float,
-    materiality_pct: float = MAIN_CHANGE_MATERIALITY_PCT,
-) -> Optional[Tuple[str, str, float]]:
-    """
-    Allocation category with the largest |before -> after| dollar delta -
-    not percentage-point delta, since a category's percentage share can
-    shift purely because net worth itself changed between the before/after
-    snapshots even if barely any real money moved in that category.
+    before_pct: Dict[str, float], after_pct: Dict[str, float]
+) -> Optional[Tuple[str, str, float, float]]:
+    """Largest absolute allocation-share change, matching section 02.
 
-    Returns (nominative name, genitive name, delta_pct) of the $-ranked
-    winner - the percentage-point delta is still what's displayed on the
-    KPI card, kept consistent with section 02's allocation table. Returns
-    None if there are no categories, or if the winning category's dollar
-    move doesn't clear `materiality_pct` of net worth (nothing significant
-    enough happened this quarter to call out).
+    Return category names and its before/after shares. Exact ties use the
+    category name for deterministic output. No change means no callout.
     """
-    categories = set(before_value) | set(after_value)
+    categories = set(before_pct) | set(after_pct)
     if not categories:
         return None
-    # Tie-break on category name for determinism - set iteration order is
-    # not stable across process runs (hash randomization), so an exact-tie
-    # in dollar delta could otherwise pick a different "winner" on every run.
     category = max(
         categories,
-        key=lambda c: (abs(after_value.get(c, 0.0) - before_value.get(c, 0.0)), c),
+        key=lambda c: (abs(after_pct.get(c, 0.0) - before_pct.get(c, 0.0)), c),
     )
-    usd_delta = after_value.get(category, 0.0) - before_value.get(category, 0.0)
-    if net_worth <= 0 or abs(usd_delta) < materiality_pct * net_worth:
+    before = before_pct.get(category, 0.0)
+    after = after_pct.get(category, 0.0)
+    if before == after:
         return None
-    delta_pct = after_pct.get(category, 0.0) - before_pct.get(category, 0.0)
     nominative, genitive = CATEGORY_UK.get(category, (category, category))
-    return nominative, genitive, delta_pct
+    return nominative, genitive, before, after
 
 
 def build_kpis(
     ibkr_ytd: float,
     sp500_ytd: float,
-    main_change: Optional[Tuple[str, str, float]] = None,
+    main_change: Optional[Tuple[str, str, float, float]] = None,
 ) -> List[KpiCard]:
     spread = ibkr_ytd - sp500_ytd
     spread_label = (
-        "Відставання від S&P 500 (процентні пункти)"
+        "Відставання від S&P 500"
         if spread < 0
-        else "Випередження S&P 500 (процентні пункти)"
+        else "Випередження S&P 500"
     )
     kpis = [
         KpiCard(
-            label="IBKR YTD",
-            value=_fmt_signed_pct1(ibkr_ytd),
+            label="Мій портфель IBKR",
+            value=_fmt_comma_pct1(ibkr_ytd),
             tone="neg" if ibkr_ytd < 0 else "pos",
+            caption="З початку року",
         ),
         KpiCard(
-            label="S&P 500 YTD",
-            value=_fmt_signed_pct1(sp500_ytd),
+            label="Індекс S&P 500",
+            value=_fmt_comma_pct1(sp500_ytd),
             tone="neg" if sp500_ytd < 0 else "pos",
+            caption="З початку року",
         ),
         KpiCard(
             label=spread_label,
-            value=_fmt_comma_pct1(spread),
+            value=f"{abs(spread):.1f}".replace(".", ","),
             tone="neg" if spread < 0 else "pos",
+            caption="відсоткового пункту\nз початку року",
         ),
     ]
     if main_change:
-        _, genitive, delta = main_change
+        category, genitive, before, after = main_change
+        short_category = "Car Resale" if category == CATEGORY_UK["Other Bets"][0] else genitive
         kpis.append(
             KpiCard(
-                label=f"Головна зміна: частка {genitive}",
-                value=_fmt_comma_pct1(delta),
-                tone="neg" if delta < 0 else "pos",
+                label=f"Частка {short_category}",
+                value=f"{after:.1f}%".replace(".", ","),
+                tone="navy",
+                caption=f"Було {before:.1f}%\nна початку кварталу".replace(".", ","),
+                purpose="Найбільша зміна\nза квартал",
             )
         )
     return kpis
 
 
 def build_footnotes(after: Dict[str, float]) -> List[str]:
-    footnotes = ["Доходи стосуються лише IBKR."]
-    excluded_present = [c for c in NOT_IN_PERFORMANCE if c in after]
-    if excluded_present:
-        # Move "Other Bets" to the end so it appears after P2P Lending.
-        if "Other Bets" in excluded_present:
-            ordered = [c for c in excluded_present if c != "Other Bets"] + ["Other Bets"]
-        else:
-            ordered = excluded_present
-        names = ", ".join(CATEGORY_UK.get(c, (c, c))[0] for c in ordered)
-        share = round(sum(after[c] for c in excluded_present))
-        footnotes.append(
-            f"Не входять у доходність: {names} (~{share}% капіталу)."
-        )
-    return footnotes
+    return ["Дохідність портфеля стосується лише активів на рахунку IBKR."]
 
 
 def _position_row(row: Dict) -> PositionRow:
@@ -543,24 +443,23 @@ def _position_row(row: Dict) -> PositionRow:
 
 def build_report_data(
     analyzer: PortfolioAnalyzer,
-    initial_to_date: str,
+    final_to_date: str,
     ibkr_ytd: float,
     sp500_ytd: float,
     before_alloc: Dict[str, float],
     after_alloc: Dict[str, float],
-    before_values: Dict[str, float],
-    after_values: Dict[str, float],
-    net_worth: float,
     after_data: Optional[Dict] = None,
 ) -> ReportData:
     formatter = TableFormatter(analyzer)
-    date_obj = datetime.strptime(initial_to_date, "%Y%m%d")
+    date_obj = datetime.strptime(final_to_date, "%Y%m%d")
     quarter = (date_obj.month - 1) // 3 + 1
 
-    main_change = find_main_change(
-        before_alloc, after_alloc, before_values, after_values, net_worth
-    )
+    main_change = find_main_change(before_alloc, after_alloc)
     return ReportData(
+        summary_title=(
+            f"Підсумки на {date_obj.day} "
+            f"{UK_MONTHS_GENITIVE[date_obj.month - 1]} {date_obj.year}"
+        ),
         period_title=_quarter_month_range_uk(date_obj),
         quarter_label=f"Q{quarter}",
         year_label=str(date_obj.year),
@@ -658,6 +557,7 @@ def main() -> int:
         print(f"End-of-quarter allocation: {after_path}")
         with after_path.open(encoding="utf-8") as f:
             after_data = json.load(f)
+    after_data = reclassify_cash_equivalents(after_data)
     after_payload = after_data.get("data", after_data)
 
     # Section 1: YTD figures
@@ -684,8 +584,6 @@ def main() -> int:
 
     # Section 2: allocation before/after
     after_alloc = read_allocations(after_data)
-    after_values = read_allocation_values(after_data)
-    net_worth = read_net_worth(after_data)
     quarter_start = datetime.strptime(initial_to_date, "%Y%m%d")
     if args.before:
         before_path = args.before
@@ -707,8 +605,8 @@ def main() -> int:
         return 2
     with before_path.open(encoding="utf-8") as f:
         before_data = json.load(f)
+    before_data = reclassify_cash_equivalents(before_data)
     before_alloc = read_allocations(before_data)
-    before_values = read_allocation_values(before_data)
     if not before_alloc:
         print(f"Error: no ASSET_ALLOCATION data in {before_path}")
         return 2
@@ -729,14 +627,11 @@ def main() -> int:
     analyzer = PortfolioAnalyzer(initial_portfolio, final_portfolio)
     report_data = build_report_data(
         analyzer,
-        initial_to_date,
+        final_to_date,
         ibkr_ytd,
         sp500_ytd,
         before_alloc,
         after_alloc,
-        before_values,
-        after_values,
-        net_worth,
         after_data,
     )
     html_doc = render_report(report_data)
