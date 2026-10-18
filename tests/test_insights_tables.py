@@ -10,6 +10,18 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsTablesTests(unittest.TestCase):
+    def test_group_totals_do_not_repeat_identical_single_position_labels(self):
+        tab = build_portfolio_tab(current_snapshot())
+        rows = next(block.rows for block in tab.blocks if block.name == "holdings")
+        for category in ("Crypto Lending", "P2P Lending", "Other Bets"):
+            self.assertEqual(sum(row[0] == category for row in rows), 1)
+
+    def test_malformed_ib_bucket_retains_the_existing_missing_data_behavior(self):
+        data = current_snapshot()
+        data["IB_DATA"] = "missing"
+        tab = build_portfolio_tab(data)
+        self.assertTrue(tab.blocks)
+
     def test_cached_status_does_not_move_financial_cells(self):
         current = current_snapshot()
         cached = current_snapshot()
@@ -32,10 +44,19 @@ class InsightsTablesTests(unittest.TestCase):
             current_snapshot(), previous_snapshot=previous_snapshot()
         )
         grid, typed, ranges = render_blocks(tab.blocks)
-        self.assertEqual(ranges["holdings"][:3], (0, 9, 0))
+        self.assertEqual(ranges["holdings"][0], 0)
+        self.assertEqual(ranges["holdings"][2:], (3, 6))
         self.assertEqual(ranges["summary"][0], 0)
-        self.assertEqual(ranges["summary"][2], 5)
-        self.assertEqual(len(tab.blocks[0].rows[1]), 4)
+        self.assertEqual(ranges["summary"][2], 0)
+        self.assertEqual(ranges["performance"][2], 0)
+        self.assertEqual(ranges["compact_allocation"][:3], (0, 13, 6))
+        self.assertEqual(ranges["compact_income"][0], 0)
+        self.assertEqual(ranges["compact_income"][2], 10)
+        holdings = next(block for block in tab.blocks if block.name == "holdings")
+        self.assertEqual(len(holdings.rows[1]), 3)
+        labels = [row[0] for row in holdings.rows]
+        self.assertLess(labels.index("Bonds"), labels.index("China Stocks"))
+        self.assertLess(labels.index("China Stocks"), labels.index("Stocks"))
         self.assertEqual(len(tab.row_groups), 1)
         block, start, end = tab.row_groups[0]
         hidden_start = ranges[block][0] + start
@@ -51,8 +72,9 @@ class InsightsTablesTests(unittest.TestCase):
         ):
             self.assertNotIn(noise, visible)
         self.assertEqual(tab.freeze_rows, 2)
-        self.assertEqual(tab.freeze_columns, 1)
-        self.assertEqual(grid[2][0], "SIM-BOND")
+        self.assertEqual(tab.freeze_columns, 4)
+        bond_row = next(r for r, row in enumerate(grid) if row[3] == "SIM-BOND")
+        self.assertEqual(grid[bond_row][4], 200)
 
     def test_holdings_filter_sits_below_the_summary_panels(self):
         tab = build_portfolio_tab(current_snapshot())
@@ -67,7 +89,7 @@ class InsightsTablesTests(unittest.TestCase):
         self.assertEqual(tab.title, "04 Oct 2026")
         self.assertEqual(ranges["holdings"][0], 0)
         self.assertEqual(tab.freeze_rows, 2)
-        self.assertEqual(tab.freeze_columns, 1)
+        self.assertEqual(tab.freeze_columns, 4)
         self.assertEqual(tab.filter_block_name, "holding_details")
         for section in (
             "allocation",

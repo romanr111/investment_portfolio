@@ -14,6 +14,7 @@ class FakeWorksheet:
         self.groups, self.hidden_columns, self.properties = set(), set(), {}
         self.hidden_rows = set()
         self.basic_filter = None
+        self.conditional_formats = []
         self.spreadsheet = None
         self.annotations = {}
 
@@ -60,6 +61,7 @@ class FakeSpreadsheet:
                 {
                     "properties": {"sheetId": s.id, "title": s.title},
                     "charts": deepcopy(s.charts),
+                    "conditionalFormats": deepcopy(s.conditional_formats),
                     "rowGroups": [],
                     "data": (
                         [
@@ -152,6 +154,13 @@ class FakeSpreadsheet:
                 by_id[value["filter"]["range"]["sheetId"]].basic_filter = value[
                     "filter"
                 ]
+            elif key == "addConditionalFormatRule":
+                sheet_id = value["rule"]["ranges"][0]["sheetId"]
+                by_id[sheet_id].conditional_formats.insert(
+                    value["index"], deepcopy(value["rule"])
+                )
+            elif key == "deleteConditionalFormatRule":
+                by_id[value["sheetId"]].conditional_formats.pop(value["index"])
             elif key in ("addDimensionGroup", "deleteDimensionGroup"):
                 r = value["range"]
                 s = by_id[r["sheetId"]]

@@ -34,9 +34,13 @@ supporting tab is `net_worth_timeline`. Same-date reruns update the same sheet
 IDs. Allocation, comparison, income, liquidity, FIRE, and exposure are sections
 on the main tab. Tiny holdings below USD 100 remain in expandable detail.
 
-The default view follows the original side-by-side layout: four holdings
-columns on the left, and totals, allocation, and estimated monthly income on
-the right. Headers are in row 2. Accounts, native P&L amounts/currency, IB
+The default view preserves the original four zones: FIRE and performance on
+the left, holdings grouped by asset category in the middle, and portfolio
+totals/allocation plus estimated income on the right. Holdings show asset,
+USD value and unrealized P&L percentage. Neutral grey headers replace blue;
+numeric P&L cells use the original red/white/green conditional gradient
+(-30%, 0%, +50%). Repeated updates replace only the saved generator rule.
+Headers are in row 2; columns through the asset names are frozen. Accounts, native P&L amounts/currency, IB
 weights, comparisons, targets, liquidity, exposure, and methodology sit under
 one collapsed `Details` section. The filter is on the full holdings table
 inside that section, so filtering does not hide adjacent summary panels.

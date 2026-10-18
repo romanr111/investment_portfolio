@@ -5,6 +5,88 @@ from src.google_sheets.insights_refresh import refresh_insights
 
 
 class InsightsWriterTests(unittest.TestCase):
+    def test_return_gradient_updates_without_duplicates_or_removing_user_rules(self):
+        from copy import deepcopy
+
+        book = FakeSpreadsheet()
+        data = current_snapshot()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        custom = {
+            "ranges": [
+                {
+                    "sheetId": main.id,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
+                    "startColumnIndex": 15,
+                    "endColumnIndex": 16,
+                }
+            ],
+            "booleanRule": {
+                "condition": {
+                    "type": "NUMBER_GREATER",
+                    "values": [{"userEnteredValue": "10"}],
+                },
+                "format": {"textFormat": {"bold": True}},
+            },
+        }
+        main.conditional_formats.insert(0, deepcopy(custom))
+        # Sheets readback rounds RGB channels and may expose colorStyle as well.
+        for point in main.conditional_formats[1]["gradientRule"].values():
+            point["color"] = {k: round(v, 7) for k, v in point["color"].items()}
+            point["colorStyle"] = {"rgbColor": dict(point["color"])}
+        data["IB_DATA"]["Stocks"]["NEW"] = 300
+        refresh_insights(book, data, config={})
+        refresh_insights(book, data, config={})
+        self.assertEqual(len(main.conditional_formats), 2)
+        self.assertIn(custom, main.conditional_formats)
+        del data["IB_DATA"]["Stocks"]["NEW"]
+        refresh_insights(book, data, config={})
+        self.assertEqual(len(main.conditional_formats), 2)
+        self.assertIn(custom, main.conditional_formats)
+
+    def test_no_empty_return_gradient_ranges_for_empty_holdings(self):
+        book = FakeSpreadsheet()
+        refresh_insights(
+            book, {"TOTAL_ASSETS": 0, "as_of_date": "2026-10-04"}, config={}
+        )
+        main = book.worksheet("04 Oct 2026")
+        for rule in main.conditional_formats:
+            for r in rule["ranges"]:
+                self.assertLess(r["startRowIndex"], r["endRowIndex"])
+
+    def test_headers_are_neutral_and_position_returns_have_the_original_gradient(self):
+        from src.google_sheets.insights_cells import render_blocks
+        from src.google_sheets.insights_tables import build_portfolio_tab
+
+        data = current_snapshot()
+        book = FakeSpreadsheet()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        _, _, ranges = render_blocks(build_portfolio_tab(data).blocks)
+        for block, (r0, r1, c0, c1) in ranges.items():
+            color = main.formats[(r0 + 1, c0 + 1)]["backgroundColor"]
+            self.assertEqual(color["red"], color["green"], block)
+            self.assertEqual(color["green"], color["blue"], block)
+        self.assertEqual(len(main.conditional_formats), 1)
+        rule = main.conditional_formats[0]
+        points = rule["gradientRule"]
+        self.assertEqual(float(points["minpoint"]["value"]), -0.30)
+        self.assertEqual(float(points["midpoint"]["value"]), 0)
+        self.assertEqual(float(points["maxpoint"]["value"]), 0.50)
+        self.assertEqual(points["midpoint"]["color"], {"red": 1, "green": 1, "blue": 1})
+        self.assertGreater(
+            points["minpoint"]["color"]["red"], points["minpoint"]["color"]["green"]
+        )
+        self.assertGreater(
+            points["maxpoint"]["color"]["green"], points["maxpoint"]["color"]["red"]
+        )
+        self.assertEqual([r["startColumnIndex"] for r in rule["ranges"]], [5, 7])
+        aaa_row = next(
+            r for (r, c), value in main.values.items() if c == 4 and value == "AAA"
+        )
+        self.assertAlmostEqual(main.values[(aaa_row, 6)], 0.0705)
+
     def test_moving_details_unhides_previously_generated_rows(self):
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
@@ -20,9 +102,12 @@ class InsightsWriterTests(unittest.TestCase):
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
         main = book.worksheet("04 Oct 2026")
-        self.assertNotIn("+", main.formats[(3, 2)]["numberFormat"]["pattern"])
-        self.assertNotIn("+", main.formats[(3, 3)]["numberFormat"]["pattern"])
-        self.assertNotIn(".", main.formats[(3, 2)]["numberFormat"]["pattern"])
+        self.assertNotIn("+", main.formats[(1, 8)]["numberFormat"]["pattern"])
+        self.assertNotIn("+", main.formats[(3, 9)]["numberFormat"]["pattern"])
+        bond_row = next(
+            r for (r, c), value in main.values.items() if c == 4 and value == "SIM-BOND"
+        )
+        self.assertNotIn(".", main.formats[(bond_row, 5)]["numberFormat"]["pattern"])
         self.assertEqual(main.basic_filter["range"]["endColumnIndex"], 8)
         self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
         self.assertEqual(main.properties["frozenRowCount"], 2)
@@ -30,7 +115,7 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertTrue(
             any(
                 request.get("repeatCell", {}).get("range", {}).get("startColumnIndex")
-                == 5
+                == 6
                 for request in book.batch_updates[-1]["requests"]
             )
         )
@@ -155,13 +240,13 @@ class InsightsWriterTests(unittest.TestCase):
         refresh_insights(book, data, config={})
         main = book.worksheet("04 Oct 2026")
         old_rows = max(r for r, c in main.values if c == 1)
-        main.values[(1, 12)] = "manual note"
+        main.values[(1, 16)] = "manual note"
         ids = [s.id for s in book.sheets]
         refresh_insights(book, current_snapshot(), config={})
         count = len(main.groups)
         refresh_insights(book, current_snapshot(), config={})
         self.assertEqual(len(main.groups), count)
-        self.assertEqual(main.cell(1, 12).value, "manual note")
+        self.assertEqual(main.cell(1, 16).value, "manual note")
         self.assertIn(main.cell(old_rows, 1).value, ("", None))
         self.assertEqual([s.id for s in book.sheets], ids)
         self.assertEqual(main.properties["frozenRowCount"], 2)
@@ -172,6 +257,16 @@ class InsightsWriterTests(unittest.TestCase):
         refresh_insights(book, current_snapshot(), config={})
         requests = book.batch_updates[0]["requests"]
         self.assertTrue(any("autoResizeDimensions" in request for request in requests))
+        detail_value_width = next(
+            request["updateDimensionProperties"]["properties"]["pixelSize"]
+            for request in requests
+            if request.get("updateDimensionProperties", {})
+            .get("range", {})
+            .get("dimension")
+            == "COLUMNS"
+            and request["updateDimensionProperties"]["range"]["startIndex"] == 2
+        )
+        self.assertGreaterEqual(detail_value_width, 100)
         self.assertEqual(
             book.worksheet("04 Oct 2026").formats[(4, 1)].get("wrapStrategy"), "WRAP"
         )
@@ -228,15 +323,15 @@ class InsightsWriterTests(unittest.TestCase):
         book = FakeSpreadsheet()
         main = book.add_worksheet("04 Oct 2026")
         main.values[(3, 8)] = "old total"
-        main.values[(3, 12)] = "old income"
+        main.values[(20, 12)] = "old income"
         main.values[(1, 13)] = "user note"
         approval = preview_adoption(main, [[0, 150, 0, 12]])
         refresh_insights(
             book, current_snapshot(), config={}, adoptions={main.id: approval}
         )
         self.assertEqual(main.cell(1, 13).value, "user note")
-        self.assertIn(main.cell(3, 12).value, ("", None))
-        self.assertEqual(main.cell(2, 7).value, 900.003)
+        self.assertIn(main.cell(20, 12).value, ("", None))
+        self.assertEqual(main.cell(1, 8).value, 900.003)
 
     def test_helper_collision_and_duplicate_dates_abort_before_any_write(self):
         from src.google_sheets.insights_writer import (
@@ -298,7 +393,7 @@ class InsightsWriterTests(unittest.TestCase):
         )
         book = FakeSpreadsheet()
         write_portfolio_snapshot(book, tab, "2026-10-04", 900.003)
-        self.assertEqual(book.worksheet("04 Oct 2026").cell(2, 7).value, "Unavailable")
+        self.assertEqual(book.worksheet("04 Oct 2026").cell(2, 2).value, "Unavailable")
 
     def test_new_reporting_date_is_created_at_the_front(self):
         book = FakeSpreadsheet()

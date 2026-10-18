@@ -161,11 +161,51 @@ def _append_format_request(
     )
 
 
+def _gradient_signature(rule: Any) -> Any:
+    """Identify a saved generator rule despite Sheets RGB readback rounding."""
+    try:
+        ranges = tuple(
+            sorted(
+                tuple(
+                    r.get(key, 0)
+                    for key in (
+                        "sheetId",
+                        "startRowIndex",
+                        "endRowIndex",
+                        "startColumnIndex",
+                        "endColumnIndex",
+                    )
+                )
+                for r in rule["ranges"]
+            )
+        )
+        points = []
+        for name in ("minpoint", "midpoint", "maxpoint"):
+            point = rule["gradientRule"][name]
+            color = point.get("color") or point.get("colorStyle", {}).get(
+                "rgbColor", {}
+            )
+            points.append(
+                (
+                    point["type"],
+                    float(point["value"]),
+                    tuple(
+                        round(color.get(channel, 0), 5)
+                        for channel in ("red", "green", "blue")
+                    ),
+                )
+            )
+        return ranges, tuple(points)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+
+
 def _tab_requests(
     tab: InsightTab,
     worksheet: Any,
     old_metadata: dict[str, Any],
     timeline_id: int,
+    conditional_formats: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int, int]:
     grid, typed_cells, block_ranges = render_blocks(tab.blocks)
     if not grid:
@@ -292,9 +332,9 @@ def _tab_requests(
             first_column,
             width,
             {
-                "backgroundColor": {"red": 0.13, "green": 0.23, "blue": 0.37},
+                "backgroundColor": {"red": 0.96, "green": 0.96, "blue": 0.96},
                 "textFormat": {
-                    "foregroundColor": {"red": 1, "green": 1, "blue": 1},
+                    "foregroundColor": {"red": 0.12, "green": 0.12, "blue": 0.12},
                     "bold": True,
                     "fontSize": 12,
                 },
@@ -311,13 +351,83 @@ def _tab_requests(
                 first_column,
                 width,
                 {
-                    "backgroundColor": {"red": 0.85, "green": 0.89, "blue": 0.94},
+                    "backgroundColor": {"red": 0.94, "green": 0.94, "blue": 0.94},
                     "textFormat": {"bold": True},
                     "wrapStrategy": "WRAP",
                     "horizontalAlignment": "CENTER",
                 },
                 "userEnteredFormat(backgroundColor,textFormat,wrapStrategy,horizontalAlignment)",
             )
+
+    for block_name, offset in tab.emphasis_rows:
+        start, _, first_column, last_column = block_ranges[block_name]
+        _append_format_request(
+            requests,
+            sheet_id,
+            start + offset,
+            start + offset + 1,
+            first_column,
+            last_column,
+            {
+                "textFormat": {"bold": True},
+                "backgroundColor": {"red": 0.97, "green": 0.97, "blue": 0.97},
+            },
+            "userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor",
+        )
+
+    gradient_ranges = []
+    for block_name, column_offset in tab.pnl_columns:
+        start, end, first_column, _ = block_ranges[block_name]
+        data_start = start + tab.header_offsets.get(block_name, 0) + 1
+        if data_start >= end:
+            continue
+        gradient_ranges.append(
+            {
+                "sheetId": sheet_id,
+                "startRowIndex": data_start,
+                "endRowIndex": end,
+                "startColumnIndex": first_column + column_offset,
+                "endColumnIndex": first_column + column_offset + 1,
+            }
+        )
+    gradient = (
+        {
+            "ranges": gradient_ranges,
+            "gradientRule": {
+                "minpoint": {
+                    "type": "NUMBER",
+                    "value": "-0.3",
+                    "color": {"red": 245 / 255, "green": 69 / 255, "blue": 69 / 255},
+                },
+                "midpoint": {
+                    "type": "NUMBER",
+                    "value": "0",
+                    "color": {"red": 1, "green": 1, "blue": 1},
+                },
+                "maxpoint": {
+                    "type": "NUMBER",
+                    "value": "0.5",
+                    "color": {"red": 46 / 255, "green": 204 / 255, "blue": 113 / 255},
+                },
+            },
+        }
+        if gradient_ranges
+        else None
+    )
+    old_signature = _gradient_signature(old_metadata.get("pnl_gradient"))
+    if old_signature is not None:
+        for index in range(len(conditional_formats) - 1, -1, -1):
+            if _gradient_signature(conditional_formats[index]) == old_signature:
+                requests.append(
+                    {
+                        "deleteConditionalFormatRule": {
+                            "sheetId": sheet_id,
+                            "index": index,
+                        }
+                    }
+                )
+    if gradient:
+        requests.append({"addConditionalFormatRule": {"rule": gradient, "index": 0}})
 
     for kind, start_row, end_row, start_column, end_column in _typed_format_ranges(
         typed_cells
@@ -485,6 +595,7 @@ def _tab_requests(
         "row_groups": current_groups,
         "role": "main",
         "ranges": [[0, row_count, 0, column_count]],
+        "pnl_gradient": gradient,
     }
     # The marker metadata is rewritten after construction so it records this refresh's geometry.
     requests.append(
@@ -901,7 +1012,17 @@ def write_portfolio_snapshot(
             updated.append(title)
         targets.append(existing)
     main, timeline = targets
-    main_requests, _, _, _ = _tab_requests(tab, main, old_main, timeline.id)
+    conditional_formats = next(
+        (
+            s.get("conditionalFormats", [])
+            for s in book_meta.get("sheets", [])
+            if s.get("properties", {}).get("sheetId") == main.id
+        ),
+        [],
+    )
+    main_requests, _, _, _ = _tab_requests(
+        tab, main, old_main, timeline.id, conditional_formats
+    )
     requests.extend(main_requests)
     timeline_rows = max(
         timeline.row_count,
