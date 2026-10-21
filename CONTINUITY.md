@@ -56,7 +56,7 @@
 - 2026-04-28T19:27Z [TOOL] Pushed cleanup to `origin/master` and verified GitHub lists only `data/README.md` under `data/`.
 
 ## Now
-- 2026-10-21 [CODE] Primary checkout is `agent/portfolio-ledger-v2` at `8d18079`. The report generator/tests/Q3 HTML are restored to the committed percentage-point comparison. Only this continuity record is modified; private `data/` remains local-only.
+- 2026-10-21 [CODE/TOOL] Primary checkout on `agent/portfolio-ledger-v2` includes the current Q3 report, percentage-point KPI, and canonical tracked `.agents/skills/quarterly-report/SKILL.md`; private `data/` remains local-only. PR #19 is the delivery path for these committed changes.
 
 ## Next
 - 2026-07-25 [USER] Add stable manual Q2 event IDs for Telegram, cold storage, and incomplete WhiteBit periods before treating Q2 movement/return coverage as complete.
