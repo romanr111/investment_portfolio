@@ -541,6 +541,10 @@ class BinanceClient(ExchangeBase):
         total_stablecoins = sum(spot_stablecoins.values()) + sum(
             funding_stablecoins.values()
         )
+        self.cash_equivalent_balances = {
+            asset: float(spot_stablecoins.get(asset, 0)) + float(funding_stablecoins.get(asset, 0))
+            for asset in self.CASH_EQUIVALENTS
+        }
         logger.debug(f"Total stablecoin balance: {int(total_stablecoins)}")
         return int(total_stablecoins)
 

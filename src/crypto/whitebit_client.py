@@ -74,16 +74,19 @@ class WhiteBit(ExchangeBase):
         return response.json()
 
     def get_cash_balance(self) -> int:
-        """Implement ExchangeBase method to get stablecoin balance in cents."""
+        """Return stablecoin cash balance in USD."""
         total = 0
+        self.cash_equivalent_balances = {}
         for stablecoin in self.STABLECOINS:
             try:
                 balance = self.get_trade_balance(stablecoin)
                 available = float(balance.get("available", "0"))
                 total += available
+                if stablecoin in self.CASH_EQUIVALENTS:
+                    self.cash_equivalent_balances[stablecoin] = round(available)
             except Exception:
                 continue
-        return int(total * 100)  # Convert to cents
+        return int(round(total))  # CashPortfolio consumes USD, like the other clients.
 
     def get_all_crypto_balances(self) -> Dict[str, float]:
         """Implement ExchangeBase method to get all crypto balances."""
@@ -97,7 +100,7 @@ class WhiteBit(ExchangeBase):
 
             # Ensure tokens from WHITEBIT_SAVINGS are present based on rules:
             core_tokens = {"BTC", "ETH", "SOL", "BNB"}
-            excluded_stablecoins = {"USDT", "USDC"}
+            excluded_stablecoins = {"USDT", "USDC"} | self.CASH_EQUIVALENTS
             for position in WHITEBIT_SAVINGS:
                 ticker = position[0]
                 if ticker in core_tokens or ticker not in excluded_stablecoins:
@@ -146,7 +149,7 @@ class WhiteBitFallback(WhiteBit):
         """Return hardcoded crypto balances from WHITEBIT_SAVINGS."""
         balances = {}
         core_tokens = {"BTC", "ETH", "SOL", "BNB"}
-        excluded_stablecoins = {"USDT", "USDC"}
+        excluded_stablecoins = {"USDT", "USDC"} | self.CASH_EQUIVALENTS
 
         for position in WHITEBIT_SAVINGS:
             ticker = position[0]
