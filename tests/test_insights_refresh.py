@@ -104,7 +104,12 @@ class SnapshotReplayIntegrationTests(unittest.TestCase):
             path = Path(directory) / "envelope.json"
             path.write_text(json.dumps({"as_of_date": "2026-09-30", "data": data}))
             book = FakeSpreadsheet()
-            refresh_from_snapshot(book, path, snapshot_dir=directory)
+            refresh_from_snapshot(
+                book,
+                path,
+                config_path=Path(directory) / "absent-insights-config.json",
+                snapshot_dir=directory,
+            )
             self.assertEqual(book.sheets[0].title, "30 Sep 2026")
             self.assertEqual(
                 book.worksheet("net_worth_timeline").cell(1, 2).value, "30 Sep 2026"

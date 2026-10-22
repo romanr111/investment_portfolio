@@ -23,7 +23,7 @@ class InsightsIntegrationTests(unittest.TestCase):
         updater.spreadsheet = book
         data = current_snapshot()
         for _ in range(2):
-            updater.update_portfolio(data)
+            updater.update_portfolio(data, config={})
         self.assertEqual(timeline.values[(2, 1)], data["TOTAL_ASSETS"])
         self.assertEqual(timeline.values[(2, 2)], "04 Oct 2026")
         self.assertEqual(timeline.values[(1, 3)], "=A1/2")
@@ -33,7 +33,7 @@ class InsightsIntegrationTests(unittest.TestCase):
         self.assertEqual((timeline.row_count, timeline.col_count), (200, 4))
         self.assertTrue(all(c <= 3 for r, c in timeline.values))
         data["as_of_date"] = "2026-12-31"
-        updater.update_portfolio(data)
+        updater.update_portfolio(data, config={})
         self.assertEqual(timeline.values[(3, 2)], "31 Dec 2026")
         self.assertEqual(book.worksheet("net_worth_timeline").id, timeline.id)
         self.assertEqual(len(book.sheets), 3)
@@ -48,16 +48,16 @@ class InsightsIntegrationTests(unittest.TestCase):
             "Rendering must not query broker"
         )
         data["IB_CLIENT"] = broker
-        updater.update_portfolio(data)
+        updater.update_portfolio(data, config={})
         ids = [s.id for s in book.sheets]
-        updater.update_portfolio(data)
+        updater.update_portfolio(data, config={})
         self.assertEqual(
             [s.title for s in book.sheets], ["04 Oct 2026", "net_worth_timeline"]
         )
         self.assertEqual([s.id for s in book.sheets], ids)
         broker.get_stock_positions_analytics.assert_not_called()
         data["as_of_date"] = "2026-12-31"
-        updater.update_portfolio(data)
+        updater.update_portfolio(data, config={})
         self.assertEqual(len(book.sheets), 3)
         self.assertEqual(book.worksheet("04 Oct 2026").id, ids[0])
         self.assertEqual(book.worksheet("net_worth_timeline").id, ids[1])

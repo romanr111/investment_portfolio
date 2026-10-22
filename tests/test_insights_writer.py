@@ -117,7 +117,7 @@ class InsightsWriterTests(unittest.TestCase):
         detail_row = next(
             r
             for (r, c), v in main.values.items()
-            if c == 1 and v == "Synthetic Alpha (AAA)"
+            if c == 1 and v == "AAA"
         )
         self.assertEqual(
             main.formats[(detail_row, 8)]["numberFormat"]["pattern"],
@@ -361,6 +361,97 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertEqual(sheet.charts[0]["spec"]["title"], "Deployed Capital")
         self.assertEqual(len(book.sheets), 2)
 
+    def test_timeline_stops_at_first_gap_and_leaves_foreign_series_untouched(self):
+        book = FakeSpreadsheet()
+        sheet = book.add_worksheet("net_worth_timeline", cols=6)
+        sheet.values[(1, 1)], sheet.values[(1, 2)] = 900.003, "30 Sep 2026"
+        # Unrelated helper rows below the series gap are never ours to touch.
+        sheet.values[(4, 2)] = "legacy note"
+        sheet.values[(5, 1)], sheet.values[(5, 2)] = 77.0, "31/12/2025"
+        refresh_insights(book, current_snapshot(), config={})
+        self.assertEqual(sheet.cell(2, 1).value, 900.003)
+        self.assertEqual(sheet.cell(2, 2).value, "04 Oct 2026")
+        self.assertEqual(sheet.cell(4, 2).value, "legacy note")
+        self.assertEqual(sheet.cell(5, 1).value, 77.0)
+
+    def test_timeline_append_rejects_an_occupied_date_cell_right_after_the_series(self):
+        from src.google_sheets.insights_writer import SheetConflictError
+
+        book = FakeSpreadsheet()
+        sheet = book.add_worksheet("net_worth_timeline", cols=6)
+        sheet.values[(1, 1)], sheet.values[(1, 2)] = 900.003, "30 Sep 2026"
+        sheet.values[(2, 2)] = "05 Oct 2026"
+        with self.assertRaises(SheetConflictError):
+            refresh_insights(book, current_snapshot(), config={})
+        self.assertFalse(book.batch_updates)
+
+    def test_stale_recorded_row_group_is_not_deleted_by_the_next_write(self):
+        book = FakeSpreadsheet()
+        data = current_snapshot()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        self.assertTrue(main.groups)
+        # Recorded groups still live on the tab are pruned by their own range.
+        refresh_insights(book, data, config={})
+        self.assertIn(
+            "deleteDimensionGroup",
+            [next(iter(r)) for r in book.batch_updates[-1]["requests"]],
+        )
+        # Groups that vanished outside the generator are never deleted blindly.
+        main.groups.clear()
+        refresh_insights(book, data, config={})
+        self.assertNotIn(
+            "deleteDimensionGroup",
+            [next(iter(r)) for r in book.batch_updates[-1]["requests"]],
+        )
+        # The current frame's groups are still established.
+        self.assertTrue(main.groups)
+
+    def test_adopted_replacement_removes_a_legacy_single_column_pnl_gradient(self):
+        from src.google_sheets.insights_writer import preview_adoption
+
+        book = FakeSpreadsheet()
+        main = book.add_worksheet("04 Oct 2026")
+        main.values[(1, 1)] = "legacy"
+        main.conditional_formats.append(
+            {
+                "ranges": [
+                    {
+                        "sheetId": main.id,
+                        "startRowIndex": 3,
+                        "endRowIndex": 40,
+                        "startColumnIndex": 5,
+                        "endColumnIndex": 6,
+                    }
+                ],
+                "gradientRule": {
+                    "minpoint": {
+                        "type": "NUMBER",
+                        "value": "-0.3",
+                        "color": {"red": 245 / 255, "green": 69 / 255, "blue": 69 / 255},
+                    },
+                    "midpoint": {
+                        "type": "NUMBER",
+                        "value": "0",
+                        "color": {"red": 1, "green": 1, "blue": 1},
+                    },
+                    "maxpoint": {
+                        "type": "NUMBER",
+                        "value": "0.5",
+                        "color": {"red": 46 / 255, "green": 204 / 255, "blue": 113 / 255},
+                    },
+                },
+            }
+        )
+        approval = preview_adoption(main, [[0, main.row_count, 0, 12]])
+        refresh_insights(
+            book, current_snapshot(), config={}, adoptions={main.id: approval}
+        )
+        gradients = [r for r in main.conditional_formats if r.get("gradientRule")]
+        self.assertEqual(len(gradients), 1)
+        # The managed replacement spans both P&L columns, not one.
+        self.assertGreater(len(gradients[0]["ranges"]), 1)
+
     def test_growing_main_tab_cannot_overwrite_unowned_formula(self):
         from src.google_sheets.insights_cells import render_blocks
         from src.google_sheets.insights_tables import build_portfolio_tab
@@ -482,7 +573,7 @@ class InsightsWriterTests(unittest.TestCase):
         full_row = next(
             r
             for (r, c), value in main.values.items()
-            if c == 1 and value == "Synthetic Alpha (AAA)"
+            if c == 1 and value == "AAA"
         )
         self.assertTrue(
             main.formats[(full_row, 6)]["numberFormat"]["pattern"].startswith("+")

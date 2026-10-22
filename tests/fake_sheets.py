@@ -62,7 +62,12 @@ class FakeSpreadsheet:
                     "properties": {"sheetId": s.id, "title": s.title},
                     "charts": deepcopy(s.charts),
                     "conditionalFormats": deepcopy(s.conditional_formats),
-                    "rowGroups": [],
+                    "rowGroups": deepcopy(
+                        [
+                            {"startRowIndex": start, "endRowIndex": end}
+                            for start, end in sorted(s.groups)
+                        ]
+                    ),
                     "data": (
                         [
                             {

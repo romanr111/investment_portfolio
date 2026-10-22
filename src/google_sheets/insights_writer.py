@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import hashlib
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -242,12 +243,63 @@ def _gradient_signature(rule: Any) -> Any:
         return None
 
 
+_LEGACY_PNL_POINTS = (
+    ("NUMBER", -0.3, (round(245 / 255, 5), round(69 / 255, 5), round(69 / 255, 5))),
+    ("NUMBER", 0.0, (1.0, 1.0, 1.0)),
+    ("NUMBER", 0.5, (round(46 / 255, 5), round(204 / 255, 5), round(113 / 255, 5))),
+)
+
+
+def _legacy_pnl_gradient(rules: Any) -> Any:
+    """Return the single-column P&L gradient from formatting.py, if still live."""
+    for rule in rules if isinstance(rules, list) else []:
+        signature = _gradient_signature(rule)
+        if signature is None:
+            continue
+        ranges, points = signature
+        if (
+            len(ranges) == 1
+            and ranges[0][3] == 5
+            and ranges[0][4] == 6
+            and points == _LEGACY_PNL_POINTS
+        ):
+            return deepcopy(rule)
+    return None
+
+
+def _sheet_row_groups(sheet_entry: Any) -> Any:
+    """Live ROW dimension groups for one sheet, or None when metadata omits them."""
+    if not isinstance(sheet_entry, dict):
+        return None
+    groups: set = set()
+
+    def take(items: Any) -> None:
+        for group in items or []:
+            if not isinstance(group, dict):
+                continue
+            start = group.get("startRowIndex")
+            end = group.get("endRowIndex")
+            if isinstance(start, int) and isinstance(end, int) and start < end:
+                groups.add((start, end))
+
+    known = False
+    if "rowGroups" in sheet_entry:
+        take(sheet_entry.get("rowGroups"))
+        known = True
+    for block in sheet_entry.get("data") or []:
+        if isinstance(block, dict) and "rowGroups" in block:
+            take(block.get("rowGroups"))
+            known = True
+    return groups if known else None
+
+
 def _tab_requests(
     tab: InsightTab,
     worksheet: Any,
     old_metadata: dict[str, Any],
     timeline_id: int,
     conditional_formats: list[dict[str, Any]],
+    live_row_groups: set = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int, int]:
     grid, typed_cells, block_ranges = render_blocks(tab.blocks)
     if not grid:
@@ -503,6 +555,13 @@ def _tab_requests(
         if gradient_ranges
         else None
     )
+    # A tab adopted from the legacy formatting.py rule keeps its own
+    # single-column P&L gradient; when nothing was recorded yet, replace it on
+    # this run instead of leaving two competing gradients on the tab.
+    if not _gradient_signature(old_metadata.get("pnl_gradient")):
+        legacy = _legacy_pnl_gradient(conditional_formats)
+        if legacy is not None:
+            old_metadata = {**old_metadata, "pnl_gradient": deepcopy(legacy)}
     old_signature = _gradient_signature(old_metadata.get("pnl_gradient"))
     if old_signature is not None:
         for index in range(len(conditional_formats) - 1, -1, -1):
@@ -622,33 +681,54 @@ def _tab_requests(
                 continue
             start = group.get("start")
             end = group.get("end")
-            if isinstance(start, int) and isinstance(end, int) and start < end:
-                requests.append(
-                    {
-                        "updateDimensionProperties": {
-                            "range": {
-                                "sheetId": sheet_id,
-                                "dimension": "ROWS",
-                                "startIndex": start,
-                                "endIndex": end,
-                            },
-                            "properties": {"hiddenByUser": False},
-                            "fields": "hiddenByUser",
-                        }
-                    }
-                )
-                requests.append(
-                    {
-                        "deleteDimensionGroup": {
-                            "range": {
-                                "sheetId": sheet_id,
-                                "dimension": "ROWS",
-                                "startIndex": start,
-                                "endIndex": end,
+            if not (isinstance(start, int) and isinstance(end, int) and start < end):
+                continue
+            if live_row_groups is not None and (start, end) not in live_row_groups:
+                # Recorded ranges the tab no longer groups: never send a
+                # deleteDimensionGroup the API cannot match. Restore row
+                # visibility inside the existing grid, then leave it alone.
+                if end <= row_count:
+                    requests.append(
+                        {
+                            "updateDimensionProperties": {
+                                "range": {
+                                    "sheetId": sheet_id,
+                                    "dimension": "ROWS",
+                                    "startIndex": start,
+                                    "endIndex": end,
+                                },
+                                "properties": {"hiddenByUser": False},
+                                "fields": "hiddenByUser",
                             }
                         }
+                    )
+                continue
+            requests.append(
+                {
+                    "updateDimensionProperties": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": start,
+                            "endIndex": end,
+                        },
+                        "properties": {"hiddenByUser": False},
+                        "fields": "hiddenByUser",
                     }
-                )
+                }
+            )
+            requests.append(
+                {
+                    "deleteDimensionGroup": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": start,
+                            "endIndex": end,
+                        }
+                    }
+                }
+            )
 
     current_groups = []
     for block_name, relative_start, relative_end in tab.row_groups:
@@ -1038,15 +1118,20 @@ def _timeline_plan(worksheet, valuation_date):
     """Find the legacy A=value/B=date row without adopting or restyling the tab."""
     grid = _read(worksheet, worksheet.row_count, 2) if worksheet else {}
     entries, row_by_date = {}, {}
+    last_series_row = None
     for row in sorted({r for r, _ in grid}):
         amount, day = grid.get((row, 0)), _timeline_date(grid.get((row, 1)))
-        if day is None:
-            if row == 0 and str(grid.get((row, 1), "")).lower() in (
-                "date",
-                "valuation date",
-            ):
-                continue
-            raise SheetConflictError(f"Unrecognised timeline date on row {row + 1}")
+        if row == 0 and str(grid.get((row, 1), "")).lower() in (
+            "date",
+            "valuation date",
+        ):
+            continue
+        if amount in ("", None) or day is None:
+            # The legacy series is a contiguous leading block; the first gap
+            # ends it. Legacy tabs may carry unrelated helper series (notes,
+            # formulas, other apps' dates) below that are never ours to
+            # validate, parse, or overwrite.
+            break
         try:
             parsed = float(str(amount).replace(",", ""))
         except (ValueError, TypeError):
@@ -1058,8 +1143,20 @@ def _timeline_plan(worksheet, valuation_date):
                 "Timeline contains invalid amounts or duplicate dates"
             )
         entries[day], row_by_date[day] = parsed, row
-    target_row = row_by_date.get(valuation_date, max([r for r, _ in grid] + [-1]) + 1)
-    return target_row, valuation_date in row_by_date
+        last_series_row = row
+    fallback = (
+        last_series_row + 1
+        if last_series_row is not None
+        else max([r for r, _ in grid] + [-1]) + 1
+    )
+    target_row, existing_date = row_by_date.get(valuation_date, fallback), (
+        valuation_date in row_by_date
+    )
+    if not existing_date and grid.get((target_row, 1)) not in ("", None):
+        raise SheetConflictError(
+            f"Timeline append cell is occupied on row {target_row + 1}"
+        )
+    return target_row, existing_date
 
 
 def _cells(sheet_id, row, column, values):
@@ -1133,16 +1230,22 @@ def write_portfolio_snapshot(
             updated.append(title)
         targets.append(existing)
     main, timeline = targets
-    conditional_formats = next(
+    main_entry = next(
         (
-            s.get("conditionalFormats", [])
+            s
             for s in book_meta.get("sheets", [])
             if s.get("properties", {}).get("sheetId") == main.id
         ),
-        [],
+        {},
     )
+    conditional_formats = main_entry.get("conditionalFormats", [])
     main_requests, _, _, _ = _tab_requests(
-        tab, main, old_main, timeline.id, conditional_formats
+        tab,
+        main,
+        old_main,
+        timeline.id,
+        conditional_formats,
+        live_row_groups=_sheet_row_groups(main_entry),
     )
     requests.extend(main_requests)
     # Preserve legacy charts, dimensions, formatting and adjacent formulas. Only
