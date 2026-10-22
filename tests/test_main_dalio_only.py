@@ -31,6 +31,9 @@ class MainDalioOnlyModeTests(unittest.TestCase):
             "history_frequency": "monthly",
             "history_start_date": None,
             "history_end_date": None,
+            "adoption_preview": None,
+            "adoptions_file": None,
+            "dry_run": False,
         }
         base.update(overrides)
         return argparse.Namespace(**base)

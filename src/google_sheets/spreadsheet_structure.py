@@ -1,4 +1,5 @@
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 from decimal import Decimal
 from typing import List, Dict, Any
@@ -138,6 +139,58 @@ def update_portfolio_spreadsheet(
         adoptions=adoptions,
         dry_run=dry_run,
     )
+
+
+def preview_portfolio_adoptions(
+    credentials_path: str, spreadsheet_name: str, sheet_titles: List[str]
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Produce read-only adoption previews for the named worksheets.
+
+    Returns ``{str(sheet_id): receipt}``; save that exact JSON as an adoptions
+    file. Applying it later is re-validated against the tab's fingerprint in the
+    writer, so any edit made in between is rejected instead of overwritten.
+    """
+    from .insights_writer import MAX_DATA_COLUMNS, preview_adoption
+
+    updater = PortfolioUpdater(credentials_path, spreadsheet_name)
+    previews = {}
+    for title in sheet_titles:
+        worksheet = updater.spreadsheet.worksheet(title)
+        previews[str(worksheet.id)] = preview_adoption(
+            worksheet,
+            [
+                [
+                    0,
+                    worksheet.row_count,
+                    0,
+                    min(worksheet.col_count, MAX_DATA_COLUMNS),
+                ]
+            ],
+        )
+    return previews
+
+
+def load_adoptions_file(path: str) -> Dict[int, Dict[str, Any]]:
+    """Load an adoptions JSON file; string keys become int sheet ids for the writer."""
+    with open(path) as handle:
+        try:
+            adoptions = json.load(handle)
+        except ValueError:
+            raise ValueError("Adoptions file is not valid JSON") from None
+    if not isinstance(adoptions, dict) or not all(
+        isinstance(receipt, dict) for receipt in adoptions.values()
+    ):
+        raise ValueError("Adoptions file must map sheet ids to preview receipts")
+    parsed = {}
+    for sheet_id, receipt in adoptions.items():
+        try:
+            parsed[int(sheet_id)] = receipt
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"Invalid worksheet id in adoptions file: {sheet_id!r}"
+            ) from None
+    return parsed
 
 
 def create_enhanced_stocks_data(

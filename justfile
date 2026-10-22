@@ -10,6 +10,16 @@ test-parallel:
 run:
     venv/bin/python -m src.portfolio_sync
 
+# Preview adopting existing hand-made worksheet tabs; prints the adoptions JSON.
+# Usage: just adoption-preview "04 Oct 2026,net_worth_timeline"
+adoption-preview titles:
+    venv/bin/python main.py --adoption-preview {{titles}}
+
+# Apply a reviewed adoptions JSON (from adoption-preview) during a sheet update.
+# Usage: just adoption-apply data/adoptions.json
+adoption-apply file:
+    venv/bin/python -m src.portfolio_sync --adoptions-file {{file}}
+
 crypto-sync *args:
     venv/bin/python -m src.portfolio_ledger.cli {{args}}
 

@@ -1,6 +1,7 @@
 import argparse
 import time
 import logging
+import json
 import sys
 import traceback
 from pathlib import Path
@@ -148,6 +149,24 @@ def _build_cli() -> argparse.ArgumentParser:
         "--skip-sheet-update",
         action="store_true",
         help="Skip updating Google Sheets (useful for testing/debugging).",
+    )
+    parser.add_argument(
+        "--adoption-preview",
+        default=None,
+        help=(
+            "Comma-separated worksheet titles to preview for adoption; prints the "
+            "adoptions JSON and exits before touching any data."
+        ),
+    )
+    parser.add_argument(
+        "--adoptions-file",
+        default=None,
+        help="Reviewed adoptions JSON produced by --adoption-preview.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate sheet writes without applying them to Google Sheets.",
     )
     parser.add_argument(
         "--skip-dalio-analysis",
@@ -454,6 +473,24 @@ def main() -> int:
             raise ValueError(
                 "--dalio-only cannot be combined with --skip-dalio-analysis."
             )
+        if args.adoption_preview:
+            # Read-only preview of hand-made tabs for adoption; no live data fetch.
+            from src.google_sheets.spreadsheet_structure import (
+                preview_portfolio_adoptions,
+            )
+
+            titles = [
+                title.strip() for title in args.adoption_preview.split(",") if title.strip()
+            ]
+            if not titles:
+                raise ValueError("--adoption-preview requires at least one sheet title.")
+            previews = preview_portfolio_adoptions(
+                args.credentials_path, args.spreadsheet_name, titles
+            )
+            print(json.dumps(previews, indent=2))
+            return 0
+        if args.adoptions_file and args.skip_sheet_update:
+            raise ValueError("--adoptions-file requires the sheet update to run.")
         if args.dalio_only:
             if not args.dalio_input_csv:
                 history_csv = Path(args.history_csv_path)
@@ -476,6 +513,7 @@ def main() -> int:
         from src.allocation_calculator import AllocationCalculator
         from src.data_source import DataSource
         from src.google_sheets.spreadsheet_structure import (
+            load_adoptions_file,
             update_portfolio_spreadsheet,
         )
         from src.allocation_writer import write_allocation_from_data
@@ -547,6 +585,12 @@ def main() -> int:
                 args.credentials_path,
                 args.spreadsheet_name,
                 ib_client,
+                adoptions=(
+                    load_adoptions_file(args.adoptions_file)
+                    if args.adoptions_file
+                    else None
+                ),
+                dry_run=args.dry_run,
             )
             logger.debug("Portfolio sheet update completed")
         else:
