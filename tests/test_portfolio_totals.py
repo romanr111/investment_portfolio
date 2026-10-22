@@ -36,9 +36,9 @@ class TestPortfolioTotals(unittest.TestCase):
             data_source = DataSource.__new__(DataSource)
             data_source._data_timestamp = 1.0
             data_source.ib_data = {
-                "China Stocks": {"700": 1100},
-                "Stocks": {"AAPL": 1800},
-                "Precious Metals": {"GLD": 500},
+                "China Stocks": {"700": 1100, "9988": 300},
+                "Stocks": {"AAPL": 1800, "NVDA": 400},
+                "Precious Metals": {"GLD": 500, "IAU": 200},
                 "Total Stocks Value": 2900,
                 "IB_Portfolio_Value": 3400,
             }

@@ -690,9 +690,7 @@ def build_portfolio_tab(
         )
         holding_rows.append((category, _cell(total, "amount")))
         for row in positions:
-            if not row["tiny"] and not (
-                len(positions) == 1 and row["symbol"] == category
-            ):
+            if not row["tiny"] and len(positions) > 1:  # a single row's subtotal already says it all
                 holding_rows.append(
                     (
                         row["symbol"],

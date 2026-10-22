@@ -92,4 +92,18 @@ class InsightsTablesTests(unittest.TestCase):
         )
         self.assertIn(("compact_allocation", offset), tab.emphasis_rows)
 
+    def test_single_position_categories_collapse_into_their_subtotal(self):
+        tab = build_portfolio_tab(current_snapshot())
+        labels = [
+            row[0]
+            for row in next(
+                block.rows for block in tab.blocks if block.name == "holdings"
+            )
+        ]
+        self.assertIn("Cash", labels)
+        self.assertNotIn("Cash total", labels)
+        self.assertIn("Commodities", labels)
+        self.assertNotIn("SIM-COM", labels)
+        self.assertIn("AAA", labels)
+
 
