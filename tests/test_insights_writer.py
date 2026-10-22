@@ -248,6 +248,74 @@ class InsightsWriterTests(unittest.TestCase):
         # The current frame's groups are still established.
         self.assertTrue(main.groups)
 
+    def test_live_row_group_metadata_parses_the_nested_api_shape(self):
+        from src.google_sheets.insights_writer import _sheet_row_groups
+
+        nested = {
+            "rowGroups": [
+                {
+                    "range": {
+                        "sheetId": 1,
+                        "dimension": "ROWS",
+                        "startIndex": 10,
+                        "endIndex": 40,
+                    },
+                    "depth": 1,
+                },
+                {
+                    "range": {
+                        "sheetId": 1,
+                        "dimension": "ROWS",
+                        "startIndex": 10,
+                        "endIndex": 40,
+                    },
+                    "depth": 2,
+                },
+            ]
+        }
+        self.assertEqual(_sheet_row_groups(nested), {(10, 40): 2})
+        self.assertEqual(
+            _sheet_row_groups({"rowGroups": [{"startRowIndex": 1, "endRowIndex": 5}]}),
+            {(1, 5): 1},
+        )
+        self.assertIsNone(_sheet_row_groups({"properties": {}}))
+
+    def test_same_date_rewrite_prunes_stacked_duplicate_groups(self):
+        book = FakeSpreadsheet()
+        data = current_snapshot()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        # The API nests another addDimensionGroup over the live span as depth 2.
+        (start, end), _count = next(iter(main.groups.items()))
+        main.groups[(start, end)] = 2
+        refresh_insights(book, data, config={})
+        deletions = [
+            req["deleteDimensionGroup"]["range"]
+            for req in book.batch_updates[-1]["requests"]
+            if "deleteDimensionGroup" in req
+        ]
+        self.assertEqual(
+            sorted((req["startIndex"], req["endIndex"]) for req in deletions),
+            [(start, end), (start, end)],
+        )
+        self.assertEqual(main.groups[(start, end)], 1)
+
+    def test_grid_shrink_moves_the_row_group_off_the_previous_span(self):
+        book = FakeSpreadsheet()
+        grown = current_snapshot()
+        grown["IB_DATA"]["Precious Metals"].update({"SIM-SILVER": 60.0})
+        refresh_insights(book, grown, config={})
+        main = book.worksheet("04 Oct 2026")
+        (old_start, old_end), _count = next(iter(main.groups.items()))
+        refresh_insights(book, current_snapshot(), config={})
+        remaining = dict(main.groups)
+        self.assertEqual(len(remaining), 1)
+        (new_start, new_end), count = next(iter(remaining.items()))
+        self.assertEqual(count, 1)
+        self.assertLess(new_end, old_end)
+        # Rows the deleted group hid beyond the shorter span stay visible.
+        self.assertNotIn(old_end - 1, main.hidden_rows)
+
     def test_adopted_replacement_removes_a_legacy_single_column_pnl_gradient(self):
         from src.google_sheets.insights_writer import preview_adoption
 

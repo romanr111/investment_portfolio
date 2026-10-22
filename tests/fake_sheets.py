@@ -11,7 +11,8 @@ class FakeWorksheet:
         self.title, self.id = title, sheet_id
         self.row_count, self.col_count = rows, cols
         self.values, self.formats, self.charts = {}, {}, []
-        self.groups, self.hidden_columns, self.properties = set(), set(), {}
+        # The API stacks repeated same-range groups as depth levels: model as spans with counts.
+        self.groups, self.hidden_columns, self.properties = {}, set(), {}
         self.hidden_rows = set()
         self.basic_filter = None
         self.conditional_formats = []
@@ -56,18 +57,29 @@ class FakeSpreadsheet:
         return sheet
 
     def fetch_sheet_metadata(self, params=None):
-        return {
-            "sheets": [
+        # Real API shape: the span nests under "range" with one entry per depth.
+        sheets_meta = []
+        for s in self.sheets:
+            row_groups = []
+            for (start, end), count in sorted(s.groups.items()):
+                for depth in range(1, count + 1):
+                    row_groups.append(
+                        {
+                            "range": {
+                                "sheetId": s.id,
+                                "dimension": "ROWS",
+                                "startIndex": start,
+                                "endIndex": end,
+                            },
+                            "depth": depth,
+                        }
+                    )
+            sheets_meta.append(
                 {
                     "properties": {"sheetId": s.id, "title": s.title},
                     "charts": deepcopy(s.charts),
                     "conditionalFormats": deepcopy(s.conditional_formats),
-                    "rowGroups": deepcopy(
-                        [
-                            {"startRowIndex": start, "endRowIndex": end}
-                            for start, end in sorted(s.groups)
-                        ]
-                    ),
+                    "rowGroups": row_groups,
                     "data": (
                         [
                             {
@@ -90,9 +102,8 @@ class FakeSpreadsheet:
                         else []
                     ),
                 }
-                for s in self.sheets
-            ]
-        }
+            )
+        return {"sheets": sheets_meta}
 
     def batch_update(self, body):
         self.batch_updates.append(deepcopy(body))
@@ -180,9 +191,14 @@ class FakeSpreadsheet:
                 s = by_id[r["sheetId"]]
                 group = (r["startIndex"], r["endIndex"])
                 if key == "addDimensionGroup":
-                    s.groups.add(group)
+                    s.groups[group] = s.groups.get(group, 0) + 1
+                elif s.groups.get(group, 0) > 1:
+                    # A delete lowers the depth of the group over the span.
+                    s.groups[group] -= 1
+                elif s.groups.get(group, 0) == 1:
+                    del s.groups[group]
                 else:
-                    s.groups.remove(group)
+                    raise KeyError(f"deleteDimensionGroup over absent group {group}")
             elif key == "updateDimensionGroup":
                 group = value["dimensionGroup"]
                 r = group["range"]

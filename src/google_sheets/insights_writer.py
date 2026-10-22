@@ -268,19 +268,28 @@ def _legacy_pnl_gradient(rules: Any) -> Any:
 
 
 def _sheet_row_groups(sheet_entry: Any) -> Any:
-    """Live ROW dimension groups for one sheet, or None when metadata omits them."""
+    """Live ROW dimension group spans with per-span counts, or None when omitted.
+
+    The Sheets API nests a DimensionRange (startIndex/endIndex) under "range";
+    flat entries still use GridRange keys (startRowIndex/endRowIndex). The API
+    stacks repeated addDimensionGroup calls at the same range as extra depths,
+    so equal spans count once per live entry and the writer deletes each of them.
+    """
     if not isinstance(sheet_entry, dict):
         return None
-    groups: set = set()
+    groups: dict = {}
 
     def take(items: Any) -> None:
         for group in items or []:
             if not isinstance(group, dict):
                 continue
-            start = group.get("startRowIndex")
-            end = group.get("endRowIndex")
+            span = group.get("range")
+            if not isinstance(span, dict):
+                span = group
+            start = span.get("startRowIndex", span.get("startIndex"))
+            end = span.get("endRowIndex", span.get("endIndex"))
             if isinstance(start, int) and isinstance(end, int) and start < end:
-                groups.add((start, end))
+                groups[(start, end)] = groups.get((start, end), 0) + 1
 
     known = False
     if "rowGroups" in sheet_entry:
@@ -299,7 +308,7 @@ def _tab_requests(
     old_metadata: dict[str, Any],
     timeline_id: int,
     conditional_formats: list[dict[str, Any]],
-    live_row_groups: set = None,
+    live_row_groups: dict = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int, int]:
     grid, typed_cells, block_ranges = render_blocks(tab.blocks)
     if not grid:
@@ -683,26 +692,30 @@ def _tab_requests(
             end = group.get("end")
             if not (isinstance(start, int) and isinstance(end, int) and start < end):
                 continue
-            if live_row_groups is not None and (start, end) not in live_row_groups:
-                # Recorded ranges the tab no longer groups: never send a
-                # deleteDimensionGroup the API cannot match. Restore row
-                # visibility inside the existing grid, then leave it alone.
-                if end <= row_count:
-                    requests.append(
-                        {
-                            "updateDimensionProperties": {
-                                "range": {
-                                    "sheetId": sheet_id,
-                                    "dimension": "ROWS",
-                                    "startIndex": start,
-                                    "endIndex": end,
-                                },
-                                "properties": {"hiddenByUser": False},
-                                "fields": "hiddenByUser",
+            if live_row_groups is not None:
+                deletes = live_row_groups.get((start, end), 0)
+                if not deletes:
+                    # Recorded ranges the tab no longer groups: never send a
+                    # deleteDimensionGroup the API cannot match. Restore row
+                    # visibility inside the existing grid, then leave it alone.
+                    if end <= row_count:
+                        requests.append(
+                            {
+                                "updateDimensionProperties": {
+                                    "range": {
+                                        "sheetId": sheet_id,
+                                        "dimension": "ROWS",
+                                        "startIndex": start,
+                                        "endIndex": end,
+                                    },
+                                    "properties": {"hiddenByUser": False},
+                                    "fields": "hiddenByUser",
+                                }
                             }
-                        }
-                    )
-                continue
+                        )
+                    continue
+            else:
+                deletes = 1
             requests.append(
                 {
                     "updateDimensionProperties": {
@@ -717,18 +730,21 @@ def _tab_requests(
                     }
                 }
             )
-            requests.append(
-                {
-                    "deleteDimensionGroup": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "dimension": "ROWS",
-                            "startIndex": start,
-                            "endIndex": end,
+            # deleteDimensionGroup lowers the depth of the group over the exact
+            # span, so stacked duplicates each need their own delete request.
+            for _ in range(deletes):
+                requests.append(
+                    {
+                        "deleteDimensionGroup": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                "startIndex": start,
+                                "endIndex": end,
+                            }
                         }
                     }
-                }
-            )
+                )
 
     current_groups = []
     for block_name, relative_start, relative_end in tab.row_groups:
