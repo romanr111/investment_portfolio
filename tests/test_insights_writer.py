@@ -529,3 +529,45 @@ class InsightsWriterTests(unittest.TestCase):
         refresh_insights(book, current_snapshot(), config={})
         self.assertEqual(timeline.values[(2, MARKER_COLUMN + 1)], metadata)
         self.assertEqual(timeline.values[(1, 3)], "=A1/2")
+
+    def test_multiline_rows_get_the_twoline_header_height(self):
+        from datetime import date
+
+        from src.google_sheets.insights_tables import build_portfolio_tab
+        from src.google_sheets.insights_writer import write_portfolio_snapshot
+        from tests.fixtures_insights import previous_snapshot
+
+        tab = build_portfolio_tab(
+            current_snapshot(),
+            previous_snapshot=previous_snapshot(),
+            current_date=date(2026, 10, 4),
+        )
+        book = FakeSpreadsheet()
+        write_portfolio_snapshot(
+            book, tab, "2026-10-04", current_snapshot()["TOTAL_ASSETS"]
+        )
+        main = book.worksheet("04 Oct 2026")
+        balance_row = next(
+            row
+            for (row, column), value in main.values.items()
+            if column == 7
+            and isinstance(value, str)
+            and value.startswith("Balance change")
+        )
+        heights = {}
+        for body in book.batch_updates:
+            for request in body["requests"]:
+                if "updateDimensionProperties" not in request:
+                    continue
+                req = request["updateDimensionProperties"]
+                rng, props = req.get("range", {}), req.get("properties", {})
+                if rng.get("dimension", "ROWS") != "ROWS":
+                    continue
+                if rng.get("sheetId") != main.id or "pixelSize" not in props:
+                    continue
+                for row in range(rng["startIndex"], rng["endIndex"]):
+                    heights[row] = props["pixelSize"]
+        # The two-line label is explicit 36, same as the two-line header above.
+        self.assertEqual(heights.get(balance_row - 1), 36)
+        self.assertEqual(heights.get(0), 42)
+        self.assertEqual(heights.get(1), 36)

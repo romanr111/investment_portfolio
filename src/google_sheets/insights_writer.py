@@ -900,12 +900,16 @@ def _tab_requests(
             values = grid[row][:12]
             if all(value in ("", None) for value in values):
                 row_heights.append((row, 12))
+            elif any(
+                isinstance(value, str) and "\n" in value for value in values
+            ):
+                # An explicit multiline label (e.g. the balance-change row) renders
+                # as two deliberate lines; Sheets does not refit these rows, so
+                # give them the same height as the two-line header above.
+                row_heights.append((row, 36))
             elif row not in status_rows and not any(
                 isinstance(value, str)
-                and (
-                    "\n" in value
-                    or len(value) > max(10, tab.column_widths[column] // 10)
-                )
+                and len(value) > max(10, tab.column_widths[column] // 10)
                 for column, value in enumerate(values)
             ):
                 # Potentially wrapped text keeps the automatic height above.
