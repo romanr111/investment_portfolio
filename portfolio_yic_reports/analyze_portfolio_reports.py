@@ -1431,7 +1431,7 @@ def main():
         return
     initial_portfolio, final_portfolio, initial_to_date, final_to_date = loaded
 
-    period_formatted = format_date_with_quarter(initial_to_date)
+    period_formatted = format_date_with_quarter(final_to_date)
 
     print(f"Зміни в портфелі акцій за {period_formatted}:")
     print("-" * 80)

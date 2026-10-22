@@ -485,6 +485,7 @@ def main() -> int:
         )
         from src.portfolio_history.unified_history import (
             save_combined_data_snapshot_json,
+            upsert_combined_data_history,
         )
 
         logger.debug("Initializing DataSource")
@@ -503,6 +504,17 @@ def main() -> int:
             output_dir=args.snapshot_dir,
         )
         logger.info("Saved combined_data snapshot to %s", snapshot_file)
+        current_history = upsert_combined_data_history(
+            combined_data,
+            args.history_csv_path,
+            args.history_jsonl_path,
+            currency=args.history_currency,
+        )
+        logger.info(
+            "Upserted current combined_data history: %s rows -> %s",
+            len(current_history),
+            args.history_csv_path,
+        )
 
         # Preserve historical behavior: data for sheet includes allocations.
         data = dict(combined_data)

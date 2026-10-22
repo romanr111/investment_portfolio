@@ -1,4 +1,6 @@
 from typing import Dict, Any
+import copy
+from decimal import Decimal
 import logging
 import json
 import time
@@ -14,6 +16,15 @@ from src.cash_fixed_income.cash_summary import CashPortfolio
 from src.cash_fixed_income.fixed_income.fixed_income import FixedIncomePortfolio
 from src.crypto.crypto_tokens import CryptoEndpoint
 from src.allocation_calculator import AllocationCalculator
+from src.portfolio_ledger.contract import (
+    build_portfolio_contract,
+    project_legacy_values,
+    recover_crypto_positions,
+    recover_cash_equivalents,
+    select_contract_start_snapshot,
+)
+from src.portfolio_ledger.storage import PortfolioLedger
+from src.portfolio_ledger.sync import build_activity_sources, sync_crypto_sources
 from data.assets_data import OTHER_BETS
 
 # Set up logging
@@ -21,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 FINANCIAL_FREEDOM_GOAL = 500000
 COMBINED_DATA_JSON_PATH = Path("data/final_data.json")
+PORTFOLIO_LEDGER_PATH = Path("data/portfolio_ledger")
 
 
 class DataSource:
@@ -33,6 +45,8 @@ class DataSource:
             self._calculate_stock_dividends()
             self._setup_fixed_income()
             self._setup_cash()
+            self._sync_crypto_activity()
+            self._prepare_portfolio_contract()
             self._fetch_index_performance()
             self.total_assets = self.calculate_total_assets()
             self.ff_progress = self.calculate_ff_goal_progress()
@@ -63,6 +77,8 @@ class DataSource:
         self._calculate_stock_dividends()
         self._setup_fixed_income()
         self._setup_cash()
+        self._sync_crypto_activity()
+        self._prepare_portfolio_contract()
         self._fetch_index_performance()
         self.total_assets = self.calculate_total_assets()
         self.ff_progress = self.calculate_ff_goal_progress()
@@ -154,6 +170,81 @@ class DataSource:
             self.crypto.free_cash,
         )
 
+    def _prepare_portfolio_contract(self) -> None:
+        if not hasattr(self, "ledger"):
+            self.ledger = PortfolioLedger(PORTFOLIO_LEDGER_PATH)
+        as_of_date = datetime.now().date()
+        start_snapshot_result = select_contract_start_snapshot(
+            Path("data/snapshots"), as_of_date
+        )
+        latest_snapshot = None
+        latest_snapshot_path = Path("data/snapshots/combined_data_latest.json")
+        if latest_snapshot_path.exists():
+            try:
+                with latest_snapshot_path.open(encoding="utf-8") as handle:
+                    latest_snapshot = json.load(handle)
+            except (OSError, json.JSONDecodeError) as error:
+                logger.warning("Could not read latest combined_data snapshot: %s", error)
+        balance_sources = dict(getattr(self.crypto, "balance_source_status", {}) or {})
+        crypto_quantities, crypto_values, crypto_freshness = recover_crypto_positions(
+            self.crypto.quantities,
+            self.crypto.crypto_market_values,
+            latest_snapshot,
+            balance_sources=balance_sources,
+        )
+        live_cash = dict(getattr(self.crypto, "cash_equivalent_values", {}) or {})
+        recovered_cash = recover_cash_equivalents(
+            live_cash, latest_snapshot, balance_sources=balance_sources
+        )
+        recovered_amount = sum(recovered_cash.values()) - sum(live_cash.values())
+        if recovered_amount > 0:
+            self.cash.crypto_cash += Decimal(str(recovered_amount))
+        self.crypto.cash_equivalent_values = recovered_cash
+        legacy_p2p = self.fi_data.get("group_weighted_interest", {}).get(
+            "p2p_lending", (0, 0)
+        )
+        if isinstance(legacy_p2p, (list, tuple)):
+            legacy_p2p = legacy_p2p[0] if legacy_p2p else 0
+        self.portfolio_contract = build_portfolio_contract(
+            ledger=self.ledger,
+            live_crypto_quantities=crypto_quantities,
+            live_crypto_market_values=crypto_values,
+            savings_positions=self.crypto_savings,
+            legacy_other_assets_usd=float(OTHER_BETS),
+            legacy_p2p_balance_usd=float(legacy_p2p or 0),
+            as_of_date=as_of_date,
+            start_snapshot=(
+                start_snapshot_result["data"] if start_snapshot_result else None
+            ),
+            crypto_freshness=crypto_freshness,
+            crypto_balance_sources=balance_sources,
+        )
+
+        if any(status not in (None, "", "ok") for status in balance_sources.values()):
+            self.portfolio_contract["DATA_QUALITY"]["cash"] = {
+                "coverage": "partial", "freshness": "snapshot_fallback"
+            }
+
+    def _sync_crypto_activity(self) -> None:
+        self.ledger = PortfolioLedger(PORTFOLIO_LEDGER_PATH)
+        sources = build_activity_sources(
+            self.crypto.brokers,
+            self.ledger.load_sources_config(),
+        )
+        if not sources:
+            self.crypto_sync_results = {}
+            return
+        today = datetime.now().date()
+        quarter_start_month = ((today.month - 1) // 3) * 3 + 1
+        start_at = datetime(today.year, quarter_start_month, 1).astimezone()
+        end_at = datetime.now().astimezone()
+        self.crypto_sync_results = sync_crypto_sources(
+            self.ledger,
+            sources,
+            start_at,
+            end_at,
+        )
+
     def _fetch_index_performance(self) -> None:
         """Fetch index performance data for major market indices."""
         try:
@@ -221,13 +312,27 @@ class DataSource:
         # standalone cash total to avoid counting the IB cash position twice.
         non_ib_cash_total = self.cash.total_cash - self.cash.ib_cash
 
+        projected = (
+            project_legacy_values(self.portfolio_contract)
+            if hasattr(self, "portfolio_contract")
+            else {
+                "crypto_value_usd": self.crypto.get_total_crypto_value(),
+                "crypto_lending_value_usd": self.fi_data[
+                    "group_weighted_interest"
+                ]["Crypto Landing"][0],
+                "p2p_value_usd": self.fi_data["group_weighted_interest"][
+                    "p2p_lending"
+                ][0],
+                "other_assets_value_usd": float(OTHER_BETS),
+            }
+        )
         asset_values = [
             self.ib_data["IB_Portfolio_Value"],
-            self.crypto.get_total_crypto_value(),
-            self.fi_data["group_weighted_interest"]["Crypto Landing"][0],
-            self.fi_data["group_weighted_interest"]["p2p_lending"][0],
+            projected["crypto_value_usd"],
+            projected["crypto_lending_value_usd"],
+            projected["p2p_value_usd"],
             float(non_ib_cash_total),
-            float(OTHER_BETS),
+            projected["other_assets_value_usd"],
         ]
         total = int(sum(asset_values))
         return total
@@ -263,6 +368,55 @@ class DataSource:
 
         asset_allocation = self._calculate_asset_allocation()
 
+        contract = getattr(self, "portfolio_contract", {})
+        projected = (
+            project_legacy_values(contract)
+            if contract
+            else {
+                "crypto_value_usd": self.crypto.get_total_crypto_value(),
+                "crypto_lending_value_usd": self.fi_data.get(
+                    "group_weighted_interest", {}
+                ).get("Crypto Landing", (0,))[0],
+                "p2p_value_usd": self.fi_data.get("group_weighted_interest", {}).get(
+                    "p2p_lending", (0,)
+                )[0],
+                "other_assets_value_usd": float(OTHER_BETS),
+            }
+        )
+        fixed_income_data = copy.deepcopy(self.fi_data)
+        group_interest = fixed_income_data.setdefault("group_weighted_interest", {})
+        legacy_crypto_rate = group_interest.get("Crypto Landing", (0, 0))
+        legacy_crypto_rate = (
+            legacy_crypto_rate[1]
+            if isinstance(legacy_crypto_rate, (list, tuple))
+            and len(legacy_crypto_rate) > 1
+            else 0
+        )
+        group_interest["Crypto Landing"] = (
+            projected["crypto_lending_value_usd"],
+            legacy_crypto_rate,
+        )
+        legacy_p2p_rate = group_interest.get("p2p_lending", (0, 0))
+        legacy_p2p_rate = (
+            legacy_p2p_rate[1]
+            if isinstance(legacy_p2p_rate, (list, tuple))
+            and len(legacy_p2p_rate) > 1
+            else 0
+        )
+        group_interest["p2p_lending"] = (
+            projected["p2p_value_usd"],
+            legacy_p2p_rate,
+        )
+        canonical_crypto_positions = contract.get("POSITION_DATA", {}).get("crypto", [])
+        canonical_crypto_values = {
+            position["asset"]: position.get("value_usd", 0.0)
+            for position in canonical_crypto_positions
+        }
+        canonical_crypto_quantities = {
+            position["asset"]: position.get("quantity", 0.0)
+            for position in canonical_crypto_positions
+        }
+
         data = {
             "IB_DATA": self.ib_data,
             "ENHANCED_STOCKS": (
@@ -273,17 +427,18 @@ class DataSource:
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
             "INDEX_PERFORMANCE": getattr(self, "index_performance_data", {}),
             "CRYPTO_DATA": {
-                "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
-                "Crypto_Market_Values": self.crypto.crypto_market_values,
-                "Token_Quantities": self.crypto.quantities,
+                "Total_Crypto_Value": projected["crypto_value_usd"],
+                "Crypto_Market_Values": canonical_crypto_values,
+                "Token_Quantities": canonical_crypto_quantities,
             },
-            "FIXED_INCOME_DATA": self.fi_data,
+            "FIXED_INCOME_DATA": fixed_income_data,
             "CASH_DATA": {
                 "Total": self.cash.total_cash,
                 "Breakdown": self.cash.as_dict(),
+                "Cash_Equivalents": dict(getattr(self.crypto, "cash_equivalent_values", {}) or {}),
             },
             "OTHER_ASSETS": {
-                "Other Bets": int(OTHER_BETS),
+                "Other Bets": projected["other_assets_value_usd"],
             },
             "TOTAL_ASSETS": self.total_assets,
             "FINANCIAL_FREEDOM_GOAL_TARGET": FINANCIAL_FREEDOM_GOAL,
@@ -298,23 +453,50 @@ class DataSource:
                 ).isoformat(),
             },
         }
+        data.update(contract)
         self._save_combined_data_to_json(data)
         return data
 
     def _calculate_asset_allocation(self) -> Dict[str, Any]:
         """Calculate asset allocation data with values and percentages."""
+        projected = (
+            project_legacy_values(self.portfolio_contract)
+            if hasattr(self, "portfolio_contract")
+            else {
+                "crypto_value_usd": self.crypto.get_total_crypto_value(),
+                "crypto_lending_value_usd": self.fi_data.get(
+                    "group_weighted_interest", {}
+                ).get("Crypto Landing", (0,))[0],
+                "p2p_value_usd": self.fi_data.get("group_weighted_interest", {}).get(
+                    "p2p_lending", (0,)
+                )[0],
+                "other_assets_value_usd": float(OTHER_BETS),
+            }
+        )
+        allocation_fixed_income = copy.deepcopy(self.fi_data)
+        allocation_group_interest = allocation_fixed_income.setdefault(
+            "group_weighted_interest", {}
+        )
+        allocation_group_interest["Crypto Landing"] = (
+            projected["crypto_lending_value_usd"],
+            0.0,
+        )
+        allocation_group_interest["p2p_lending"] = (
+            projected["p2p_value_usd"],
+            0.0,
+        )
         calculator = AllocationCalculator(
             {
                 "IB_DATA": self.ib_data,
                 "CRYPTO_DATA": {
-                    "Total_Crypto_Value": self.crypto.get_total_crypto_value(),
+                    "Total_Crypto_Value": projected["crypto_value_usd"],
                 },
-                "FIXED_INCOME_DATA": self.fi_data,
+                "FIXED_INCOME_DATA": allocation_fixed_income,
                 "CASH_DATA": {
                     "Total": self.cash.total_cash,
                 },
                 "OTHER_ASSETS": {
-                    "Other Bets": int(OTHER_BETS),
+                    "Other Bets": projected["other_assets_value_usd"],
                 },
                 "TOTAL_ASSETS": self.total_assets,
             }
@@ -343,20 +525,16 @@ class DataSource:
             "Precious Metals": _sum_dict_values(
                 self.ib_data.get("Precious Metals", {})
             ),
-            "Crypto Coins": _to_float(self.crypto.get_total_crypto_value()),
-            "Crypto Lending": _to_float(
-                self.fi_data.get("group_weighted_interest", {}).get(
-                    "Crypto Landing", (0,)
-                )[0]
+            "Crypto Coins": _to_float(
+                projected["crypto_value_usd"]
             ),
-            "P2P Lending": _to_float(
-                self.fi_data.get("group_weighted_interest", {}).get(
-                    "p2p_lending", (0,)
-                )[0]
-            ),
+            "Crypto Lending": _to_float(projected["crypto_lending_value_usd"]),
+            "P2P Lending": _to_float(projected["p2p_value_usd"]),
             "REIT": _sum_dict_values(self.ib_data.get("REIT", {})),
             "Cash": _to_float(self.cash.total_cash),
-            "Other Bets": _to_float(OTHER_BETS),
+            "Other Bets": _to_float(
+                projected["other_assets_value_usd"]
+            ),
         }
 
         # Build allocations with both value and percentage

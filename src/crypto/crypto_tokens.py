@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 import time
 import traceback
@@ -48,7 +48,11 @@ class CryptoData:
                     f"get_savings_positions for {broker.__class__.__name__} took {time.time() - start_time:.2f} seconds"
                 )
                 if broker_positions:
-                    positions.append(broker_positions)
+                    positions.append({
+                        platform: {asset: values for asset, values in savings.items()
+                                   if asset.upper() not in ExchangeBase.CASH_EQUIVALENTS}
+                        for platform, savings in broker_positions.items()
+                    })
                 logger.debug(
                     f"Retrieved {len(broker_positions) if broker_positions else 0} positions"
                 )
@@ -62,10 +66,17 @@ class CryptoData:
         return positions
 
     @staticmethod
-    def get_all_crypto_quantity(brokers: List[ExchangeBase]) -> Dict[str, float]:
+    def get_all_crypto_quantity(
+        brokers: List[ExchangeBase],
+        source_status: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, float]:
         """
         Retrieve all cryptocurrency quantities from multiple brokers and add external balances.
         Returns quantities sorted by INITIAL_TOKENS order, followed by remaining tokens.
+
+        When `source_status` is given, it records "ok"/"failed" per broker class
+        name so callers can distinguish a genuinely empty aggregate from one
+        whose data is incomplete because a balance source failed.
 
         Args:
             brokers: List of broker instances implementing ExchangeBase.
@@ -91,11 +102,15 @@ class CryptoData:
                 logger.debug(
                     f"Retrieved {len(broker_crypto)} tokens from {broker.__class__.__name__}"
                 )
+                if source_status is not None:
+                    source_status[broker.__class__.__name__] = "ok"
             except Exception as e:
                 logger.error(
                     f"Error getting crypto balances from {broker.__class__.__name__}: {str(e)}"
                 )
                 logger.error(f"Stack trace: {traceback.format_exc()}")
+                if source_status is not None:
+                    source_status[broker.__class__.__name__] = "failed"
 
         # Add cold storage crypto balances
         logger.debug("Adding cold storage balances")
@@ -121,13 +136,23 @@ class CryptoData:
         return sorted_crypto
 
     @staticmethod
-    def calculate_free_cash_balance(brokers: List[ExchangeBase]) -> int:
+    def calculate_free_cash_balance(
+        brokers: List[ExchangeBase], cash_equivalent_values: Optional[Dict[str, float]] = None
+    ) -> int:
         """
         Get total free cash balance across all brokers.
         Sums up integer balances from get_cash_balance().
         """
         logger.debug("Calculating free cash balance from brokers")
-        total_balance = 0
+        if cash_equivalent_values is not None:
+            cash_equivalent_values.clear()
+            cash_equivalent_values.update({asset.upper(): round(float(amount))
+                for asset, amount in COLD_STORAGE.items()
+                if asset.upper() in ExchangeBase.CASH_EQUIVALENTS})
+        total_balance = round(sum(
+            float(amount) for asset, amount in COLD_STORAGE.items()
+            if asset.upper() in ExchangeBase.CASH_EQUIVALENTS
+        ))
 
         for broker in brokers:
             try:
@@ -135,6 +160,25 @@ class CryptoData:
                 balance = broker.get_cash_balance()
                 if balance >= 1:
                     total_balance += balance
+                # USD1 Earn principal is cash, not an interest-bearing bucket.
+                savings_positions = broker.get_savings_positions()
+                cash_earn = sum(
+                    float(values[0])
+                    for savings in savings_positions.values()
+                    for asset, values in savings.items()
+                    if asset.upper() in ExchangeBase.CASH_EQUIVALENTS
+                )
+                total_balance += round(cash_earn)
+                if cash_equivalent_values is not None:
+                    for asset in ExchangeBase.CASH_EQUIVALENTS:
+                        spot = getattr(broker, "cash_equivalent_balances", {}).get(asset, 0)
+                        cash_equivalent_values[asset] = cash_equivalent_values.get(asset, 0) + float(spot)
+                    for savings in savings_positions.values():
+                        for asset, values in savings.items():
+                            if asset.upper() in ExchangeBase.CASH_EQUIVALENTS:
+                                cash_equivalent_values[asset.upper()] = (
+                                    cash_equivalent_values.get(asset.upper(), 0) + round(float(values[0]))
+                                )
                 logger.debug(
                     f"Retrieved cash balance: {balance} from {broker.__class__.__name__}"
                 )
@@ -207,8 +251,10 @@ class CryptoEndpoint:
         # Initialize with default empty values
         self.brokers: List[ExchangeBase] = []
         self.quantities = {}
+        self.balance_source_status: Dict[str, str] = {}
         self.crypto_market_values = {}
         self.free_cash = 0
+        self.cash_equivalent_values = {}
         self.all_crypto_savings = []
 
         try:
@@ -229,7 +275,11 @@ class CryptoEndpoint:
             logger.debug("Getting all crypto quantities - start")
             start_time = time.time()
             try:
-                self.quantities = CryptoData.get_all_crypto_quantity(self.brokers)
+                fetch_status: Dict[str, str] = {}
+                self.quantities = CryptoData.get_all_crypto_quantity(
+                    self.brokers, fetch_status
+                )
+                self.balance_source_status.update(fetch_status)
                 logger.debug(
                     f"Crypto quantities retrieved in {time.time() - start_time:.2f} seconds"
                 )
@@ -276,7 +326,9 @@ class CryptoEndpoint:
             logger.debug("Calculating free cash - start")
             start_time = time.time()
             try:
-                self.free_cash = CryptoData.calculate_free_cash_balance(self.brokers)
+                self.free_cash = CryptoData.calculate_free_cash_balance(
+                    self.brokers, self.cash_equivalent_values
+                )
                 logger.debug(
                     f"Free cash calculated in {time.time() - start_time:.2f} seconds"
                 )
@@ -318,6 +370,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing BinanceClient: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without BinanceClient")
+            self.balance_source_status["BinanceClient"] = "failed"
 
     def _safe_init_okx(self):
         """Initialize OKXFiltered with error handling."""
@@ -333,6 +386,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing OKXFiltered: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without OKXFiltered")
+            self.balance_source_status["OKXFiltered"] = "failed"
 
     def _safe_init_bybit(self):
         """Bybit initialization is disabled."""
@@ -371,6 +425,7 @@ class CryptoEndpoint:
                 )
                 logger.error(f"Stack trace: {traceback.format_exc()}")
                 logger.warning("Continuing without WhiteBit")
+                self.balance_source_status["WhiteBit"] = "failed"
 
     def _safe_init_telegram(self):
         """Initialize TelegramClient with error handling."""
@@ -386,6 +441,7 @@ class CryptoEndpoint:
             logger.error(f"Error initializing TelegramClient: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             logger.warning("Continuing without TelegramClient")
+            self.balance_source_status["TelegramClient"] = "failed"
 
     def get_total_crypto_value(self) -> int:
         logger.debug("Calculating total crypto value")

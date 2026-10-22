@@ -153,13 +153,25 @@ def combined_data_to_unified_snapshot_rows(
     currency: str = "USD",
 ) -> list[dict[str, Any]]:
     rows = []
+    performance_buckets = combined_data.get("PERFORMANCE_DATA", {}).get("buckets", {})
     for bucket in CORE_BUCKETS:
+        performance = performance_buckets.get(bucket, {})
+        return_pct = _parse_number(performance.get("return_pct"))
+        return_method = performance.get("return_method", "unavailable")
+        if return_method == "modified_dietz" and return_pct is not None:
+            return_pct /= 100.0
+        net_flow_usd = _parse_number(performance.get("net_flow_usd"))
         rows.append(
             {
                 "date": as_of_date,
                 "asset_bucket": bucket,
                 "market_value": _safe_bucket_value(combined_data, bucket),
-                "return_pct": pd.NA,
+                "return_pct": return_pct if return_pct is not None else pd.NA,
+                "net_flow_usd": (
+                    net_flow_usd if net_flow_usd is not None else pd.NA
+                ),
+                "return_method": return_method,
+                "data_quality": performance.get("data_quality", "partial"),
                 "currency": currency.upper(),
                 "source_type": "combined_data",
                 "source_ref": "DataSource.get_combined_data",
@@ -172,6 +184,8 @@ def save_combined_data_snapshot_json(
     combined_data: dict,
     output_dir: str,
     as_of_date: Optional[str] = None,
+    *,
+    update_latest: bool = True,
 ) -> Path:
     snapshot_dir = Path(output_dir)
     snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -187,12 +201,13 @@ def save_combined_data_snapshot_json(
     }
 
     dated_file = snapshot_dir / f"combined_data_{date_value}_{timestamp_label}.json"
-    latest_file = snapshot_dir / "combined_data_latest.json"
 
     with dated_file.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=True, indent=2)
-    with latest_file.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=True, indent=2)
+    if update_latest:
+        latest_file = snapshot_dir / "combined_data_latest.json"
+        with latest_file.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=True, indent=2)
 
     return dated_file
 
@@ -250,6 +265,9 @@ def build_unified_history_frame(
                 "asset_bucket",
                 "market_value",
                 "return_pct",
+                "net_flow_usd",
+                "return_method",
+                "data_quality",
                 "currency",
                 "source_type",
                 "source_ref",
@@ -258,6 +276,9 @@ def build_unified_history_frame(
         )
 
     frame = pd.DataFrame(rows)
+    for column in ("return_pct", "net_flow_usd", "return_method", "data_quality"):
+        if column not in frame.columns:
+            frame[column] = pd.NA
     frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
     if frame["date"].isna().any():
         raise ValueError("History rows contain unparsable date values.")
@@ -277,6 +298,10 @@ def build_unified_history_frame(
         .agg(
             {
                 "market_value": "sum",
+                "return_pct": "last",
+                "net_flow_usd": lambda values: values.sum(min_count=1),
+                "return_method": "last",
+                "data_quality": "last",
                 "source_type": "last",
                 "source_ref": "last",
             }
@@ -285,12 +310,24 @@ def build_unified_history_frame(
         .reset_index(drop=True)
     )
 
-    if return_source == "pct-change":
-        frame["return_pct"] = frame.groupby("asset_bucket")["market_value"].pct_change()
-    elif return_source == "blank":
-        frame["return_pct"] = pd.NA
-    else:
+    if return_source not in {"pct-change", "blank"}:
         raise ValueError("return_source must be one of: blank, pct-change.")
+
+    legacy_returns = (
+        frame.groupby("asset_bucket")["market_value"].pct_change()
+        if return_source == "pct-change"
+        else pd.Series(pd.NA, index=frame.index, dtype="object")
+    )
+    resolved_returns = []
+    for index, row in frame.iterrows():
+        method = row["return_method"]
+        if method == "modified_dietz":
+            resolved_returns.append(row["return_pct"])
+        elif method == "unavailable":
+            resolved_returns.append(pd.NA)
+        else:
+            resolved_returns.append(legacy_returns.loc[index])
+    frame["return_pct"] = resolved_returns
 
     frame = frame.sort_values(["date", "asset_bucket"]).reset_index(drop=True)
     frame["ingested_at_utc"] = datetime.now(timezone.utc).isoformat()
@@ -300,6 +337,9 @@ def build_unified_history_frame(
             "asset_bucket",
             "market_value",
             "return_pct",
+            "net_flow_usd",
+            "return_method",
+            "data_quality",
             "currency",
             "source_type",
             "source_ref",
@@ -356,6 +396,66 @@ def save_unified_history(
     return csv_output, jsonl_output
 
 
+def upsert_combined_data_history(
+    combined_data: dict,
+    csv_path: str,
+    jsonl_path: Optional[str] = None,
+    *,
+    as_of_date: Optional[str] = None,
+    currency: str = "USD",
+) -> pd.DataFrame:
+    date_value = as_of_date or datetime.now(timezone.utc).date().isoformat()
+    new_rows = combined_data_to_unified_snapshot_rows(
+        combined_data,
+        date_value,
+        currency=currency,
+    )
+    csv_file = Path(csv_path)
+    existing_rows: list[dict[str, Any]] = []
+    if csv_file.exists():
+        existing_rows = pd.read_csv(csv_file).to_dict(orient="records")
+
+    replacement_keys = {
+        (row["date"], row["asset_bucket"], row["currency"]) for row in new_rows
+    }
+    preserved_rows = [
+        row
+        for row in existing_rows
+        if (str(row.get("date")), row.get("asset_bucket"), row.get("currency"))
+        not in replacement_keys
+    ]
+    frame = build_unified_history_frame(
+        preserved_rows + new_rows,
+        return_source="pct-change",
+        history_frequency="raw",
+    )
+    save_unified_history(frame, csv_path, jsonl_path)
+    return frame
+
+
+def merge_history_frames(
+    sheet_frame: pd.DataFrame, local_frame: pd.DataFrame
+) -> pd.DataFrame:
+    if sheet_frame.empty:
+        return local_frame.copy()
+    if local_frame.empty:
+        return sheet_frame.copy()
+    merged = pd.DataFrame(
+        sheet_frame.to_dict(orient="records") + local_frame.to_dict(orient="records")
+    )
+    merged["_local_priority"] = merged["source_type"].eq("combined_data").astype(int)
+    merged = (
+        merged.sort_values(
+            ["date", "asset_bucket", "currency", "_local_priority"]
+        )
+        .drop_duplicates(["date", "asset_bucket", "currency"], keep="last")
+        .drop(columns=["_local_priority"])
+        .sort_values(["date", "asset_bucket"])
+        .reset_index(drop=True)
+    )
+    return merged
+
+
 def sync_unified_history_from_google_sheets(
     credentials_path: str,
     spreadsheet_name: str,
@@ -399,6 +499,21 @@ def sync_unified_history_from_google_sheets(
         return_source=return_source,
         history_frequency=history_frequency,
     )
+    output_csv = Path(output_csv_path)
+    if output_csv.exists():
+        local_frame = pd.read_csv(output_csv)
+        local_frame = local_frame.loc[
+            local_frame.get("source_type", pd.Series(dtype=str)).eq("combined_data")
+        ].copy()
+        if not local_frame.empty and history_frequency == "monthly":
+            local_dates = pd.to_datetime(local_frame["date"], errors="coerce")
+            local_frame["date"] = (
+                local_dates.dt.to_period("M")
+                .dt.to_timestamp(how="end")
+                .dt.normalize()
+                .dt.strftime("%Y-%m-%d")
+            )
+        frame = merge_history_frames(frame, local_frame)
     if strict_required_buckets:
         validate_required_buckets(frame)
 

@@ -22,6 +22,8 @@ class KpiCard:
     label: str
     value: str
     tone: str  # "pos" | "neg" | "navy"
+    caption: str = ""
+    purpose: str = ""
 
 
 @dataclass
@@ -43,6 +45,17 @@ class PositionRow:
 
 
 @dataclass
+class DetailTable:
+    title: str
+    headers: List[str]
+    rows: List[List[str]]
+    note: Optional[str] = None
+    position_rows: List[PositionRow] = field(default_factory=list)
+    show_price_column: bool = True
+    show_pl_column: bool = True
+
+
+@dataclass
 class ReportData:
     period_title: str  # e.g. "2-й квартал 2026 року"
     quarter_label: str  # e.g. "Q2"
@@ -54,6 +67,8 @@ class ReportData:
     core_satellite: Tuple[float, float]
     china_rest: Tuple[float, float]
     special_asset_rows: List[PositionRow] = field(default_factory=list)
+    alternative_asset_tables: List[DetailTable] = field(default_factory=list)
+    summary_title: str = "Коротко за квартал"
 
 
 CSS = """
@@ -98,14 +113,6 @@ body {
   position: absolute;
   left: 0; right: 0; bottom: -4px;
   border-bottom: 1px solid var(--hairline);
-}
-.overline {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--navy);
-  margin-bottom: 10px;
 }
 h1 {
   font-family: "Iowan Old Style", "Palatino", Georgia, "Times New Roman", serif;
@@ -156,32 +163,52 @@ h3 {
 /* ---------- KPI cards ---------- */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 18px;
 }
 .kpi-card {
+  display: flex;
+  flex-direction: column;
   background: var(--card);
   border: 1px solid var(--hairline);
   border-top: 3px solid var(--navy);
   border-radius: 3px;
-  padding: 14px 16px 12px;
+  padding: 17px 14px 15px;
+  min-width: 0;
 }
 .kpi-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
-  margin-bottom: 8px;
-  min-height: 28px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+.kpi-purpose {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--navy);
+  line-height: 1.4;
+  min-height: 2.8em;
+  margin-bottom: 7px;
+  white-space: pre-line;
 }
 .kpi-value {
+  margin-top: auto;
   font-family: "Iowan Old Style", "Palatino", Georgia, serif;
-  font-size: 27px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-caption {
+  margin-top: 12px;
+  min-height: 4.5em;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-line;
 }
 .pos { color: var(--green); }
 .neg { color: var(--red); }
@@ -365,21 +392,32 @@ def _weight_cell(row: PositionRow, max_weight: float) -> str:
     return _esc(row.weight_text or "-")
 
 
-def _pl_cell(pl_pct: Optional[float]) -> str:
+def _pl_cell(pl_pct: Optional[float], precision: int = 1) -> str:
     if pl_pct is None:
         return "<td></td>"
     tone = "pos" if pl_pct > 0 else ("neg" if pl_pct < 0 else "")
     tone_class = f" {tone}" if tone else ""
-    return f'<td class="num{tone_class}">{_fmt_signed_pct1(pl_pct)}</td>'
+    value = _fmt_signed_pct2(pl_pct) if precision == 2 else _fmt_signed_pct1(pl_pct)
+    return f'<td class="num{tone_class}">{value}</td>'
 
 
 def _render_kpis(kpis: List[KpiCard]) -> str:
     cards = []
     for kpi in kpis:
+        purpose = (
+            f'<div class="kpi-purpose">{_esc(kpi.purpose)}</div>'
+            if kpi.purpose else ""
+        )
+        caption = (
+            f'<div class="kpi-caption">{_esc(kpi.caption)}</div>'
+            if kpi.caption else ""
+        )
         cards.append(
             '<div class="kpi-card">'
+            f"{purpose}"
             f'<div class="kpi-label">{_esc(kpi.label)}</div>'
             f'<div class="kpi-value {kpi.tone}">{_esc(kpi.value)}</div>'
+            f"{caption}"
             "</div>"
         )
     return f'<div class="kpi-grid">{"".join(cards)}</div>'
@@ -397,7 +435,7 @@ def _render_allocation_table(rows: List[AllocationRow]) -> str:
         chip = (
             f'<span class="chip {chip_tone}">{arrow} {_fmt_signed_pct2(delta)}</span>'
             if abs(delta) >= 0.005
-            else '<span class="chip">—</span>'
+            else '<span class="chip">-</span>'
         )
         body.append(
             "<tr>"
@@ -479,6 +517,36 @@ def _render_special_table(rows: List[PositionRow]) -> str:
     )
 
 
+def _render_detail_table(table: DetailTable) -> str:
+    headers = "".join(
+        ('<th class="num">' if table.position_rows and index >= 2 else "<th>")
+        + _esc(header) + "</th>" for index, header in enumerate(table.headers)
+    )
+    if table.position_rows:
+        max_weight = max((row.weight_pct or 0 for row in table.position_rows), default=0)
+        rows = "".join(
+            '<tr' + (' class="closed-row"' if row.kind == "closed" else '') + '>'
+            + f'<td class="ticker">{_esc(row.symbol)}</td>'
+            + f"<td>{_activity_cell(row)}</td>"
+            + f'<td class="num">{_weight_cell(row, max_weight)}</td>'
+            + (f'<td class="num">{_esc(row.price_text)}</td>' if table.show_price_column else "")
+            + ((_pl_cell(row.pl_pct, precision=2) if row.pl_pct is not None
+                else '<td class="num">-</td>') if table.show_pl_column else "") + "</tr>"
+            for row in table.position_rows
+        )
+    else:
+        rows = "".join(
+            "<tr>" + "".join(f"<td>{_esc(value)}</td>" for value in row) + "</tr>"
+            for row in table.rows
+        )
+    return (
+        f"<h3>{_esc(table.title)}</h3>"
+        '<div class="table-scroll"><table><thead><tr>'
+        f"{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
+        + (f'<p class="footnote">{_esc(table.note)}</p>' if table.note else "")
+    )
+
+
 def _render_split(label: str, a_pct: float, b_pct: float) -> str:
     return (
         '<div class="split">'
@@ -502,6 +570,21 @@ def render_report(data: ReportData) -> str:
             "\n  <h3>Облігації, золото та товарні активи</h3>\n  "
             + _render_special_table(data.special_asset_rows)
         )
+    alternative_section = ""
+    if data.alternative_asset_tables:
+        detail_tables = "\n".join(
+            _render_detail_table(table) for table in data.alternative_asset_tables
+        )
+        alternative_section = f"""
+<section>
+  <div class="sec-label">
+    <span class="sec-num">04</span>
+    <h2 class="sec-title">Альтернативні активи</h2>
+    <span class="sec-rule"></span>
+  </div>
+  {detail_tables}
+</section>
+"""
 
     return f"""<!DOCTYPE html>
 <html lang="uk">
@@ -516,7 +599,6 @@ def render_report(data: ReportData) -> str:
 
 <header class="masthead">
   <div>
-    <div class="overline">Portfolio Review</div>
     <h1>Квартальний звіт</h1>
     <div class="subtitle">{_esc(data.period_title)}</div>
   </div>
@@ -526,7 +608,7 @@ def render_report(data: ReportData) -> str:
 <section>
   <div class="sec-label">
     <span class="sec-num">01</span>
-    <h2 class="sec-title">Коротко за квартал</h2>
+    <h2 class="sec-title">{_esc(data.summary_title)}</h2>
     <span class="sec-rule"></span>
   </div>
   {_render_kpis(data.kpis)}
@@ -556,6 +638,8 @@ def render_report(data: ReportData) -> str:
   {_render_split("Співвідношення Китай/Інші", china_pct, rest_pct)}
 {special_section}
 </section>
+
+{alternative_section}
 
 <footer>
   <span>Квартальний звіт · {_esc(data.quarter_label)} {_esc(data.year_label)}</span>

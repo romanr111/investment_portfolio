@@ -1,13 +1,15 @@
 # -------------------------------- DONE --------------------------------
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
+from src.portfolio_ledger.contract import STABLECOINS, CASH_EQUIVALENTS
 
 
 class ExchangeBase(ABC):
     """Base class for cryptocurrency exchange clients with common functionality."""
 
     # Common constants
-    STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "PAX", "EURI"}
+    STABLECOINS = STABLECOINS
+    CASH_EQUIVALENTS = CASH_EQUIVALENTS
     MIN_CRYPTO_BALANCE = 0.001
     ROUND_DECIMALS = 4
 
@@ -102,7 +104,7 @@ class ExchangeBase(ABC):
 
     @abstractmethod
     def get_cash_balance(self) -> int:
-        """Retrieve spot account cash balance from exchange."""
+        """Retrieve spot/funding cash balance in USD."""
         pass
 
     @abstractmethod
