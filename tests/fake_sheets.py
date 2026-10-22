@@ -147,9 +147,18 @@ class FakeSpreadsheet:
                 for y in range(r.get("startRowIndex", 0), r["endRowIndex"]):
                     for x in range(r.get("startColumnIndex", 0), r["endColumnIndex"]):
                         self._check(s, (y + 1, x + 1))
-                        s.formats.setdefault((y + 1, x + 1), {}).update(
-                            value["cell"].get("userEnteredFormat", {})
-                        )
+                        current = s.formats.setdefault((y + 1, x + 1), {})
+                        for field, setting in (
+                            value["cell"].get("userEnteredFormat", {}).items()
+                        ):
+                            # A nested Sheets field mask preserves sibling font properties.
+                            if field == "textFormat" and (
+                                "userEnteredFormat.textFormat." in value["fields"]
+                                or "userEnteredFormat.textFormat(" in value["fields"]
+                            ):
+                                current.setdefault(field, {}).update(deepcopy(setting))
+                            else:
+                                current[field] = deepcopy(setting)
             elif key == "setBasicFilter":
                 by_id[value["filter"]["range"]["sheetId"]].basic_filter = value[
                     "filter"

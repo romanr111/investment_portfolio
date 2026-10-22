@@ -682,7 +682,7 @@ def build_portfolio_tab(
     holdings = holdings_table(combined_data)
     holding_rows = [
         ("Holdings - USD",),
-        ("Asset", "Value USD", LBL_UNREALIZED_PNL),
+        ("Asset", "Value", LBL_UNREALIZED_PNL),
     ]
     grouped = {}
     ib_data = combined_data.get("IB_DATA")
@@ -745,7 +745,7 @@ def build_portfolio_tab(
     summary_rows = [("Portfolio", _date_cell(valuation_date))]
     if fire["target"] is not None:
         summary_rows = [
-            ("FIRE Goal", _cell(fire["progress_fraction"], "weight")),
+            ("FIRE progress", _cell(fire["progress_fraction"], "weight")),
             ("Eligible assets", _cell(fire["eligible_value"], "amount")),
             ("Target", _cell(fire["target"], "amount")),
         ]
@@ -791,8 +791,8 @@ def build_portfolio_tab(
 
     allocation_section = _allocation_section(combined_data, settings)
     allocation_rows = [
-        ("Tracked assets", _cell(combined_data.get("TOTAL_ASSETS"), "amount"), "USD"),
-        ("Category", "Value USD", "Weight"),
+        ("Portfolio value", _cell(combined_data.get("TOTAL_ASSETS"), "amount"), "USD"),
+        ("Category", "Value", "Weight"),
     ]
     allocation_rows.extend(
         (row[0], _cell(row[1].value, "amount"), _cell(row[2].value, "weight"))
@@ -801,7 +801,7 @@ def build_portfolio_tab(
     )
     if any(row["value"] is None for row in category_rows(combined_data)):
         allocation_rows[0] = (
-            "Tracked assets (partial)",
+            "Portfolio value (partial)",
             _cell(combined_data.get("TOTAL_ASSETS"), "amount"),
             "USD",
         )
@@ -821,7 +821,7 @@ def build_portfolio_tab(
             ("Accessible cash", _cell(liquidity["cash_available_now"], "amount"))
         )
     income_rows = [
-        ("Investment income (est.)",),
+        ("Estimated income",),
         ("Source", "Monthly USD"),
     ]
     income_rows.extend(
@@ -836,12 +836,12 @@ def build_portfolio_tab(
         (
             ("",),
             (
-                "Monthly total"
+                "Monthly average"
                 + (" (partial)" if income["state"] == "Incomplete" else ""),
                 _cell(income["monthly_average"], "amount"),
             ),
             (
-                "Yearly total",
+                "Annual estimate",
                 _cell(
                     income["annual_income"],
                     "amount",
@@ -1002,7 +1002,7 @@ def build_portfolio_tab(
         freeze_rows=2,
         freeze_columns=4,
         row_groups=groups,
-        column_widths=(190, 116, 105, 180, 105, 145, 145, 150, 85, 24, 220, 110),
+        column_widths=(190, 120, 100, 190, 110, 150, 150, 160, 100, 28, 220, 115),
         emphasis_rows=tuple(emphasis),
         pnl_columns=(("holdings", 2), ("holding_details", 7)),
     )

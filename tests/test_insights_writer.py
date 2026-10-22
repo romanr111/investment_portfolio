@@ -5,6 +5,124 @@ from src.google_sheets.insights_refresh import refresh_insights
 
 
 class InsightsWriterTests(unittest.TestCase):
+    def test_compact_small_values_and_unavailable_cells_keep_their_meaning(self):
+        for amount, decimals in ((0, 0), (0.004, 3), (-0.004, 3), (0.42, 2), (1.01, 0)):
+            with self.subTest(amount=amount):
+                data = current_snapshot()
+                data["TOTAL_ASSETS"] = amount
+                data["ENHANCED_STOCKS"]["Stocks"]["AAA"][
+                    "unrealized_pnl_percentage"
+                ] = 0.0001
+                book = FakeSpreadsheet()
+                refresh_insights(book, data, config={})
+                main = book.worksheet("04 Oct 2026")
+                self.assertEqual(main.values[(1, 8)], amount)
+                pattern = main.formats[(1, 8)]["numberFormat"]["pattern"].split(";")[0]
+                self.assertEqual(len(pattern.partition(".")[2]), decimals)
+                aaa_row = next(
+                    r for (r, c), v in main.values.items() if c == 4 and v == "AAA"
+                )
+                self.assertAlmostEqual(main.values[(aaa_row, 6)], 0.000001)
+                self.assertTrue(
+                    main.formats[(aaa_row, 6)]["numberFormat"]["pattern"].startswith(
+                        "+0.0000%"
+                    )
+                )
+        data = current_snapshot()
+        data["IB_PERFORMANCE"]["rate_of_return_pct"] = None
+        data.pop("FINANCIAL_FREEDOM_GOAL_TARGET")
+        data["FIXED_INCOME_DATA"]["group_weighted_interest"].pop("Bonds")
+        book = FakeSpreadsheet()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        unavailable_row = next(
+            r
+            for (r, c), v in main.values.items()
+            if c == 1 and v == "IB return - YTD - TWR"
+        )
+        self.assertEqual(main.values[(unavailable_row, 2)], "Unavailable")
+        self.assertNotIn("numberFormat", main.formats[(unavailable_row, 2)])
+        self.assertTrue(
+            any(v == "Monthly average (partial)" for v in main.values.values())
+        )
+
+    def test_row_sizes_preserve_adjacent_data_and_automatic_warning_height(self):
+        from src.google_sheets.insights_cells import render_blocks
+        from src.google_sheets.insights_tables import build_portfolio_tab
+
+        data = current_snapshot()
+        data["DATA_METADATA"].update(source="cached_snapshot", age_seconds=900)
+        grid, typed, ranges = render_blocks(build_portfolio_tab(data).blocks)
+        book = FakeSpreadsheet()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        sizes = {}
+        for request in book.batch_updates[-1]["requests"]:
+            p = request.get("updateDimensionProperties", {})
+            r = p.get("range", {})
+            if (
+                r.get("sheetId") == main.id
+                and r.get("dimension") == "ROWS"
+                and "pixelSize" in p.get("properties", {})
+            ):
+                for row in range(r["startIndex"], r["endIndex"]):
+                    sizes[row] = p["properties"]["pixelSize"]
+        self.assertEqual(sizes.get(0), 42)
+        self.assertEqual(sizes.get(1), 36)
+        self.assertEqual(sizes.get(2), 24)
+        warning = next(
+            r
+            for (r, c), v in typed.items()
+            if v.kind == "status" and r < ranges["details"][0]
+        )
+        self.assertNotIn(warning, sizes)
+        for row in range(2, ranges["details"][0]):
+            empty = all(v in ("", None) for v in grid[row][:12])
+            if empty:
+                self.assertEqual(sizes.get(row), 12)
+            elif sizes.get(row) == 12:
+                self.fail("A separator shrank a row containing adjacent panel data")
+        self.assertEqual(main.formats[(2, 5)]["horizontalAlignment"], "RIGHT")
+        self.assertEqual(main.formats[(2, 9)]["horizontalAlignment"], "RIGHT")
+
+    def test_compact_formats_preserve_numbers_and_leave_details_precise(self):
+        from copy import deepcopy
+
+        data = current_snapshot()
+        data["TOTAL_ASSETS"] = 12345.678
+        original = deepcopy(data)
+        book = FakeSpreadsheet()
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        self.assertEqual(data, original)
+        self.assertEqual(main.values[(1, 8)], 12345.678)
+        self.assertEqual(
+            main.formats[(1, 8)]["numberFormat"]["pattern"], '"$"#,##0;-"$"#,##0;"$"0'
+        )
+        self.assertEqual(
+            main.formats[(1, 2)]["numberFormat"]["pattern"], "0.0%;-0.0%;0.0%"
+        )
+        aaa_row = next(r for (r, c), v in main.values.items() if c == 4 and v == "AAA")
+        self.assertEqual(main.values[(aaa_row, 6)], 0.0705)
+        self.assertEqual(
+            main.formats[(aaa_row, 6)]["numberFormat"]["pattern"], "+0.0%;-0.0%;0.0%"
+        )
+        date_row = next(
+            r for (r, c), v in main.values.items() if c == 1 and v == "As of"
+        )
+        self.assertEqual(
+            main.formats[(date_row, 2)]["numberFormat"]["pattern"], "dd mmm yyyy"
+        )
+        detail_row = next(
+            r
+            for (r, c), v in main.values.items()
+            if c == 1 and v == "Synthetic Alpha (AAA)"
+        )
+        self.assertEqual(
+            main.formats[(detail_row, 8)]["numberFormat"]["pattern"],
+            "+0.00%;-0.00%;0.00%",
+        )
+
     def test_summary_hierarchy_survives_refresh_with_large_portfolio_values(self):
         book = FakeSpreadsheet()
         data = current_snapshot()
@@ -18,17 +136,26 @@ class InsightsWriterTests(unittest.TestCase):
             self.assertTrue(main.formats[(1, 8)]["textFormat"]["bold"])
             self.assertEqual(main.formats[(1, 2)]["textFormat"]["fontSize"], 16)
             for coord in ((1, 4), (1, 7), (1, 11)):
-                self.assertEqual(main.formats[coord]["textFormat"]["fontSize"], 11)
+                self.assertEqual(main.formats[coord]["textFormat"]["fontSize"], 12)
             for coord in ((2, 4), (2, 7), (2, 11)):
                 self.assertEqual(main.formats[coord]["horizontalAlignment"], "LEFT")
-            for label in ("Monthly total", "Yearly total"):
+            for label, size, bold in (
+                ("Monthly average", 14, True),
+                ("Annual estimate", 11, False),
+            ):
                 row = next(
                     r
                     for (r, c), v in main.values.items()
                     if c == 11 and str(v).startswith(label)
                 )
-                self.assertTrue(main.formats[(row, 12)]["textFormat"]["bold"])
-                self.assertEqual(main.formats[(row, 12)]["textFormat"]["fontSize"], 12)
+                self.assertEqual(main.formats[(row, 12)]["textFormat"]["bold"], bold)
+                self.assertEqual(
+                    main.formats[(row, 12)]["textFormat"]["fontSize"], size
+                )
+            for coord in ((1, 8), (1, 2), (2, 4), (3, 4), (4, 4)):
+                self.assertEqual(
+                    main.formats[coord]["textFormat"].get("fontFamily"), "Arial"
+                )
             requests = book.batch_updates[-1]["requests"]
             row_sizes = [
                 v["updateDimensionProperties"]
@@ -41,7 +168,7 @@ class InsightsWriterTests(unittest.TestCase):
                 any(
                     v["range"]["startIndex"] == 0
                     and v["range"]["endIndex"] == 1
-                    and v["properties"]["pixelSize"] >= 38
+                    and v["properties"]["pixelSize"] == 42
                     for v in row_sizes
                 )
             )
@@ -108,8 +235,9 @@ class InsightsWriterTests(unittest.TestCase):
         _, _, ranges = render_blocks(build_portfolio_tab(data).blocks)
         for block, (r0, r1, c0, c1) in ranges.items():
             color = main.formats[(r0 + 1, c0 + 1)]["backgroundColor"]
-            self.assertEqual(color["red"], color["green"], block)
-            self.assertEqual(color["green"], color["blue"], block)
+            self.assertEqual(
+                color, {"red": 241 / 255, "green": 240 / 255, "blue": 236 / 255}, block
+            )
         self.assertEqual(len(main.conditional_formats), 1)
         rule = main.conditional_formats[0]
         points = rule["gradientRule"]

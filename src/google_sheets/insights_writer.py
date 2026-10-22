@@ -19,6 +19,23 @@ MARKER_COLUMN = 28  # Zero-based column AC. gspread cell coordinates are one-bas
 OWNERSHIP_MARKER = "portfolio_snapshot_generated_v2"
 MAX_DATA_COLUMNS = MARKER_COLUMN
 
+_COLORS = {
+    name: dict(
+        zip(
+            ("red", "green", "blue"),
+            (int(hex_value[i : i + 2], 16) / 255 for i in (0, 2, 4)),
+        )
+    )
+    for name, hex_value in {
+        "text": "242424",
+        "muted": "666666",
+        "header": "F1F0EC",
+        "subtotal": "F7F6F2",
+        "border": "DEDED8",
+        "white": "FFFFFF",
+    }.items()
+}
+
 _NUMBER_FORMATS = {
     "money": {
         "type": "CURRENCY",
@@ -132,6 +149,31 @@ def _typed_format_ranges(
         else:
             merged.append((kind, start_row, end_row, start_column, end_column))
     return merged
+
+
+def _compact_format(cell: CellValue) -> dict[str, str] | None:
+    """Change presentation only; tiny nonzero values retain a significant digit."""
+    if cell.kind == "date":
+        return {"type": "DATE", "pattern": "dd mmm yyyy"}
+    if cell.kind not in {"amount", "money", "weight", "percent"} or (
+        isinstance(cell.value, bool)
+        or not isinstance(cell.value, (int, float, Decimal))
+        or not math.isfinite(cell.value)
+    ):
+        return None
+    percent = cell.kind in {"weight", "percent"}
+    units = abs(float(cell.value)) * (100 if percent else 1)
+    decimals = 1 if percent else 0
+    if 0 < units < (0.05 if percent else 1):
+        decimals = max(1 if percent else 2, -math.floor(math.log10(units)))
+    number = ("0" if percent else "#,##0") + ("." + "0" * decimals if decimals else "")
+    prefix, suffix = ("", "%") if percent else ('"$"', "")
+    positive = "+" if cell.kind in {"money", "percent"} else ""
+    return {
+        "type": "PERCENT" if percent else "CURRENCY",
+        "pattern": f"{positive}{prefix}{number}{suffix};-{prefix}{number}{suffix};"
+        + ("0.0%" if percent else '"$"0'),
+    }
 
 
 def _append_format_request(
@@ -334,9 +376,15 @@ def _tab_requests(
         {
             "wrapStrategy": "WRAP",
             "verticalAlignment": "MIDDLE",
-            "textFormat": {"fontFamily": "Arial", "fontSize": 10},
+            "backgroundColor": _COLORS["white"],
+            "textFormat": {
+                "fontFamily": "Arial",
+                "fontSize": 11,
+                "bold": False,
+                "foregroundColor": _COLORS["text"],
+            },
         },
-        "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.fontFamily,userEnteredFormat.textFormat.fontSize",
+        "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.backgroundColor,userEnteredFormat.textFormat(fontFamily,fontSize,bold,foregroundColor)",
     )
 
     for block_name, (start, end, first_column, width) in block_ranges.items():
@@ -348,14 +396,16 @@ def _tab_requests(
             first_column,
             width,
             {
-                "backgroundColor": {"red": 0.96, "green": 0.96, "blue": 0.96},
+                "backgroundColor": _COLORS["header"],
                 "textFormat": {
-                    "foregroundColor": {"red": 0.12, "green": 0.12, "blue": 0.12},
+                    "fontFamily": "Arial",
+                    "foregroundColor": _COLORS["text"],
                     "bold": True,
-                    "fontSize": 11,
+                    "fontSize": 12,
                 },
+                "borders": {"bottom": {"style": "SOLID", "color": _COLORS["border"]}},
             },
-            "userEnteredFormat(backgroundColor,textFormat)",
+            "userEnteredFormat(backgroundColor,textFormat,borders)",
         )
         if block_name in tab.header_offsets:
             header_row = start + tab.header_offsets[block_name]
@@ -367,23 +417,36 @@ def _tab_requests(
                 first_column,
                 width,
                 {
-                    "backgroundColor": {"red": 0.94, "green": 0.94, "blue": 0.94},
-                    "textFormat": {"bold": True},
+                    "backgroundColor": _COLORS["header"],
+                    "textFormat": {
+                        "fontFamily": "Arial",
+                        "fontSize": 11,
+                        "bold": True,
+                        "foregroundColor": _COLORS["text"],
+                    },
                     "wrapStrategy": "WRAP",
-                    "horizontalAlignment": "CENTER",
+                    "horizontalAlignment": "LEFT",
                 },
                 "userEnteredFormat(backgroundColor,textFormat,wrapStrategy,horizontalAlignment)",
             )
-            _append_format_request(
-                requests,
-                sheet_id,
-                header_row,
-                header_row + 1,
-                first_column,
-                first_column + 1,
-                {"horizontalAlignment": "LEFT"},
-                "userEnteredFormat.horizontalAlignment",
-            )
+            numeric_columns = {
+                column
+                for (row, column), cell in typed_cells.items()
+                if header_row < row < end
+                and first_column <= column < width
+                and cell.kind in _NUMBER_FORMATS
+            }
+            for column in sorted(numeric_columns):
+                _append_format_request(
+                    requests,
+                    sheet_id,
+                    header_row,
+                    header_row + 1,
+                    column,
+                    column + 1,
+                    {"horizontalAlignment": "RIGHT"},
+                    "userEnteredFormat.horizontalAlignment",
+                )
 
     for block_name, offset in tab.emphasis_rows:
         start, _, first_column, last_column = block_ranges[block_name]
@@ -396,7 +459,7 @@ def _tab_requests(
             last_column,
             {
                 "textFormat": {"bold": True},
-                "backgroundColor": {"red": 0.97, "green": 0.97, "blue": 0.97},
+                "backgroundColor": _COLORS["subtotal"],
             },
             "userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor",
         )
@@ -471,6 +534,22 @@ def _tab_requests(
             },
             "userEnteredFormat.numberFormat,userEnteredFormat.horizontalAlignment",
         )
+
+    if "compact_allocation" in block_ranges:
+        compact_end = block_ranges["details"][0]
+        for (row, column), cell in typed_cells.items():
+            number_format = _compact_format(cell) if row < compact_end else None
+            if number_format:
+                _append_format_request(
+                    requests,
+                    sheet_id,
+                    row,
+                    row + 1,
+                    column,
+                    column + 1,
+                    {"numberFormat": number_format},
+                    "userEnteredFormat.numberFormat",
+                )
 
     _append_format_request(
         requests,
@@ -680,18 +759,62 @@ def _tab_requests(
                 "userEnteredFormat.textFormat(fontSize,bold)",
             )
         _, end, first_column, last_column = block_ranges["compact_income"]
+        for row, size, bold, color in (
+            (end - 2, 14, True, _COLORS["text"]),
+            (end - 1, 11, False, _COLORS["muted"]),
+        ):
+            _append_format_request(
+                requests,
+                sheet_id,
+                row,
+                row + 1,
+                first_column,
+                last_column,
+                {
+                    "textFormat": {
+                        "fontSize": size,
+                        "bold": bold,
+                        "foregroundColor": color,
+                    }
+                },
+                "userEnteredFormat.textFormat(fontSize,bold,foregroundColor)",
+            )
         _append_format_request(
             requests,
             sheet_id,
-            end - 2,
-            end,
-            first_column,
-            last_column,
-            {"textFormat": {"fontSize": 12, "bold": True}},
-            "userEnteredFormat.textFormat(fontSize,bold)",
+            0,
+            1,
+            8,
+            9,
+            {
+                "textFormat": {
+                    "fontSize": 11,
+                    "bold": False,
+                    "foregroundColor": _COLORS["muted"],
+                }
+            },
+            "userEnteredFormat.textFormat(fontSize,bold,foregroundColor)",
         )
-        # Fixed minimums follow auto-resize so repeated refreshes keep the hierarchy.
-        for row, height in ((0, 38), (1, 34)):
+        # Rows span all four panels: only a wholly empty row is a separator.
+        row_heights = [(0, 42), (1, 36)]
+        status_rows = {
+            row for (row, _), cell in typed_cells.items() if cell.kind == "status"
+        }
+        for row in range(2, block_ranges["details"][0]):
+            values = grid[row][:12]
+            if all(value in ("", None) for value in values):
+                row_heights.append((row, 12))
+            elif row not in status_rows and not any(
+                isinstance(value, str)
+                and (
+                    "\n" in value
+                    or len(value) > max(10, tab.column_widths[column] // 10)
+                )
+                for column, value in enumerate(values)
+            ):
+                # Potentially wrapped text keeps the automatic height above.
+                row_heights.append((row, 24))
+        for row, height in row_heights:
             requests.append(
                 {
                     "updateDimensionProperties": {

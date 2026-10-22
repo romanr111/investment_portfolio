@@ -10,6 +10,30 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsTablesTests(unittest.TestCase):
+    def test_monitor_layout_uses_clear_labels_without_changing_values(self):
+        data = current_snapshot()
+        tab = build_portfolio_tab(data)
+        blocks = {block.name: block for block in tab.blocks}
+        self.assertEqual(
+            tab.column_widths,
+            (190, 120, 100, 190, 110, 150, 150, 160, 100, 28, 220, 115),
+        )
+        self.assertEqual(blocks["summary"].rows[0][0], "FIRE progress")
+        self.assertEqual(blocks["compact_allocation"].rows[0][0], "Portfolio value")
+        self.assertEqual(
+            blocks["compact_allocation"].rows[0][1].value, data["TOTAL_ASSETS"]
+        )
+        self.assertEqual(blocks["holdings"].rows[1][1], "Value")
+        self.assertEqual(blocks["compact_allocation"].rows[1][1], "Value")
+        self.assertEqual(blocks["compact_income"].rows[0][0], "Estimated income")
+        self.assertEqual(blocks["compact_income"].rows[-2][0], "Monthly average")
+        self.assertEqual(blocks["compact_income"].rows[-1][0], "Annual estimate")
+        data["IB_DATA"].pop("Bonds")
+        partial = {block.name: block for block in build_portfolio_tab(data).blocks}
+        self.assertEqual(
+            partial["compact_allocation"].rows[0][0], "Portfolio value (partial)"
+        )
+
     def test_group_totals_do_not_repeat_identical_single_position_labels(self):
         tab = build_portfolio_tab(current_snapshot())
         rows = next(block.rows for block in tab.blocks if block.name == "holdings")
