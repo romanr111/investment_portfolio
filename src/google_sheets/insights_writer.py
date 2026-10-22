@@ -801,7 +801,6 @@ def _tab_requests(
         }
     )
 
-    chart_count = 0
     widths = tab.column_widths or (240, 135, 130, 140, 130, 150, 110, 200)
     for column, width in enumerate(widths[:column_count]):
         requests.append(
@@ -929,7 +928,7 @@ def _tab_requests(
                     }
                 }
             )
-    return requests, metadata, row_count, chart_count
+    return requests, metadata, row_count, 0
 
 
 class SheetConflictError(ValueError):

@@ -395,4 +395,4 @@ if __name__ == "__main__":
         },
     }
 
-    update_portfolio(portfolio_data, CREDENTIALS_PATH, SPREADSHEET_NAME)
+    update_portfolio_spreadsheet(portfolio_data, CREDENTIALS_PATH, SPREADSHEET_NAME)

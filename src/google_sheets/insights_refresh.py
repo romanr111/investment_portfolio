@@ -108,17 +108,6 @@ def select_previous_snapshot(
     return candidates[-1]
 
 
-def _latest_per_date(records: list[SnapshotRecord]) -> list[SnapshotRecord]:
-    latest: dict[str, SnapshotRecord] = {}
-    for record in records:
-        if record.as_of_date is None:
-            continue
-        existing = latest.get(record.as_of_date)
-        if existing is None or _saved_sort_key(record) > _saved_sort_key(existing):
-            latest[record.as_of_date] = record
-    return [latest[key] for key in sorted(latest)]
-
-
 def load_insights_config(path: Optional[str | Path] = None) -> dict[str, Any]:
     """Read supported settings from an ignored local-only JSON file."""
     if path is not None:

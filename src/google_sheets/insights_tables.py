@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
 from src.google_sheets.insights_finance import (
-    CATEGORIES,
     category_rows,
     concentration_views,
     fire_progress,
