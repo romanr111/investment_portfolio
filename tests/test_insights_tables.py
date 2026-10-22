@@ -78,3 +78,18 @@ class InsightsTablesTests(unittest.TestCase):
             )
         )
 
+    def test_balance_change_total_row_is_emphasized(self):
+        tab = build_portfolio_tab(
+            current_snapshot(), previous_snapshot=previous_snapshot()
+        )
+        allocation = next(
+            block for block in tab.blocks if block.name == "compact_allocation"
+        )
+        offset = next(
+            index
+            for index, row in enumerate(allocation.rows)
+            if row[0] == "Balance change"
+        )
+        self.assertIn(("compact_allocation", offset), tab.emphasis_rows)
+
+

@@ -782,6 +782,7 @@ def build_portfolio_tab(
                 ),
             )
         )
+        emphasis.append(("compact_allocation", len(allocation_rows) - 1))
     if liquidity["cash_available_now"] is not None:
         allocation_rows.append(
             ("Accessible cash", _cell(liquidity["cash_available_now"], "amount"))
