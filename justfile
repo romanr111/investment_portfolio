@@ -13,6 +13,10 @@ run:
 crypto-sync *args:
     venv/bin/python -m src.portfolio_ledger.cli {{args}}
 
+# Add risk analytics to a derived copy of a dated combined-data snapshot.
+holy-grail *args:
+    venv/bin/python -m analytics.holy_grail_cli {{args}}
+
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:
     #!/usr/bin/env bash

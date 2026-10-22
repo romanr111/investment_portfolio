@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
+from analytics.holy_grail import saved_progress_view
 from .formatting import (
     DataFormatter,
     PortfolioFormatter,
@@ -124,6 +125,7 @@ class PortfolioTableBuilder:
     def __init__(self, data: Dict[str, Any]):
         self.data = data
         self.category_header_rows = []  # Track rows with category headers
+        self.holy_grail_details_range = None
 
     def build_left_columns(self) -> List[List[str]]:
         """Build columns D/E data with enhanced stock percentage display."""
@@ -546,6 +548,24 @@ class PortfolioTableBuilder:
         # Fixed Income Data (K/L)
         self._build_fixed_income_section(final_table)
 
+        view = saved_progress_view(self.data)
+        summary = [
+            ("Holy Grail", view["fraction"] if view["fraction"] is not None else view["headline"]),
+            ("Ефективні джерела / ціль", view["effective"] + " / 15-20"),
+            ("Дата оцінки", view["as_of"]),
+            ("Статус", view["sheet_status"]),
+            ("Проксі / без історії", view["coverage_text"]),
+        ]
+        for row_index, values in enumerate(summary, start=9):
+            self._set_cell(final_table, row_index, 0, values[0])
+            self._set_cell(final_table, row_index, 1, values[1])
+        first = len(final_table) + 1
+        self._set_cell(final_table, first, 0, "Holy Grail - Details")
+        for row_index, values in enumerate(view["rows"], start=first + 1):
+            self._set_cell(final_table, row_index, 0, values[0])
+            self._set_cell(final_table, row_index, 1, values[1])
+        self.holy_grail_details_range = (first + 1, len(final_table))
+
         return final_table
 
     def _build_fixed_income_section(self, final_table: List[List[str]]) -> None:
@@ -620,6 +640,7 @@ class PortfolioUpdater:
         portfolio_formatter.format_portfolio_table(
             final_table, table_builder.category_header_rows
         )
+        portfolio_formatter.format_holy_grail(table_builder.holy_grail_details_range)
         # Expand columns D and K for better fit
         portfolio_formatter.expand_columns_for_portfolio(
             col_d_width=200, col_k_width=180

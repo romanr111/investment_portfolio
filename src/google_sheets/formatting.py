@@ -216,6 +216,34 @@ class SpreadsheetFormatter:
 class PortfolioFormatter(SpreadsheetFormatter):
     """Handles portfolio-specific formatting operations."""
 
+    def format_holy_grail(self, details_range) -> None:
+        requests = [{"repeatCell": {
+            "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
+                      "endRowIndex": 10, "startColumnIndex": 1, "endColumnIndex": 2},
+            "cell": {"userEnteredFormat": {"numberFormat": {"type": "PERCENT", "pattern": "0.0%"}}},
+            "fields": "userEnteredFormat.numberFormat",
+        }}, {"repeatCell": {
+            "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
+                      "endRowIndex": 14, "startColumnIndex": 0, "endColumnIndex": 2},
+            "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+            "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+        }}]
+        if details_range and details_range[1] > details_range[0]:
+            bounds = {"sheetId": self.worksheet.id, "dimension": "ROWS",
+                      "startIndex": details_range[0], "endIndex": details_range[1]}
+            requests.extend([
+                {"repeatCell": {
+                    "range": {"sheetId": self.worksheet.id, "startRowIndex": details_range[0],
+                              "endRowIndex": details_range[1], "startColumnIndex": 0, "endColumnIndex": 2},
+                    "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+                    "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+                }},
+                {"addDimensionGroup": {"range": bounds}},
+                {"updateDimensionGroup": {"dimensionGroup": {"range": bounds, "depth": 1, "collapsed": True}, "fields": "collapsed"}},
+                {"updateDimensionProperties": {"range": bounds, "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
+            ])
+        self.worksheet.spreadsheet.batch_update({"requests": requests})
+
     def format_portfolio_table(
         self, table_data: List[List[Union[str, float]]], header_rows: List[int]
     ) -> None:

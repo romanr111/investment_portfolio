@@ -61,6 +61,47 @@ For missing positions, use the same collector with `IB_FLEX_QUERY_ID_PORTFOLIO_S
 
 ## Generate and verify
 
+### Holy Grail saved-data enrichment
+
+The optional `HOLY_GRAIL_DATA` block is calculated once in
+`DataSource.get_combined_data()` before persistence and Sheets publication.
+The HTML reads only that saved block through `saved_progress_view()` and
+rejects a different valuation date or holdings fingerprint. Preserve the four
+approved summary cards; show diversification in its dedicated section.
+Never fetch histories or calculate correlations from the report generator.
+
+For a historical quarter, validate the original snapshot's holdings/date first:
+
+```bash
+just holy-grail --snapshot VERIFIED_QUARTER_END_SNAPSHOT \
+  --output data/derived_snapshots/quarter_holy_grail.json
+venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
+  --year YEAR --quarter QUARTER --before VERIFIED_BASELINE \
+  --after data/derived_snapshots/quarter_holy_grail.json
+```
+
+The enrichment command refuses overwrite, output in automatic snapshot folders,
+and changes to latest pointers. It preserves existing financial fields. Use
+`--offline` to reuse cached data. Historical enrichment is retrospective because
+today's retrieved histories may include revisions; it does not establish what
+was known at the original close. Keep September holdings even if sold later.
+
+Method `holy_grail_progress_v1` uses common monthly USD returns, sample
+covariance and squared correlations weighted by absolute variance contributions.
+15 effective streams correspond to statistical 100%; reviewed net-return
+rationales, full coverage, 60 observations, cluster risk <=10% and recent36
+count >=75% of primary are also required for achievement. HYG lending proxies
+and the used-car CPI proxy are approximate, with omitted risks retained.
+36-59 observations are provisional; below36 withholds the percentage.
+Keep estimates distinct from approval; never remove unqualified holdings to
+improve the score. See README's Holy Grail progress section for full policy.
+
+Mappings, qualifications, raw histories and provenance remain under ignored
+`data/`. Public diagnostics may contain percentages and generic risk labels,
+never balances, platform accounts or private rationale records. Missing coverage,
+weak proxies and drafts must remain visible. Do not change a draft to reviewed
+without an actual documented review.
+
 ```bash
 just report YEAR QUARTER
 ```

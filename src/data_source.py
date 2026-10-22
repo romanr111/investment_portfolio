@@ -25,6 +25,7 @@ from src.portfolio_ledger.contract import (
 )
 from src.portfolio_ledger.storage import PortfolioLedger
 from src.portfolio_ledger.sync import build_activity_sources, sync_crypto_sources
+from analytics.holy_grail_data import enrich_combined_data
 from data.assets_data import OTHER_BETS
 
 # Set up logging
@@ -36,7 +37,8 @@ PORTFOLIO_LEDGER_PATH = Path("data/portfolio_ledger")
 
 
 class DataSource:
-    def __init__(self):
+    def __init__(self, *, refresh_holy_grail_history: bool = True):
+        self._refresh_holy_grail_history = refresh_holy_grail_history
         try:
             start_time = time.time()
             self._data_timestamp = time.time()
@@ -449,6 +451,11 @@ class DataSource:
             },
         }
         data.update(contract)
+        data = enrich_combined_data(
+            data,
+            as_of_date=datetime.fromtimestamp(self._data_timestamp).date().isoformat(),
+            allow_network=getattr(self, "_refresh_holy_grail_history", False),
+        )
         self._save_combined_data_to_json(data)
         return data
 

@@ -78,7 +78,8 @@ class TestPortfolioTotals(unittest.TestCase):
                 "net_worth": 150,
                 "allocations": {},
             }
-            data_source._save_combined_data_to_json = lambda data: None
+            persisted = []
+            data_source._save_combined_data_to_json = lambda data: persisted.append(dict(data))
             data_source.portfolio_contract = build_portfolio_contract(
                 ledger=PortfolioLedger(Path(temp_dir)),
                 live_crypto_quantities={"BTC": 0.001},
@@ -93,6 +94,8 @@ class TestPortfolioTotals(unittest.TestCase):
             combined = data_source.get_combined_data()
 
             self.assertEqual(combined["DATA_CONTRACT_VERSION"], 2)
+            self.assertIn("HOLY_GRAIL_DATA", combined)
+            self.assertEqual(persisted[0]["HOLY_GRAIL_DATA"], combined["HOLY_GRAIL_DATA"])
             self.assertIn("POSITION_DATA", combined)
             self.assertIn("ACTIVITY_DATA", combined)
             self.assertIn("PERFORMANCE_DATA", combined)
