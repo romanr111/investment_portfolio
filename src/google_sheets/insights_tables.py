@@ -682,7 +682,8 @@ def build_portfolio_tab(
             continue
         if len(holding_rows) > 2:
             holding_rows.append(("",))
-        emphasis.append(("holdings", len(holding_rows)))
+        if len(positions) > 1:  # a lone category row is data, not a summary
+            emphasis.append(("holdings", len(holding_rows)))
         total = (
             sum(row["value_usd"] for row in positions)
             if all(row["value_usd"] is not None for row in positions)
