@@ -94,6 +94,17 @@ def _date_cell(value: Optional[str]) -> CellValue:
         return _status("Unknown")
 
 
+def _balance_change_label(previous_date: Optional[str]) -> str:
+    """State the comparison period in the label so the delta reads unambiguous."""
+    if previous_date is None:
+        return "Balance change"
+    try:
+        parsed = date.fromisoformat(str(previous_date)[:10])
+    except ValueError:
+        return "Balance change"
+    return f"Balance change\nvs {parsed.day} {parsed.strftime('%b')} {parsed.year}"
+
+
 def _current_date(data: dict, current_date: Optional[str]) -> Optional[str]:
     if current_date:
         try:
@@ -777,9 +788,8 @@ def build_portfolio_tab(
             (
                 ("",),
                 (
-                    "Balance change",
+                    _balance_change_label(previous_date),
                     _money(comparison["balance_change_total"]),
-                    _date_cell(previous_date),
                 ),
             )
         )

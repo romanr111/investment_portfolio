@@ -88,9 +88,11 @@ class InsightsTablesTests(unittest.TestCase):
         offset = next(
             index
             for index, row in enumerate(allocation.rows)
-            if row[0] == "Balance change"
+            if row[0].startswith("Balance change")
         )
         self.assertIn(("compact_allocation", offset), tab.emphasis_rows)
+        # The label carries the comparison period so the delta reads unambiguous.
+        self.assertIn("vs 30 Sep 2026", allocation.rows[offset][0])
 
     def test_compact_pnl_header_splits_across_two_lines(self):
         tab = build_portfolio_tab(current_snapshot())
