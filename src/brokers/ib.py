@@ -294,6 +294,7 @@ class InteractiveBrokers:
                 "unrealized_pnl_percentage": round(unrealized_pnl_percentage, 2),
                 "percentage_of_stocks": round(stocks_percentage, 2),
                 "percentage_of_portfolio": round(portfolio_percentage, 2),
+                "currency": position.get("currency"),
             }
 
         # Calculate total unrealized P&L percentage relative to total cost basis

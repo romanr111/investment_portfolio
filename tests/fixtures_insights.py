@@ -22,25 +22,27 @@ def current_snapshot():
             "Stocks": {
                 "AAA": {
                     "market_value": 100.0,
-                    "unrealized_pnl": 7.05,
-                    "unrealized_pnl_percentage": 7.05,
+                    "quantity": 1.0,
                     "avg_price": 93.4336,
                     "current_price": 100.0,
+                    "unrealized_pnl": 7.05,
+                    "unrealized_pnl_percentage": 7.05,
+                    "percentage_of_stocks": 22.22,
+                    "percentage_of_portfolio": 11.11,
                     "currency": "USD",
-                    "account_label": "IB",
-                    "name": "Synthetic Alpha",
                 }
             },
             "China Stocks": {
                 "BBB": {
                     "market_value": 100.0,
-                    "unrealized_pnl": 10.0,
-                    "unrealized_pnl_percentage": 10.0,
+                    "quantity": 1.0,
                     "avg_price": 90.0,
                     "current_price": 100.0,
+                    "unrealized_pnl": 10.0,
+                    "unrealized_pnl_percentage": 10.0,
+                    "percentage_of_stocks": 22.22,
+                    "percentage_of_portfolio": 11.11,
                     "currency": "HKD",
-                    "account_label": "IB",
-                    "name": "Synthetic Beta",
                 }
             },
         },

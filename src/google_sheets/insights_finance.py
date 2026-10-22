@@ -116,7 +116,7 @@ def _category_values(data: Optional[dict]) -> dict[str, Optional[float]]:
     else:
         other = None
 
-    return {
+    values = {
         "Stocks": stocks,
         "Bonds": bonds,
         "Other Bets": other,
@@ -130,6 +130,20 @@ def _category_values(data: Optional[dict]) -> dict[str, Optional[float]]:
         "P2P Lending": _group_principal(data, ("P2P Lending", "p2p_lending")),
         "REIT": _sum_mapping(ib_data["REIT"]) if "REIT" in ib_data else None,
     }
+    # ASSET_ALLOCATION.allocations is the published per-category amount
+    # (src/data_source.py). Prefer it so the sheet cannot diverge from what the
+    # sheets sync publishes; the derivation above is the fallback when the
+    # publication is absent.
+    allocation = data.get("ASSET_ALLOCATION")
+    saved = allocation.get("allocations") if isinstance(allocation, dict) else None
+    if isinstance(saved, dict):
+        for category, entry in saved.items():
+            if category not in values or not isinstance(entry, dict):
+                continue
+            amount = entry.get("value")
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                values[category] = float(amount)
+    return values
 
 
 def _category_total(values: dict[str, Optional[float]]) -> Optional[float]:
@@ -398,6 +412,10 @@ def _position_row(
         pnl_state = "Native currency unavailable"
     else:
         pnl_state = "Unavailable - cost basis not supplied"
+    # Producers carry no currency code for positions without one; show the
+    # explicit state in the currency column instead of a fabricated code.
+    if pnl_currency is None and pnl is not None:
+        pnl_currency = pnl_state
     name = details.get("name")
     return {
         "asset": f"{name} ({symbol})" if name else symbol,

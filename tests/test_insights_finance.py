@@ -2,6 +2,7 @@ import unittest
 from copy import deepcopy
 
 from src.google_sheets.insights_finance import (
+    _category_values,
     category_rows,
     concentration_views,
     fire_progress,
@@ -16,6 +17,22 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsFinanceTests(unittest.TestCase):
+    def test_saved_allocations_are_the_single_source_for_category_amounts(self):
+        data = current_snapshot()
+        data["ASSET_ALLOCATION"] = {
+            "allocations": {
+                "Stocks": {"value": 123.456, "percentage": 13.7},
+                "Cash": {"value": 1},
+            }
+        }
+        values = _category_values(data)
+        self.assertEqual(values["Stocks"], 123.456)
+        self.assertEqual(values["Cash"], 1.0)
+        # Categories without a publication keep the derived amount.
+        self.assertEqual(values["Other Bets"], 100.0)
+        self.assertEqual(values["Precious Metals"], 50.0)
+        self.assertNotIn("ASSET_ALLOCATION", current_snapshot())
+
     def test_fire_uses_portfolio_value_without_substituting_income_principal(self):
         data = current_snapshot()
         data["FIXED_INCOME_DATA"]["group_weighted_interest"]["Bonds"] = (225.0, 0.04)
@@ -216,7 +233,7 @@ class InsightsFinanceTests(unittest.TestCase):
         holdings = holdings_table(current_snapshot(), tiny_threshold_usd=100)
         by_symbol = {row["symbol"]: row for row in holdings["rows"]}
 
-        self.assertEqual(by_symbol["AAA"]["asset"], "Synthetic Alpha (AAA)")
+        self.assertEqual(by_symbol["AAA"]["asset"], "AAA")
         self.assertAlmostEqual(by_symbol["AAA"]["pct_total_assets"], 100 / 900.003)
         self.assertAlmostEqual(by_symbol["AAA"]["pct_ib_portfolio"], 100 / 450.003)
         self.assertEqual(by_symbol["AAA"]["unrealized_pnl_amount"], 7.05)
@@ -229,6 +246,28 @@ class InsightsFinanceTests(unittest.TestCase):
         self.assertAlmostEqual(
             sum(row["value_usd"] for row in holdings["rows"]), 900.003
         )
+
+    def test_holdings_report_state_when_producer_emits_no_currency(self):
+        # Production shape: analytics positions carry no name or account_label,
+        # and currency may be missing entirely.
+        data = current_snapshot()
+        for details in (
+            data["ENHANCED_STOCKS"]["Stocks"]["AAA"],
+            data["ENHANCED_STOCKS"]["China Stocks"]["BBB"],
+        ):
+            details.pop("currency")
+        by_symbol = {
+            row["symbol"]: row
+            for row in holdings_table(data, tiny_threshold_usd=100)["rows"]
+        }
+        for symbol in ("AAA", "BBB"):
+            self.assertEqual(
+                by_symbol[symbol]["pnl_currency"], "Native currency unavailable"
+            )
+            self.assertEqual(
+                by_symbol[symbol]["trading_currency"], "Native currency unavailable"
+            )
+        self.assertEqual(by_symbol["AAA"]["account"], "IB")
 
     def test_liquidity_requires_explicit_classification_and_distinguishes_zero_liabilities(
         self,
