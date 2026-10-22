@@ -99,7 +99,7 @@ class InsightsTablesTests(unittest.TestCase):
         holdings = next(block for block in tab.blocks if block.name == "holdings")
         self.assertEqual(holdings.rows[1][2], "Unrealized P&L\nvs cost")
 
-    def test_single_position_categories_collapse_into_their_subtotal(self):
+    def test_single_position_categories_show_their_symbol_rows(self):
         tab = build_portfolio_tab(current_snapshot())
         labels = [
             row[0]
@@ -108,9 +108,9 @@ class InsightsTablesTests(unittest.TestCase):
             )
         ]
         self.assertIn("Cash", labels)
-        self.assertNotIn("Cash total", labels)
+        self.assertNotIn("Cash total", labels)  # category-name echo is skipped
         self.assertIn("Commodities", labels)
-        self.assertNotIn("SIM-COM", labels)
+        self.assertNotIn("Commodities total", labels)
         self.assertIn("AAA", labels)
         # The subtotal tint marks groups that render rows inside them only;
         # a lone category row is data and reads plain.

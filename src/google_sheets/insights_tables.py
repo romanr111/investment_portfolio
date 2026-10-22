@@ -703,7 +703,7 @@ def build_portfolio_tab(
         )
         holding_rows.append((category, _cell(total, "amount")))
         for row in positions:
-            if not row["tiny"] and len(positions) > 1:  # a single row's subtotal already says it all
+            if not row["tiny"] and row["symbol"] != category:  # symbol stays visible; skip exact category-name echo
                 holding_rows.append(
                     (
                         row["symbol"],
