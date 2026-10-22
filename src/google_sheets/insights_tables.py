@@ -20,6 +20,8 @@ from src.google_sheets.insights_finance import (
 
 LBL_IB_RETURN = "IB return - YTD - TWR"
 LBL_UNREALIZED_PNL = "Unrealized P&L vs cost"
+# The compact holdings column is narrow; the header reads as two deliberate lines.
+LBL_UNREALIZED_PNL_COMPACT = "Unrealized P&L\nvs cost"
 LBL_ESTIMATED_MONTHLY_INCOME = "Estimated investment income - monthly average"
 
 
@@ -649,7 +651,7 @@ def build_portfolio_tab(
     holdings = holdings_table(combined_data)
     holding_rows = [
         ("Holdings - USD",),
-        ("Asset", "Value", LBL_UNREALIZED_PNL),
+        ("Asset", "Value", LBL_UNREALIZED_PNL_COMPACT),
     ]
     grouped = {}
     ib_data = combined_data.get("IB_DATA")

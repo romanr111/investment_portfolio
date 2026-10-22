@@ -92,6 +92,11 @@ class InsightsTablesTests(unittest.TestCase):
         )
         self.assertIn(("compact_allocation", offset), tab.emphasis_rows)
 
+    def test_compact_pnl_header_splits_across_two_lines(self):
+        tab = build_portfolio_tab(current_snapshot())
+        holdings = next(block for block in tab.blocks if block.name == "holdings")
+        self.assertEqual(holdings.rows[1][2], "Unrealized P&L\nvs cost")
+
     def test_single_position_categories_collapse_into_their_subtotal(self):
         tab = build_portfolio_tab(current_snapshot())
         labels = [
