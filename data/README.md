@@ -58,22 +58,25 @@ snapshot without broker access. Its envelope date determines the main tab,
 comparison cutoff, and timeline entry. The live updater also accepts an optional
 keyword-only `valuation_date`; absent dates stop before any write.
 
-Existing unmarked tabs require explicit adoption. First inspect the exact sheet
-ID, source chart ranges, and generated regions. Call
-`preview_adoption(worksheet, ranges, history_chart_id=None)` from
+Existing unmarked main tabs require explicit adoption. First inspect the exact
+sheet ID and generated regions. Call
+`preview_adoption(worksheet, ranges)` from
 `src.google_sheets.insights_writer`; ranges are zero-based
 `[start_row, end_row, start_column, end_column]`, with exclusive ends. Review its
 occupied cells and ranges, then pass the unchanged receipt as
 `adoptions={worksheet.id: receipt}`. A stale receipt or occupied cells outside
 the approved regions blocks the whole update. Never include user notes in an
-approved range. Optional `history_chart_id` explicitly adopts the reviewed
-history chart; other charts, including Deployed Capital, remain untouched.
+approved range.
 
 For a legacy main tab include all reviewed generated cells (normally columns
-A:L), not only the new layout. For the legacy timeline approve the existing
-date/value region in A:B; E:F must be empty or explicitly reviewed because it
-holds sorted chart data. AC1:AC2 are reserved metadata cells. No historical or
-thematic tabs are deleted and no suffixed copies are created.
+A:L), not only the new layout. AC1:AC2 are reserved metadata cells on the main
+tab. The existing `net_worth_timeline` keeps its legacy configuration: A is value,
+B is date. Same-date updates change only A; new dates append an A:B entry using
+the snapshot date. No adoption, ownership metadata, helper columns, chart edits
+or formatting changes apply to that tab. If missing, it is created with the
+legacy two-column layout. Existing helper data/charts from earlier previews
+are left intact; any cleanup is separate. No historical or thematic tabs are
+deleted and no suffixed copies are created.
 
 `dry_run=True` validates both destinations and returns the proposed tab/ID
 receipt without writes. Validate a synthetic test workbook and review it before

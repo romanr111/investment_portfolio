@@ -12,7 +12,7 @@ from typing import Any
 
 import gspread
 
-from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
+from src.google_sheets.insights_cells import CellValue, render_blocks
 from src.google_sheets.insights_tables import InsightTab
 
 MARKER_COLUMN = 28  # Zero-based column AC. gspread cell coordinates are one-based.
@@ -973,18 +973,6 @@ def _preflight(worksheet, role, ranges, adoption):
         if not isinstance(old, dict) or old.get("role") != role:
             raise SheetConflictError("Wrong generated worksheet role")
         old["ranges"] = _validated_ranges(old.get("ranges"))
-        if role == "timeline":
-            old["helper_ranges"] = _validated_ranges(old.get("helper_ranges", []))
-            if any(
-                c0 != 4
-                or c1 != 6
-                or not any(
-                    a <= r0 and r1 <= b and c <= c0 and c1 <= d
-                    for a, b, c, d in old["ranges"]
-                )
-                for r0, r1, c0, c1 in old["helper_ranges"]
-            ):
-                raise SheetConflictError("Invalid timeline helper ownership")
     elif adoption is not None:
         if (
             adoption.get("sheet_id") != worksheet.id
@@ -1046,7 +1034,8 @@ def _timeline_date(value):
     return None
 
 
-def _timeline_plan(worksheet, valuation_date, total_assets):
+def _timeline_plan(worksheet, valuation_date):
+    """Find the legacy A=value/B=date row without adopting or restyling the tab."""
     grid = _read(worksheet, worksheet.row_count, 2) if worksheet else {}
     entries, row_by_date = {}, {}
     for row in sorted({r for r, _ in grid}):
@@ -1070,16 +1059,7 @@ def _timeline_plan(worksheet, valuation_date, total_assets):
             )
         entries[day], row_by_date[day] = parsed, row
     target_row = row_by_date.get(valuation_date, max([r for r, _ in grid] + [-1]) + 1)
-    entries[valuation_date] = total_assets
-    history = [("Valuation date", "Tracked assets USD")]
-    history.extend(
-        (CellValue(day, "date"), CellValue(amount, "money"))
-        for day, amount in sorted(entries.items())
-    )
-    history_grid, history_typed, _ = render_blocks(
-        [CellBlock("history", tuple(history))]
-    )
-    return target_row, history_grid, history_typed
+    return target_row, valuation_date in row_by_date
 
 
 def _cells(sheet_id, row, column, values):
@@ -1092,33 +1072,10 @@ def _cells(sheet_id, row, column, values):
     }
 
 
-def _history_chart_spec(sheet_id, end_row):
-    def source(col):
-        return {
-            "sourceRange": {"sources": [_range(sheet_id, [0, end_row, col, col + 1])]}
-        }
-
-    return {
-        "title": "Tracked assets over time",
-        "hiddenDimensionStrategy": "SHOW_ALL",
-        "basicChart": {
-            "chartType": "SCATTER",
-            "legendPosition": "NO_LEGEND",
-            "headerCount": 1,
-            "domains": [{"domain": source(4)}],
-            "series": [{"series": source(5), "targetAxis": "LEFT_AXIS"}],
-            "axis": [
-                {"position": "BOTTOM_AXIS", "title": "Valuation date"},
-                {"position": "LEFT_AXIS", "title": "Tracked assets USD"},
-            ],
-        },
-    }
-
-
 def write_portfolio_snapshot(
     spreadsheet, tab, valuation_date, total_assets, *, adoptions=None, dry_run=False
 ):
-    """Preflight both targets, then apply one atomic Sheets batch. No suffix tabs."""
+    """Render the main tab and update only value/date data in the legacy timeline."""
     if (
         not isinstance(total_assets, (int, float))
         or isinstance(total_assets, bool)
@@ -1132,46 +1089,24 @@ def write_portfolio_snapshot(
     main, timeline = by_title.get(tab.title), by_title.get("net_worth_timeline")
     grid, _, _ = render_blocks(tab.blocks)
     main_ranges = [[0, len(grid), 0, len(grid[0])]]
-    target_row, history, typed_history = _timeline_plan(
-        timeline, valuation_date, total_assets
-    )
-    timeline_ranges = [[target_row, target_row + 1, 0, 2], [0, len(history), 4, 6]]
+    target_row, existing_date = _timeline_plan(timeline, valuation_date)
     old_main = _preflight(
         main, "main", main_ranges, adoptions.get(main.id) if main else None
     )
-    old_timeline = _preflight(
-        timeline,
-        "timeline",
-        timeline_ranges,
-        adoptions.get(timeline.id) if timeline else None,
-    )
     book_meta = spreadsheet.fetch_sheet_metadata(params={"includeGridData": False})
-    charts = {
-        c["chartId"]: c
-        for s in book_meta.get("sheets", [])
-        for c in s.get("charts", [])
-    }
-    timeline_charts = {
-        c["chartId"]
-        for s in book_meta.get("sheets", [])
-        if timeline and s.get("properties", {}).get("sheetId") == timeline.id
-        for c in s.get("charts", [])
-    }
-    chart_id = old_timeline.get("history_chart_id")
-    if chart_id is not None and chart_id not in timeline_charts:
-        raise SheetConflictError(
-            "Reviewed history chart is missing or belongs to another sheet"
-        )
     next_id = max([s.id for s in by_title.values()] + [0]) + 1
     requests, created, updated = [], [], []
     targets = []
     for existing, title, rows in (
         (main, tab.title, len(grid)),
-        (timeline, "net_worth_timeline", max(target_row + 1, len(history))),
+        (timeline, "net_worth_timeline", target_row + 1),
     ):
         if existing is None:
             existing = SimpleNamespace(
-                id=next_id, title=title, row_count=max(200, rows + 5), col_count=29
+                id=next_id,
+                title=title,
+                row_count=max(200, rows + 5),
+                col_count=29 if title == tab.title else 2,
             )
             next_id += 1
             requests.append(
@@ -1187,7 +1122,7 @@ def write_portfolio_snapshot(
                             ),
                             "gridProperties": {
                                 "rowCount": existing.row_count,
-                                "columnCount": 29,
+                                "columnCount": existing.col_count,
                             },
                         }
                     }
@@ -1210,130 +1145,22 @@ def write_portfolio_snapshot(
         tab, main, old_main, timeline.id, conditional_formats
     )
     requests.extend(main_requests)
-    timeline_rows = max(
-        timeline.row_count,
-        target_row + 1,
-        len(history) + 5,
-        max([r[1] for r in old_timeline.get("ranges", [])] + [0]),
-    )
-    requests.append(
-        {
-            "updateSheetProperties": {
-                "properties": {
-                    "sheetId": timeline.id,
-                    "gridProperties": {
-                        "rowCount": timeline_rows,
-                        "columnCount": max(29, timeline.col_count),
+    # Preserve legacy charts, dimensions, formatting and adjacent formulas. Only
+    # grow rows when appending past the existing grid; same-date updates touch A.
+    if target_row >= timeline.row_count:
+        requests.append(
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": timeline.id,
+                        "gridProperties": {"rowCount": target_row + 1},
                     },
-                },
-                "fields": "gridProperties.rowCount,gridProperties.columnCount",
-            }
-        }
-    )
-    # Only the helper history range is replaced. Existing A/B rows and C/D remain intact.
-    for bounds in old_timeline.get("helper_ranges", []):
-        requests.append(
-            {
-                "updateCells": {
-                    "range": _range(timeline.id, bounds),
-                    "fields": "userEnteredValue,userEnteredFormat",
+                    "fields": "gridProperties.rowCount",
                 }
             }
         )
-    serial = (date.fromisoformat(valuation_date) - date(1899, 12, 30)).days
-    requests.append(_cells(timeline.id, target_row, 0, [[total_assets, serial]]))
-    requests.append(_cells(timeline.id, 0, 4, history))
-    for kind, r0, r1, c0, c1 in _typed_format_ranges(typed_history):
-        _append_format_request(
-            requests,
-            timeline.id,
-            r0,
-            r1,
-            c0 + 4,
-            c1 + 4,
-            {"numberFormat": _NUMBER_FORMATS[kind]},
-            "userEnteredFormat.numberFormat",
-        )
-    for column, kind in ((0, "money"), (1, "date")):
-        _append_format_request(
-            requests,
-            timeline.id,
-            target_row,
-            target_row + 1,
-            column,
-            column + 1,
-            {"numberFormat": _NUMBER_FORMATS[kind]},
-            "userEnteredFormat.numberFormat",
-        )
-    spec = _history_chart_spec(timeline.id, len(history))
-    if chart_id is None:
-        chart_id = max(list(charts) + [0]) + 1
-        requests.append(
-            {
-                "addChart": {
-                    "chart": {
-                        "chartId": chart_id,
-                        "spec": spec,
-                        "position": {
-                            "overlayPosition": {
-                                "anchorCell": {
-                                    "sheetId": timeline.id,
-                                    "rowIndex": 1,
-                                    "columnIndex": 7,
-                                },
-                                "widthPixels": 800,
-                                "heightPixels": 420,
-                            }
-                        },
-                    }
-                }
-            }
-        )
-    else:
-        requests.append({"updateChartSpec": {"chartId": chart_id, "spec": spec}})
-    owned = old_timeline.get("ranges", []) + timeline_ranges
-    timeline_metadata = {
-        "role": "timeline",
-        "ranges": [list(r) for r in dict.fromkeys(tuple(r) for r in owned)],
-        "helper_ranges": [[0, len(history), 4, 6]],
-        "history_chart_id": chart_id,
-    }
-    requests.append(
-        _cells(
-            timeline.id,
-            0,
-            MARKER_COLUMN,
-            [[OWNERSHIP_MARKER], [json.dumps(timeline_metadata, sort_keys=True)]],
-        )
-    )
-    requests.append(
-        {
-            "updateDimensionProperties": {
-                "range": {
-                    "sheetId": timeline.id,
-                    "dimension": "COLUMNS",
-                    "startIndex": 4,
-                    "endIndex": 6,
-                },
-                "properties": {"hiddenByUser": True},
-                "fields": "hiddenByUser",
-            }
-        }
-    )
-    requests.append(
-        {
-            "updateDimensionProperties": {
-                "range": {
-                    "sheetId": timeline.id,
-                    "dimension": "COLUMNS",
-                    "startIndex": MARKER_COLUMN,
-                    "endIndex": MARKER_COLUMN + 1,
-                },
-                "properties": {"hiddenByUser": True},
-                "fields": "hiddenByUser",
-            }
-        }
-    )
+    values = [[total_assets]] if existing_date else [[total_assets, tab.title]]
+    requests.append(_cells(timeline.id, target_row, 0, values))
     receipt = dict(
         created_tabs=created,
         updated_tabs=updated,

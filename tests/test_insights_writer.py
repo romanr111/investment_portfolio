@@ -331,35 +331,33 @@ class InsightsWriterTests(unittest.TestCase):
         ids = [sheet.id for sheet in book.sheets]
         refresh_insights(book, current_snapshot(), config={})
         self.assertEqual([sheet.id for sheet in book.sheets], ids)
-        self.assertEqual(len(book.worksheet("net_worth_timeline").charts), 1)
+        timeline = book.worksheet("net_worth_timeline")
+        self.assertEqual(timeline.col_count, 2)
+        self.assertEqual(timeline.charts, [])
 
     def test_foreign_tab_conflict_has_no_writes_or_extra_tabs(self):
         from src.google_sheets.insights_writer import SheetConflictError
 
         book = FakeSpreadsheet()
-        sheet = book.add_worksheet("net_worth_timeline", cols=6)
-        sheet.values[(1, 1)], sheet.values[(1, 2)] = 100, "30 Sep 2026"
+        sheet = book.add_worksheet("04 Oct 2026", cols=12)
+        sheet.values[(1, 1)] = "user data"
         with self.assertRaises(SheetConflictError):
             refresh_insights(book, current_snapshot(), config={})
         self.assertEqual(book.batch_updates, [])
         self.assertEqual(len(book.sheets), 1)
 
-    def test_adoption_preserves_timeline_adjacent_formula_and_user_charts(self):
-        from src.google_sheets.insights_writer import preview_adoption
-
+    def test_legacy_timeline_preserves_adjacent_formula_and_user_charts(self):
         book = FakeSpreadsheet()
         sheet = book.add_worksheet("net_worth_timeline", cols=6)
         sheet.values[(1, 1)], sheet.values[(1, 2)] = 900, "04 Oct 2026"
         sheet.values[(1, 3)] = "=A1*2"
         sheet.charts.append({"chartId": 99, "spec": {"title": "Deployed Capital"}})
-        approval = preview_adoption(sheet, [[0, 1, 0, 2]])
-        refresh_insights(
-            book, current_snapshot(), config={}, adoptions={sheet.id: approval}
-        )
+        refresh_insights(book, current_snapshot(), config={})
         refresh_insights(book, current_snapshot(), config={})
         self.assertEqual(sheet.cell(1, 1).value, 900.003)
         self.assertEqual(sheet.cell(1, 3).value, "=A1*2")
-        self.assertEqual(len(sheet.charts), 2)
+        self.assertEqual(len(sheet.charts), 1)
+        self.assertEqual(sheet.cell(1, 2).value, "04 Oct 2026")
         self.assertEqual(sheet.charts[0]["spec"]["title"], "Deployed Capital")
         self.assertEqual(len(book.sheets), 2)
 
@@ -443,26 +441,39 @@ class InsightsWriterTests(unittest.TestCase):
         )
 
     def test_timeline_accepts_saved_iso_timestamp_dates(self):
-        from src.google_sheets.insights_writer import preview_adoption
-
         book = FakeSpreadsheet()
         sheet = book.add_worksheet("net_worth_timeline")
         sheet.values[(1, 1)], sheet.values[(1, 2)] = 750, "2026-06-30T00:00:00.000Z"
-        approval = preview_adoption(sheet, [[0, 1, 0, 2]])
-        refresh_insights(
-            book, current_snapshot(), config={}, adoptions={sheet.id: approval}
-        )
+        data = current_snapshot()
+        data["as_of_date"] = "2026-06-30"
+        refresh_insights(book, data, config={})
+        self.assertEqual(sheet.cell(1, 2).value, "2026-06-30T00:00:00.000Z")
+        self.assertEqual(sheet.cell(1, 1).value, data["TOTAL_ASSETS"])
         self.assertEqual(len(book.sheets), 2)
 
-    def test_history_chart_uses_hidden_helper_data(self):
+    def test_legacy_timeline_dry_run_and_appending_past_the_last_grid_row(self):
+        from copy import deepcopy
+
+        book = FakeSpreadsheet()
+        timeline = book.add_worksheet("net_worth_timeline", rows=1, cols=2)
+        timeline.values.update({(1, 1): 750, (1, 2): "30 Sep 2026"})
+        before = deepcopy(timeline.values)
+        refresh_insights(book, current_snapshot(), config={}, dry_run=True)
+        self.assertEqual(timeline.values, before)
+        self.assertEqual(book.batch_updates, [])
+        self.assertEqual(len(book.sheets), 1)
+        refresh_insights(book, current_snapshot(), config={})
+        self.assertEqual((timeline.row_count, timeline.col_count), (2, 2))
+        self.assertEqual(timeline.values[(2, 2)], "04 Oct 2026")
+        self.assertEqual(timeline.values[(1, 2)], "30 Sep 2026")
+
+    def test_timeline_does_not_add_charts_hidden_helpers_or_ownership_metadata(self):
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
-        self.assertEqual(
-            book.worksheet("net_worth_timeline")
-            .charts[0]["spec"]
-            .get("hiddenDimensionStrategy"),
-            "SHOW_ALL",
-        )
+        timeline = book.worksheet("net_worth_timeline")
+        self.assertEqual(timeline.charts, [])
+        self.assertEqual(timeline.hidden_columns, set())
+        self.assertTrue(all(column <= 2 for row, column in timeline.values))
 
     def test_pnl_has_explicit_sign_and_display_rounding_keeps_tiny_values(self):
         book = FakeSpreadsheet()
@@ -504,11 +515,8 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertIn(main.cell(20, 12).value, ("", None))
         self.assertEqual(main.cell(1, 8).value, 900.003)
 
-    def test_helper_collision_and_duplicate_dates_abort_before_any_write(self):
-        from src.google_sheets.insights_writer import (
-            preview_adoption,
-            SheetConflictError,
-        )
+    def test_legacy_timeline_preserves_other_columns_and_rejects_duplicate_dates(self):
+        from src.google_sheets.insights_writer import SheetConflictError
 
         for duplicate in (False, True):
             book = FakeSpreadsheet()
@@ -518,13 +526,14 @@ class InsightsWriterTests(unittest.TestCase):
                 sheet.values[(2, 1)], sheet.values[(2, 2)] = 800, "30 Jun 2026"
             else:
                 sheet.values[(1, 5)] = "user formula"
-            approval = preview_adoption(sheet, [[0, 2, 0, 2]])
-            with self.assertRaises(SheetConflictError):
-                refresh_insights(
-                    book, current_snapshot(), config={}, adoptions={sheet.id: approval}
-                )
-            self.assertFalse(book.batch_updates)
-            self.assertEqual(len(book.sheets), 1)
+            if duplicate:
+                with self.assertRaises(SheetConflictError):
+                    refresh_insights(book, current_snapshot(), config={})
+                self.assertFalse(book.batch_updates)
+                self.assertEqual(len(book.sheets), 1)
+            else:
+                refresh_insights(book, current_snapshot(), config={})
+                self.assertEqual(sheet.values[(1, 5)], "user formula")
 
     def test_growth_cannot_overwrite_a_blank_cell_with_a_user_note(self):
         from src.google_sheets.insights_cells import render_blocks
@@ -574,19 +583,18 @@ class InsightsWriterTests(unittest.TestCase):
         refresh_insights(book, data, config={})
         self.assertEqual(book.sheets[0].title, "31 Dec 2026")
 
-    def test_invalid_helper_metadata_cannot_clear_adjacent_timeline_cells(self):
+    def test_legacy_timeline_ignores_old_helper_metadata_without_clearing_it(self):
         import json
-        from src.google_sheets.insights_writer import MARKER_COLUMN, SheetConflictError
+        from src.google_sheets.insights_writer import MARKER_COLUMN, OWNERSHIP_MARKER
 
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
         timeline = book.worksheet("net_worth_timeline")
         timeline.values[(1, 3)] = "=A1/2"
-        metadata = json.loads(timeline.values[(2, MARKER_COLUMN + 1)])
-        metadata["helper_ranges"] = [[0, 2, 2, 6]]
-        timeline.values[(2, MARKER_COLUMN + 1)] = json.dumps(metadata)
-        count = len(book.batch_updates)
-        with self.assertRaises(SheetConflictError):
-            refresh_insights(book, current_snapshot(), config={})
-        self.assertEqual(len(book.batch_updates), count)
+        timeline.col_count = 29
+        timeline.values[(1, MARKER_COLUMN + 1)] = OWNERSHIP_MARKER
+        metadata = json.dumps({"role": "timeline", "helper_ranges": [[0, 2, 2, 6]]})
+        timeline.values[(2, MARKER_COLUMN + 1)] = metadata
+        refresh_insights(book, current_snapshot(), config={})
+        self.assertEqual(timeline.values[(2, MARKER_COLUMN + 1)], metadata)
         self.assertEqual(timeline.values[(1, 3)], "=A1/2")

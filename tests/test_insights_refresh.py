@@ -106,8 +106,8 @@ class SnapshotReplayIntegrationTests(unittest.TestCase):
             book = FakeSpreadsheet()
             refresh_from_snapshot(book, path, snapshot_dir=directory)
             self.assertEqual(book.sheets[0].title, "30 Sep 2026")
-            self.assertIsInstance(
-                book.worksheet("net_worth_timeline").cell(1, 2).value, int
+            self.assertEqual(
+                book.worksheet("net_worth_timeline").cell(1, 2).value, "30 Sep 2026"
             )
             replay_finance = {
                 coord: value
