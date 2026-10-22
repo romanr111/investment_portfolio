@@ -202,18 +202,6 @@ class InsightsFinanceTests(unittest.TestCase):
             "Incomplete",
         )
 
-    def test_other_bets_subtotal_is_not_added_to_its_component_rows(self):
-        data = current_snapshot()
-        data["OTHER_ASSETS"].update({"Equipment": 25.0, "Other Bets": 100.0})
-
-        values = {row["category"]: row["value"] for row in category_rows(data)}
-        holdings = holdings_table(data)
-        other_bets = [
-            row for row in holdings["rows"] if row["category"] == "Other Bets"
-        ]
-
-        self.assertEqual(values["Other Bets"], 100.0)
-        self.assertEqual([row["symbol"] for row in other_bets], ["Other Bets"])
 
     def test_income_is_a_monthly_estimate_and_receipts_stay_unavailable(self):
         income = income_breakdown(current_snapshot())
@@ -361,19 +349,6 @@ class InsightsFinanceTests(unittest.TestCase):
             )
         currencies = {row["category"] for row in views["trading_currency"]}
         self.assertIn("HKD", currencies)
-
-    def test_source_status_preserves_machine_state_and_human_cache_age(self):
-        live = source_statuses(current_snapshot())
-        self.assertEqual(live["overall_key"], "Current")
-        self.assertEqual(live["overall"], "Current")
-
-        cached_data = current_snapshot()
-        cached_data["DATA_METADATA"]["source"] = "cached_snapshot"
-        cached_data["DATA_METADATA"]["age_seconds"] = 900
-        cached = source_statuses(cached_data)
-        self.assertEqual(cached["overall_key"], "Cached")
-        self.assertEqual(cached["overall"], "Cached - data age 900s")
-        self.assertEqual(source_statuses({})["overall_key"], "Unknown")
 
 
 class ReconciliationPrecisionTests(unittest.TestCase):

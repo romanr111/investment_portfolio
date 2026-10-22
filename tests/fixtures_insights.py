@@ -1,7 +1,5 @@
 """Synthetic combined_data examples for spreadsheet insight tests."""
 
-from copy import deepcopy
-
 
 def current_snapshot():
     return {
@@ -95,7 +93,3 @@ def previous_snapshot():
     data["CASH_DATA"]["Total"] = 100.0
     data["OTHER_ASSETS"]["Other Bets"] = 100.0
     return data
-
-
-def cloned_snapshot(data):
-    return deepcopy(data)

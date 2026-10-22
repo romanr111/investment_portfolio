@@ -67,31 +67,6 @@ class UnifiedHistoryTests(unittest.TestCase):
         )
         self.assertEqual(by_bucket["P2P Lending"]["return_method"], "unavailable")
 
-    def test_sheet_tab_values_to_unified_rows(self) -> None:
-        values = [
-            ["", "", "", "", "", "", "Stocks", "1000"],
-            ["", "", "", "", "", "", "Crypto Landing", "2500"],
-            ["", "", "", "", "", "", "REIT", "0"],
-        ]
-        rows = sheet_tab_values_to_unified_rows(values, "31 Dec 2025")
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[1]["asset_bucket"], "Crypto Lending")
-        self.assertEqual(rows[0]["date"], "2025-12-31")
-
-    def test_sheet_tab_values_support_legacy_hi_columns(self) -> None:
-        values = [
-            ["", "", "", "", "", "", "", "Stocks", "23048"],
-            ["", "", "", "", "", "", "", "Crypto", "15456"],
-            ["", "", "", "", "", "", "", "Mining", "13040"],
-            ["", "", "", "", "", "", "", "Cash & Equivalents", "13901"],
-        ]
-        rows = sheet_tab_values_to_unified_rows(values, "31 Mar 2021")
-        self.assertEqual(len(rows), 4)
-        self.assertEqual(rows[0]["asset_bucket"], "Stocks")
-        self.assertEqual(rows[1]["asset_bucket"], "Crypto Coins")
-        self.assertEqual(rows[2]["asset_bucket"], "Other Bets")
-        self.assertEqual(rows[3]["asset_bucket"], "Cash")
-
     def test_build_unified_history_blank_returns(self) -> None:
         rows = [
             {

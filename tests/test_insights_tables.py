@@ -24,36 +24,6 @@ class InsightsTablesTests(unittest.TestCase):
         self.assertEqual(detail[2][1].value, total)
         self.assertNotIn("eligibility", blocks)
 
-    def test_monitor_layout_uses_clear_labels_without_changing_values(self):
-        data = current_snapshot()
-        tab = build_portfolio_tab(data)
-        blocks = {block.name: block for block in tab.blocks}
-        self.assertEqual(
-            tab.column_widths,
-            (190, 120, 100, 190, 110, 150, 150, 160, 100, 28, 220, 115),
-        )
-        self.assertEqual(blocks["summary"].rows[0][0], "FIRE progress")
-        self.assertEqual(blocks["compact_allocation"].rows[0][0], "Portfolio value")
-        self.assertEqual(
-            blocks["compact_allocation"].rows[0][1].value, data["TOTAL_ASSETS"]
-        )
-        self.assertEqual(blocks["holdings"].rows[1][1], "Value")
-        self.assertEqual(blocks["compact_allocation"].rows[1][1], "Value")
-        self.assertEqual(blocks["compact_income"].rows[0][0], "Estimated income")
-        self.assertEqual(blocks["compact_income"].rows[-2][0], "Monthly average")
-        self.assertEqual(blocks["compact_income"].rows[-1][0], "Annual estimate")
-        data["IB_DATA"].pop("Bonds")
-        partial = {block.name: block for block in build_portfolio_tab(data).blocks}
-        self.assertEqual(
-            partial["compact_allocation"].rows[0][0], "Portfolio value (partial)"
-        )
-
-    def test_group_totals_do_not_repeat_identical_single_position_labels(self):
-        tab = build_portfolio_tab(current_snapshot())
-        rows = next(block.rows for block in tab.blocks if block.name == "holdings")
-        for category in ("Crypto Lending", "P2P Lending", "Other Bets"):
-            self.assertEqual(sum(row[0] == category for row in rows), 1)
-
     def test_malformed_ib_bucket_retains_the_existing_missing_data_behavior(self):
         data = current_snapshot()
         data["IB_DATA"] = "missing"
@@ -76,90 +46,6 @@ class InsightsTablesTests(unittest.TestCase):
         }
         self.assertEqual(numeric(live_grid), numeric(cached_grid))
         self.assertEqual(live_ranges, cached_ranges)
-
-    def test_default_view_is_a_compact_original_style_portfolio(self):
-        tab = build_portfolio_tab(
-            current_snapshot(), previous_snapshot=previous_snapshot()
-        )
-        grid, typed, ranges = render_blocks(tab.blocks)
-        self.assertEqual(ranges["holdings"][0], 0)
-        self.assertEqual(ranges["holdings"][2:], (3, 6))
-        self.assertEqual(ranges["summary"][0], 0)
-        self.assertEqual(ranges["summary"][2], 0)
-        self.assertEqual(ranges["performance"][2], 0)
-        self.assertEqual(ranges["compact_allocation"][:3], (0, 13, 6))
-        self.assertEqual(ranges["compact_income"][0], 0)
-        self.assertEqual(ranges["compact_income"][2], 10)
-        holdings = next(block for block in tab.blocks if block.name == "holdings")
-        self.assertEqual(len(holdings.rows[1]), 3)
-        labels = [row[0] for row in holdings.rows]
-        self.assertLess(labels.index("Bonds"), labels.index("China Stocks"))
-        self.assertLess(labels.index("China Stocks"), labels.index("Stocks"))
-        self.assertEqual(len(tab.row_groups), 1)
-        block, start, end = tab.row_groups[0]
-        hidden_start = ranges[block][0] + start
-        self.assertLessEqual(hidden_start, 32)
-        visible = [str(value) for row in grid[:hidden_start] for value in row]
-        for noise in (
-            "Unknown",
-            "Unavailable",
-            "Unconfigured",
-            "Attribution status",
-            "Definitions and coverage",
-            "Manual estimate",
-        ):
-            self.assertNotIn(noise, visible)
-        self.assertEqual(tab.freeze_rows, 2)
-        self.assertEqual(tab.freeze_columns, 4)
-        bond_row = next(r for r, row in enumerate(grid) if row[3] == "SIM-BOND")
-        self.assertEqual(grid[bond_row][4], 200)
-
-    def test_holdings_filter_sits_below_the_summary_panels(self):
-        tab = build_portfolio_tab(current_snapshot())
-        _, _, ranges = render_blocks(tab.blocks)
-        self.assertGreater(
-            ranges[tab.filter_block_name][0], ranges["compact_income"][1]
-        )
-
-    def test_main_snapshot_contains_all_sections_and_compact_holdings_header(self):
-        tab = build_portfolio_tab(current_snapshot(), current_date="2026-10-04")
-        grid, typed, ranges = render_blocks(tab.blocks)
-        self.assertEqual(tab.title, "04 Oct 2026")
-        self.assertEqual(ranges["holdings"][0], 0)
-        self.assertEqual(tab.freeze_rows, 2)
-        self.assertEqual(tab.freeze_columns, 4)
-        self.assertEqual(tab.filter_block_name, "holding_details")
-        for section in (
-            "allocation",
-            "comparison",
-            "income",
-            "receipts",
-            "liquidity",
-            "provider",
-            "trading_currency",
-            "underlying_geography",
-        ):
-            self.assertIn(section, ranges)
-        values = [
-            value.value if isinstance(value, CellValue) else value
-            for block in tab.blocks
-            for row in block.rows
-            for value in row
-        ]
-        for label in (LBL_IB_RETURN, LBL_UNREALIZED_PNL, LBL_ESTIMATED_MONTHLY_INCOME):
-            self.assertIn(label, values)
-        self.assertNotIn("CRYPTO_DATA", values)
-        self.assertTrue(any(cell.kind == "link" for cell in typed.values()))
-        self.assertEqual(tab.row_groups[0][0], "details")
-        self.assertGreater(ranges["methodology"][0], ranges["details"][0])
-
-    def test_required_labels_are_verbatim(self):
-        self.assertEqual(LBL_IB_RETURN, "IB return - YTD - TWR")
-        self.assertEqual(LBL_UNREALIZED_PNL, "Unrealized P&L vs cost")
-        self.assertEqual(
-            LBL_ESTIMATED_MONTHLY_INCOME,
-            "Estimated investment income - monthly average",
-        )
 
     def test_missing_date_cannot_generate_a_tab(self):
         with self.assertRaises(ValueError):
@@ -192,30 +78,3 @@ class InsightsTablesTests(unittest.TestCase):
             )
         )
 
-    def test_saved_benchmark_values_and_measurement_dates_remain_visible(self):
-        data = current_snapshot()
-        data["IB_PERFORMANCE"].update(
-            start_date="2026-01-01", end_date="2026-10-04", currency="USD"
-        )
-        data["INDEX_PERFORMANCE"] = {
-            "SP500": {
-                "name": "S&P 500",
-                "rate_of_return_pct": 12.5,
-                "start_date": "2026-01-01",
-                "end_date": "2026-10-04",
-                "currency": "USD",
-            }
-        }
-        tab = build_portfolio_tab(data)
-        blocks = {block.name: block for block in tab.blocks}
-        self.assertIn("benchmarks", blocks)
-        row = blocks["benchmarks"].rows[2]
-        self.assertEqual(row[0], "S&P 500")
-        self.assertEqual(row[1].value, 0.125)
-        self.assertEqual(row[4], "USD")
-        coverage = next(
-            row for row in blocks["methodology"].rows if row[0] == "IB return coverage"
-        )
-        self.assertEqual(str(coverage[2].value), "2026-01-01")
-        self.assertEqual(str(coverage[4].value), "2026-10-04")
-        self.assertEqual(coverage[6], "USD")

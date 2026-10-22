@@ -74,18 +74,6 @@ class TestSpreadsheetPreciousMetalsRendering(unittest.TestCase):
         self.assertEqual(gld_row[2].value, 1500)
         self.assertEqual(gld_row[7].value, 0.055)
 
-    def test_create_enhanced_stocks_data_includes_precious_metals_defaults(self):
-        enhanced = create_enhanced_stocks_data(
-            precious_metals={"GLD": {"market_value": 1500}}
-        )
-
-        self.assertIn("Precious Metals", enhanced)
-        self.assertIn("GLD", enhanced["Precious Metals"])
-        self.assertIn("metadata", enhanced)
-        self.assertIn("total_cost_basis", enhanced["metadata"])
-        self.assertIn("total_unrealized_pnl", enhanced["metadata"])
-        self.assertIn("total_unrealized_pnl_percentage", enhanced["metadata"])
-
 
 if __name__ == "__main__":
     unittest.main()

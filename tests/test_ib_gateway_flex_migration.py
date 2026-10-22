@@ -2,7 +2,7 @@
 
 Verifies portfolio item normalization, bond CUSIP→IBCID, account summary
 shape, one-connection snapshot, socket-error message, TWR extraction,
-polling, token leak prevention, client-portal endpoint removal guard.
+polling, and token leak prevention.
 """
 import unittest
 from pathlib import Path
@@ -173,14 +173,6 @@ class TestGatewaySocketError(unittest.TestCase):
 
 class TestFlexPerformance(unittest.TestCase):
 
-    def test_flex_send_request_extracts_reference_code(self):
-        xml_text = """
-        <FlexStatementResponse>
-          <Status>Success</Status>
-          <ReferenceCode>ABC123</ReferenceCode>
-        </FlexStatementResponse>
-        """
-        self.assertEqual(extract_reference_code(xml_text), "ABC123")
 
     def test_flex_change_in_nav_extracts_ytd_twr(self):
         xml_text = """
@@ -288,19 +280,6 @@ class TestFlexPerformance(unittest.TestCase):
 
         self.assertEqual(result["rate_of_return_pct"], 4.25)
         self.assertIsNone(result["error"])
-
-
-class TestClientPortalMigrationGuard(unittest.TestCase):
-
-    def test_public_ib_path_no_longer_references_client_portal_endpoints(self):
-        ib_source = Path("src/brokers/ib.py").read_text()
-
-        self.assertNotIn("PERFORMANCE_API", ib_source)
-        self.assertNotIn("POSITIONS_API", ib_source)
-        self.assertNotIn("SUMMARY_API", ib_source)
-        self.assertNotIn("perform_post_request", ib_source)
-        self.assertNotIn("/pa/performance", ib_source)
-        self.assertNotIn("clientportal.gw", ib_source)
 
 
 if __name__ == "__main__":

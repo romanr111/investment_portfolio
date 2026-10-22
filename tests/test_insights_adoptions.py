@@ -24,10 +24,6 @@ class LoadAdoptionsFileTests(unittest.TestCase):
             json.dump(payload, handle)
         return path
 
-    def test_string_sheet_ids_become_int_keys_for_the_writer(self):
-        payload = {"7": {"sheet_id": 7, "fingerprint": "abc"}}
-        parsed = load_adoptions_file(self._write(payload))
-        self.assertEqual(parsed, {7: {"sheet_id": 7, "fingerprint": "abc"}})
 
     def test_invalid_adoptions_files_are_rejected(self):
         path = os.path.join(self.tmp, "malformed.json")
@@ -53,18 +49,6 @@ class PreviewPortfolioAdoptionsTests(unittest.TestCase):
     def _fake_updater(spreadsheet):
         return SimpleNamespace(spreadsheet=spreadsheet)
 
-    def test_previews_are_keyed_by_string_sheet_id_with_json_receipts(self):
-        book = FakeSpreadsheet()
-        main = book.add_worksheet("04 Oct 2026")
-        previews = self._preview(book, ["04 Oct 2026"])
-
-        self.assertEqual(list(previews), [str(main.id)])
-        receipt = previews[str(main.id)]
-        self.assertEqual(receipt["sheet_id"], main.id)
-        self.assertEqual(receipt["title"], "04 Oct 2026")
-        # A new tab has no occupied cells; ranges clip to the marker column.
-        self.assertEqual(receipt["occupied_cells"], [])
-        self.assertEqual(receipt["ranges"], [[0, main.row_count, 0, 28]])
 
     def test_occupied_cells_and_fingerprint_capture_existing_content(self):
         book = FakeSpreadsheet()

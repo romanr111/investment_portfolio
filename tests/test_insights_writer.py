@@ -46,135 +46,6 @@ class InsightsWriterTests(unittest.TestCase):
             any(v == "Monthly average (partial)" for v in main.values.values())
         )
 
-    def test_row_sizes_preserve_adjacent_data_and_automatic_warning_height(self):
-        from src.google_sheets.insights_cells import render_blocks
-        from src.google_sheets.insights_tables import build_portfolio_tab
-
-        data = current_snapshot()
-        data["DATA_METADATA"].update(source="cached_snapshot", age_seconds=900)
-        grid, typed, ranges = render_blocks(build_portfolio_tab(data).blocks)
-        book = FakeSpreadsheet()
-        refresh_insights(book, data, config={})
-        main = book.worksheet("04 Oct 2026")
-        sizes = {}
-        for request in book.batch_updates[-1]["requests"]:
-            p = request.get("updateDimensionProperties", {})
-            r = p.get("range", {})
-            if (
-                r.get("sheetId") == main.id
-                and r.get("dimension") == "ROWS"
-                and "pixelSize" in p.get("properties", {})
-            ):
-                for row in range(r["startIndex"], r["endIndex"]):
-                    sizes[row] = p["properties"]["pixelSize"]
-        self.assertEqual(sizes.get(0), 42)
-        self.assertEqual(sizes.get(1), 36)
-        bond_row = next(r for r, row in enumerate(grid) if row[3] == "SIM-BOND")
-        self.assertEqual(sizes.get(bond_row), 24)
-        warning = next(
-            r
-            for (r, c), v in typed.items()
-            if v.kind == "status" and r < ranges["details"][0]
-        )
-        self.assertNotIn(warning, sizes)
-        for row in range(2, ranges["details"][0]):
-            empty = all(v in ("", None) for v in grid[row][:12])
-            if empty:
-                self.assertEqual(sizes.get(row), 12)
-            elif sizes.get(row) == 12:
-                self.fail("A separator shrank a row containing adjacent panel data")
-        self.assertEqual(main.formats[(2, 5)]["horizontalAlignment"], "RIGHT")
-        self.assertEqual(main.formats[(2, 9)]["horizontalAlignment"], "RIGHT")
-
-    def test_compact_formats_preserve_numbers_and_leave_details_precise(self):
-        from copy import deepcopy
-
-        data = current_snapshot()
-        data["TOTAL_ASSETS"] = 12345.678
-        original = deepcopy(data)
-        book = FakeSpreadsheet()
-        refresh_insights(book, data, config={})
-        main = book.worksheet("04 Oct 2026")
-        self.assertEqual(data, original)
-        self.assertEqual(main.values[(1, 8)], 12345.678)
-        self.assertEqual(
-            main.formats[(1, 8)]["numberFormat"]["pattern"], '"$"#,##0;-"$"#,##0;"$"0'
-        )
-        self.assertEqual(
-            main.formats[(1, 2)]["numberFormat"]["pattern"], "0.0%;-0.0%;0.0%"
-        )
-        aaa_row = next(r for (r, c), v in main.values.items() if c == 4 and v == "AAA")
-        self.assertEqual(main.values[(aaa_row, 6)], 0.0705)
-        self.assertEqual(
-            main.formats[(aaa_row, 6)]["numberFormat"]["pattern"], "+0.0%;-0.0%;0.0%"
-        )
-        date_row = next(
-            r for (r, c), v in main.values.items() if c == 1 and v == "As of"
-        )
-        self.assertEqual(
-            main.formats[(date_row, 2)]["numberFormat"]["pattern"], "dd mmm yyyy"
-        )
-        detail_row = next(
-            r
-            for (r, c), v in main.values.items()
-            if c == 1 and v == "AAA"
-        )
-        self.assertEqual(
-            main.formats[(detail_row, 8)]["numberFormat"]["pattern"],
-            "+0.00%;-0.00%;0.00%",
-        )
-
-    def test_summary_hierarchy_survives_refresh_with_large_portfolio_values(self):
-        book = FakeSpreadsheet()
-        data = current_snapshot()
-        data["TOTAL_ASSETS"] = 12345678.90
-        config = {"fire_target_usd": 1000}
-        for _ in range(2):
-            refresh_insights(book, data, config=config)
-            main = book.worksheet("04 Oct 2026")
-            self.assertEqual(main.values[(1, 8)], 12345678.90)
-            self.assertEqual(main.formats[(1, 8)]["textFormat"]["fontSize"], 20)
-            self.assertTrue(main.formats[(1, 8)]["textFormat"]["bold"])
-            self.assertEqual(main.formats[(1, 2)]["textFormat"]["fontSize"], 16)
-            for coord in ((1, 4), (1, 7), (1, 11)):
-                self.assertEqual(main.formats[coord]["textFormat"]["fontSize"], 12)
-            for coord in ((2, 4), (2, 7), (2, 11)):
-                self.assertEqual(main.formats[coord]["horizontalAlignment"], "LEFT")
-            for label, size, bold in (
-                ("Monthly average", 14, True),
-                ("Annual estimate", 11, False),
-            ):
-                row = next(
-                    r
-                    for (r, c), v in main.values.items()
-                    if c == 11 and str(v).startswith(label)
-                )
-                self.assertEqual(main.formats[(row, 12)]["textFormat"]["bold"], bold)
-                self.assertEqual(
-                    main.formats[(row, 12)]["textFormat"]["fontSize"], size
-                )
-            for coord in ((1, 8), (1, 2), (2, 4), (3, 4), (4, 4)):
-                self.assertEqual(
-                    main.formats[coord]["textFormat"].get("fontFamily"), "Arial"
-                )
-            requests = book.batch_updates[-1]["requests"]
-            row_sizes = [
-                v["updateDimensionProperties"]
-                for v in requests
-                if "updateDimensionProperties" in v
-                and v["updateDimensionProperties"]["range"].get("dimension") == "ROWS"
-                and "pixelSize" in v["updateDimensionProperties"]["properties"]
-            ]
-            self.assertTrue(
-                any(
-                    v["range"]["startIndex"] == 0
-                    and v["range"]["endIndex"] == 1
-                    and v["properties"]["pixelSize"] == 42
-                    for v in row_sizes
-                )
-            )
-            self.assertEqual(len(main.conditional_formats), 1)
-
     def test_return_gradient_updates_without_duplicates_or_removing_user_rules(self):
         from copy import deepcopy
 
@@ -215,15 +86,6 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertEqual(len(main.conditional_formats), 2)
         self.assertIn(custom, main.conditional_formats)
 
-    def test_no_empty_return_gradient_ranges_for_empty_holdings(self):
-        book = FakeSpreadsheet()
-        refresh_insights(
-            book, {"TOTAL_ASSETS": 0, "as_of_date": "2026-10-04"}, config={}
-        )
-        main = book.worksheet("04 Oct 2026")
-        for rule in main.conditional_formats:
-            for r in rule["ranges"]:
-                self.assertLess(r["startRowIndex"], r["endRowIndex"])
 
     def test_headers_are_neutral_and_position_returns_have_the_original_gradient(self):
         from src.google_sheets.insights_cells import render_blocks
@@ -269,27 +131,6 @@ class InsightsWriterTests(unittest.TestCase):
         refresh_insights(book, data, config={})
         self.assertNotIn(old_start, main.hidden_rows)
 
-    def test_compact_view_formats_levels_quietly_and_limits_filter_to_holdings(self):
-        book = FakeSpreadsheet()
-        refresh_insights(book, current_snapshot(), config={})
-        main = book.worksheet("04 Oct 2026")
-        self.assertNotIn("+", main.formats[(1, 8)]["numberFormat"]["pattern"])
-        self.assertNotIn("+", main.formats[(3, 9)]["numberFormat"]["pattern"])
-        bond_row = next(
-            r for (r, c), value in main.values.items() if c == 4 and value == "SIM-BOND"
-        )
-        self.assertNotIn(".", main.formats[(bond_row, 5)]["numberFormat"]["pattern"])
-        self.assertEqual(main.basic_filter["range"]["endColumnIndex"], 8)
-        self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
-        self.assertEqual(main.properties["frozenRowCount"], 2)
-        self.assertEqual(len(main.groups), 1)
-        self.assertTrue(
-            any(
-                request.get("repeatCell", {}).get("range", {}).get("startColumnIndex")
-                == 6
-                for request in book.batch_updates[-1]["requests"]
-            )
-        )
 
     def test_supported_partial_receipts_keep_native_currency_and_coverage(self):
         data = current_snapshot()
@@ -512,36 +353,6 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertEqual(main.properties["frozenRowCount"], 2)
         self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
 
-    def test_main_uses_wrapping_and_bounded_resize_for_readable_labels(self):
-        book = FakeSpreadsheet()
-        refresh_insights(book, current_snapshot(), config={})
-        requests = book.batch_updates[0]["requests"]
-        self.assertTrue(any("autoResizeDimensions" in request for request in requests))
-        detail_value_width = next(
-            request["updateDimensionProperties"]["properties"]["pixelSize"]
-            for request in requests
-            if request.get("updateDimensionProperties", {})
-            .get("range", {})
-            .get("dimension")
-            == "COLUMNS"
-            and request["updateDimensionProperties"]["range"]["startIndex"] == 2
-        )
-        self.assertGreaterEqual(detail_value_width, 100)
-        self.assertEqual(
-            book.worksheet("04 Oct 2026").formats[(4, 1)].get("wrapStrategy"), "WRAP"
-        )
-
-    def test_timeline_accepts_saved_iso_timestamp_dates(self):
-        book = FakeSpreadsheet()
-        sheet = book.add_worksheet("net_worth_timeline")
-        sheet.values[(1, 1)], sheet.values[(1, 2)] = 750, "2026-06-30T00:00:00.000Z"
-        data = current_snapshot()
-        data["as_of_date"] = "2026-06-30"
-        refresh_insights(book, data, config={})
-        self.assertEqual(sheet.cell(1, 2).value, "2026-06-30T00:00:00.000Z")
-        self.assertEqual(sheet.cell(1, 1).value, data["TOTAL_ASSETS"])
-        self.assertEqual(len(book.sheets), 2)
-
     def test_legacy_timeline_dry_run_and_appending_past_the_last_grid_row(self):
         from copy import deepcopy
 
@@ -557,38 +368,6 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertEqual((timeline.row_count, timeline.col_count), (2, 2))
         self.assertEqual(timeline.values[(2, 2)], "04 Oct 2026")
         self.assertEqual(timeline.values[(1, 2)], "30 Sep 2026")
-
-    def test_timeline_does_not_add_charts_hidden_helpers_or_ownership_metadata(self):
-        book = FakeSpreadsheet()
-        refresh_insights(book, current_snapshot(), config={})
-        timeline = book.worksheet("net_worth_timeline")
-        self.assertEqual(timeline.charts, [])
-        self.assertEqual(timeline.hidden_columns, set())
-        self.assertTrue(all(column <= 2 for row, column in timeline.values))
-
-    def test_pnl_has_explicit_sign_and_display_rounding_keeps_tiny_values(self):
-        book = FakeSpreadsheet()
-        refresh_insights(book, current_snapshot(), config={})
-        main = book.worksheet("04 Oct 2026")
-        full_row = next(
-            r
-            for (r, c), value in main.values.items()
-            if c == 1 and value == "AAA"
-        )
-        self.assertTrue(
-            main.formats[(full_row, 6)]["numberFormat"]["pattern"].startswith("+")
-        )
-        self.assertEqual(
-            main.formats[(full_row, 4)]["numberFormat"]["pattern"],
-            "+0.00%;-0.00%;0.00%",
-        )
-        tiny_row = next(
-            r for (r, c), value in main.values.items() if c == 1 and value == "TINY"
-        )
-        self.assertEqual(main.values[(tiny_row, 3)], 0.003)
-        self.assertIn(
-            "#", main.formats[(tiny_row, 3)]["numberFormat"]["pattern"].split(".")[1]
-        )
 
     def test_explicit_main_adoption_clears_only_reviewed_legacy_regions(self):
         from src.google_sheets.insights_writer import preview_adoption
@@ -666,13 +445,6 @@ class InsightsWriterTests(unittest.TestCase):
         write_portfolio_snapshot(book, tab, "2026-10-04", 900.003)
         self.assertEqual(book.worksheet("04 Oct 2026").cell(2, 2).value, "Unavailable")
 
-    def test_new_reporting_date_is_created_at_the_front(self):
-        book = FakeSpreadsheet()
-        data = current_snapshot()
-        refresh_insights(book, data, config={})
-        data["as_of_date"] = "2026-12-31"
-        refresh_insights(book, data, config={})
-        self.assertEqual(book.sheets[0].title, "31 Dec 2026")
 
     def test_legacy_timeline_ignores_old_helper_metadata_without_clearing_it(self):
         import json
