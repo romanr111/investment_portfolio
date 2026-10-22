@@ -589,12 +589,11 @@ def _concentration_section(data: dict) -> InsightTab:
 
 def _fire_section(data: dict, config: dict) -> InsightTab:
     fire = fire_progress(data, config)
-    values = {row["category"]: row for row in category_rows(data)}
     summary = (
         ("FIRE target progress",),
         ("Measure", "Value", "Status / definition"),
         (
-            "Current eligible value",
+            "Portfolio value",
             _money(fire["eligible_value"]),
             fire["eligible_value_state"],
         ),
@@ -607,7 +606,7 @@ def _fire_section(data: dict, config: dict) -> InsightTab:
         (
             "Progress",
             _percent(fire["progress_fraction"]),
-            "Bar capped at 100%; no forecast.",
+            "Portfolio value / target. Bar capped at 100%; no forecast.",
             _bar(fire["progress_bar_fraction"]),
         ),
         (
@@ -615,43 +614,11 @@ def _fire_section(data: dict, config: dict) -> InsightTab:
             _percent(fire["income_coverage_fraction"]),
             fire["income_coverage_state"],
         ),
-        (
-            "Included categories",
-            ", ".join(fire["included_categories"]),
-            "Change the local config only when the eligibility set is intentional.",
-        ),
-    )
-    rows = [
-        (
-            "Category",
-            "Market value USD",
-            "FIRE principal / value USD",
-            "Included in FIRE value",
-            "Basis / status",
-        )
-    ]
-    rows.extend(
-        (
-            category,
-            _money(values[category]["value"]),
-            _money(fire["category_values"][category]),
-            "Yes" if category in fire["included_categories"] else "No",
-            (
-                "Saved income principal"
-                if category in {"Bonds", "Crypto Lending", "P2P Lending"}
-                else _status(values[category]["state"])
-            ),
-        )
-        for category in CATEGORIES
     )
     return InsightTab(
         title="FIRE",
-        blocks=(
-            CellBlock("summary", summary),
-            CellBlock("eligibility", (("Eligible asset categories",), *rows)),
-        ),
-        header_offsets={"summary": 1, "eligibility": 1},
-        filter_block_name="eligibility",
+        blocks=(CellBlock("summary", summary),),
+        header_offsets={"summary": 1},
         freeze_rows=2,
     )
 
@@ -746,7 +713,6 @@ def build_portfolio_tab(
     if fire["target"] is not None:
         summary_rows = [
             ("FIRE progress", _cell(fire["progress_fraction"], "weight")),
-            ("Eligible assets", _cell(fire["eligible_value"], "amount")),
             ("Target", _cell(fire["target"], "amount")),
         ]
     performance_rows = [

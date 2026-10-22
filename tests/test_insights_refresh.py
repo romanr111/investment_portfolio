@@ -70,6 +70,7 @@ class InsightsRefreshTests(unittest.TestCase):
                 json.dumps(
                     {
                         "allocation_targets_pct": {"Stocks": 50},
+                        "fire_eligible_categories": ["Bonds"],
                         "essential_monthly_spending_usd": 2000,
                         "base_currency": "EUR",
                         "credentials": "must not enter generator config",
@@ -84,6 +85,7 @@ class InsightsRefreshTests(unittest.TestCase):
         self.assertEqual(config["essential_monthly_spending_usd"], 2000)
         self.assertNotIn("base_currency", config)
         self.assertNotIn("credentials", config)
+        self.assertNotIn("fire_eligible_categories", config)
 
 
 class SnapshotReplayIntegrationTests(unittest.TestCase):

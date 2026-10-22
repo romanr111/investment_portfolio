@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from src.google_sheets.insights_finance import (
     category_rows,
@@ -15,12 +16,43 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsFinanceTests(unittest.TestCase):
-    def test_fire_uses_saved_principal_once_for_each_eligible_category(self):
+    def test_fire_uses_portfolio_value_without_substituting_income_principal(self):
         data = current_snapshot()
         data["FIXED_INCOME_DATA"]["group_weighted_interest"]["Bonds"] = (225.0, 0.04)
+        saved = deepcopy(data)
         fire = fire_progress(data, {"fire_eligible_categories": ["Bonds", "Bonds"]})
-        self.assertEqual(fire["included_categories"], ["Bonds"])
-        self.assertEqual(fire["eligible_value"], 225)
+        self.assertEqual(fire["eligible_value"], data["TOTAL_ASSETS"])
+        self.assertEqual(fire["progress_fraction"], data["TOTAL_ASSETS"] / 1000)
+        self.assertEqual(fire["remaining"], 1000 - data["TOTAL_ASSETS"])
+        self.assertEqual(fire["excluded_categories"], [])
+        bonds = next(
+            row for row in income_breakdown(data)["items"] if row["source"] == "Bonds"
+        )
+        self.assertEqual(bonds["principal"], 225)
+        self.assertEqual(data, saved)
+
+    def test_fire_preserves_saved_total_when_categories_are_partial_or_unreconciled(
+        self,
+    ):
+        data = current_snapshot()
+        data["IB_DATA"].pop("Bonds")
+        data["TOTAL_ASSETS"] += 10
+        self.assertEqual(fire_progress(data)["eligible_value"], data["TOTAL_ASSETS"])
+
+    def test_fire_keeps_missing_totals_unknown_and_zero_totals_zero(self):
+        for total in (None, "invalid", float("nan"), float("inf"), 0, 0.003):
+            with self.subTest(total=total):
+                data = current_snapshot()
+                data["TOTAL_ASSETS"] = total
+                fire = fire_progress(data)
+                if total in (0, 0.003):
+                    self.assertEqual(fire["eligible_value"], total)
+                    self.assertEqual(fire["progress_fraction"], total / 1000)
+                    self.assertEqual(fire["remaining"], 1000 - total)
+                else:
+                    self.assertIsNone(fire["eligible_value"])
+                    self.assertIsNone(fire["progress_fraction"])
+                    self.assertIsNone(fire["remaining"])
 
     def test_reit_is_in_every_reconciled_view(self):
         data = current_snapshot()

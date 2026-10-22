@@ -12,7 +12,6 @@ from typing import Any, Optional
 _CONFIG_KEYS = {
     "allocation_targets_pct",
     "fire_target_usd",
-    "fire_eligible_categories",
     "essential_monthly_spending_usd",
     "liabilities_usd",
     "cash_available_now_usd",

@@ -636,50 +636,41 @@ def liquidity_ladder(combined_data: dict, config: Optional[dict] = None) -> dict
     }
 
 
-def _fire_value_rows(combined_data: dict) -> dict[str, Optional[float]]:
-    values = _category_values(combined_data)
-    for category, names in (
-        ("Bonds", ("Bonds",)),
-        ("Crypto Lending", ("Crypto Lending", "Crypto Landing")),
-        ("P2P Lending", ("P2P Lending", "p2p_lending")),
-    ):
-        values[category] = _group_principal(combined_data, names)
-    return values
-
-
 def fire_progress(combined_data: dict, config: Optional[dict] = None) -> dict[str, Any]:
-    """Calculate FIRE progress from explicitly included tracked asset categories."""
+    """Use the saved portfolio value for FIRE; income principal is a separate basis.
+
+    Legacy eligibility configuration no longer filters the portfolio. Existing
+    result keys remain aliases for the full portfolio to preserve callers.
+    """
     config = config if isinstance(config, dict) else {}
-    included = config.get("fire_eligible_categories", list(CATEGORIES))
-    if not isinstance(included, (list, tuple)) or any(
-        category not in CATEGORIES for category in included
-    ):
-        included = []
-        eligible_value = None
-        state = "Invalid eligible category configuration"
-    else:
-        included = list(dict.fromkeys(included))
-        values = _fire_value_rows(combined_data)
-        selected_values = [values[category] for category in included]
-        if selected_values and all(value is not None for value in selected_values):
-            eligible_value = sum(value for value in selected_values if value is not None)
-        else:
-            eligible_value = None
+    eligible_value = _number(combined_data.get("TOTAL_ASSETS"))
     eligible_state = "Available" if eligible_value is not None else "Unavailable"
 
     if "fire_target_usd" in config:
         target_candidate = _number(config.get("fire_target_usd"))
     else:
         target_candidate = _number(combined_data.get("FINANCIAL_FREEDOM_GOAL_TARGET"))
-    target = target_candidate if target_candidate is not None and target_candidate > 0 else None
+    target = (
+        target_candidate
+        if target_candidate is not None and target_candidate > 0
+        else None
+    )
     if target is None:
         state = "Target not configured"
     elif eligible_value is None:
-        state = "Eligible value unavailable"
+        state = "Portfolio value unavailable"
     else:
         state = "Available"
-    remaining = max(target - eligible_value, 0) if target is not None and eligible_value is not None else None
-    progress = eligible_value / target if target is not None and eligible_value is not None else None
+    remaining = (
+        max(target - eligible_value, 0)
+        if target is not None and eligible_value is not None
+        else None
+    )
+    progress = (
+        eligible_value / target
+        if target is not None and eligible_value is not None
+        else None
+    )
 
     liquidity = liquidity_ladder(combined_data, config)
     income = income_breakdown(combined_data)
@@ -695,16 +686,18 @@ def fire_progress(combined_data: dict, config: Optional[dict] = None) -> dict[st
 
     return {
         "eligible_value": eligible_value,
-        "category_values": _fire_value_rows(combined_data),
+        "category_values": _category_values(combined_data),
         "target": target,
         "remaining": remaining,
         "progress_fraction": progress,
         "progress_bar_fraction": min(progress, 1.0) if progress is not None else None,
-        "included_categories": list(included),
-        "excluded_categories": [category for category in CATEGORIES if category not in included],
+        "included_categories": list(CATEGORIES),
+        "excluded_categories": [],
         "eligible_value_state": eligible_state,
         "income_coverage_fraction": income_coverage,
-        "income_coverage_state": "Estimated" if income_coverage is not None else "Unavailable",
+        "income_coverage_state": (
+            "Estimated" if income_coverage is not None else "Unavailable"
+        ),
         "state": state,
     }
 

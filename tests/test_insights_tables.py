@@ -10,6 +10,20 @@ from tests.fixtures_insights import current_snapshot, previous_snapshot
 
 
 class InsightsTablesTests(unittest.TestCase):
+    def test_fire_summary_uses_the_portfolio_headline_without_a_duplicate_balance(self):
+        data = current_snapshot()
+        data["FIXED_INCOME_DATA"]["group_weighted_interest"]["Bonds"] = (225, 0.04)
+        blocks = {block.name: block for block in build_portfolio_tab(data).blocks}
+        summary = blocks["summary"].rows
+        self.assertEqual([row[0] for row in summary[:2]], ["FIRE progress", "Target"])
+        self.assertNotIn("Eligible assets", [row[0] for row in summary])
+        total = blocks["compact_allocation"].rows[0][1].value
+        self.assertEqual(summary[0][1].value, total / summary[1][1].value)
+        detail = blocks["summary_fire"].rows
+        self.assertEqual(detail[2][0], "Portfolio value")
+        self.assertEqual(detail[2][1].value, total)
+        self.assertNotIn("eligibility", blocks)
+
     def test_monitor_layout_uses_clear_labels_without_changing_values(self):
         data = current_snapshot()
         tab = build_portfolio_tab(data)
@@ -121,7 +135,6 @@ class InsightsTablesTests(unittest.TestCase):
             "income",
             "receipts",
             "liquidity",
-            "eligibility",
             "provider",
             "trading_currency",
             "underlying_geography",
@@ -161,16 +174,15 @@ class InsightsTablesTests(unittest.TestCase):
         self.assertIn("not added", rows[2][2])
         self.assertEqual(rows[3][1].value, 100)
 
-    def test_allocation_and_fire_have_bars_and_show_principal_separately(self):
+    def test_allocation_and_fire_have_bars_and_keep_income_principal_separate(self):
         data = current_snapshot()
         data["FIXED_INCOME_DATA"]["group_weighted_interest"]["Bonds"] = (225, 0.04)
         tab = build_portfolio_tab(data)
         allocation = next(block for block in tab.blocks if block.name == "allocation")
         self.assertIn("Allocation bar", allocation.rows[1])
-        eligibility = next(block for block in tab.blocks if block.name == "eligibility")
-        bonds = next(row for row in eligibility.rows if row[0] == "Bonds")
-        self.assertEqual(bonds[1].value, 200)
-        self.assertEqual(bonds[2].value, 225)
+        income = next(block for block in tab.blocks if block.name == "income")
+        bonds = next(row for row in income.rows if row[0] == "Bonds")
+        self.assertEqual(bonds[1].value, 225)
         fire = next(block for block in tab.blocks if block.name == "summary_fire")
         self.assertTrue(
             any(

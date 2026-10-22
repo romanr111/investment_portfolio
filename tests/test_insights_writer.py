@@ -69,7 +69,8 @@ class InsightsWriterTests(unittest.TestCase):
                     sizes[row] = p["properties"]["pixelSize"]
         self.assertEqual(sizes.get(0), 42)
         self.assertEqual(sizes.get(1), 36)
-        self.assertEqual(sizes.get(2), 24)
+        bond_row = next(r for r, row in enumerate(grid) if row[3] == "SIM-BOND")
+        self.assertEqual(sizes.get(bond_row), 24)
         warning = next(
             r
             for (r, c), v in typed.items()
