@@ -146,6 +146,53 @@ class TestSnapshotSelection(unittest.TestCase):
             selected = select_before_snapshot(tmp_path, datetime(2026, 4, 1))
             self.assertEqual(selected.name, "combined_data_2026-03-31_manual.json")
 
+    def test_snapshot_date_from_name(self):
+        self.assertEqual(
+            snapshot_date_from_name("combined_data_2026-04-01_20260401T174713Z.json"),
+            datetime(2026, 4, 1).date(),
+        )
+        self.assertEqual(
+            snapshot_date_from_name("combined_data_2026-04-01_manual-backfill.json"),
+            datetime(2026, 4, 1).date(),
+        )
+        # No embedded date (the rolling-latest file) -> None.
+        self.assertIsNone(snapshot_date_from_name("combined_data_latest.json"))
+        # Well-formed prefix but an impossible calendar date -> None, not a crash.
+        self.assertIsNone(
+            snapshot_date_from_name("combined_data_2026-13-40_x.json")
+        )
+
+    def test_none_when_no_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "combined_data_2026-06-30_20260630T205647Z.json").write_text(
+                _snapshot_json()
+            )
+            self.assertIsNone(select_before_snapshot(tmp_path, datetime(2026, 4, 1)))
+
+    def test_after_snapshot_prefers_selected_quarter_activity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "combined_data_2026-06-30_end.json").write_text(
+                json.dumps(
+                    {
+                        "data": {
+                            "ASSET_ALLOCATION": {"allocations": {"Stocks": {"percentage": 30}}},
+                            "ACTIVITY_DATA": {"quarters": {"2026-Q2": {}}},
+                        }
+                    }
+                )
+            )
+            (tmp_path / "combined_data_2026-07-03_later.json").write_text(
+                _snapshot_json()
+            )
+
+            selected = select_after_snapshot(
+                tmp_path, datetime(2026, 6, 30), "2026-Q2"
+            )
+
+            self.assertEqual(selected.name, "combined_data_2026-06-30_end.json")
+
 
 class TestDerivations(unittest.TestCase):
     BEFORE = {"Stocks": 38.55, "Cash": 0.80, "Bonds": 21.59}

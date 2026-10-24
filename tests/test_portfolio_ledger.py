@@ -282,6 +282,138 @@ class PortfolioLedgerTests(unittest.TestCase):
         self.assertEqual(binance_events[0]["transfer_id"], "on-chain-1")
         self.assertEqual(okx_events[0]["transfer_id"], "on-chain-1")
 
+    def test_manual_csv_is_loaded_into_canonical_event_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            ledger.crypto_dir.mkdir(parents=True)
+            ledger.manual_events_path.write_text(
+                "event_id,occurred_at,source,account,event_type,asset,quantity,"
+                "quote_asset,quote_quantity,usd_value,fee_asset,fee_quantity,"
+                "from_location,to_location,remote_id,fx_rate_to_usd\n"
+                "manual-cold-1,2026-04-01T00:00:00Z,manual,cold_storage,"
+                "deposit,BTC,0.25,,,15000,,,,external,cold_storage,,\n",
+                encoding="utf-8",
+            )
+
+            events = ledger.load_crypto_events()
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["event_id"], "manual-cold-1")
+            self.assertEqual(events[0]["asset"], "BTC")
+            self.assertEqual(events[0]["quantity"], 0.25)
+
+    def test_whitebit_trade_normalization_supports_second_timestamps(self) -> None:
+        event = normalize_whitebit_trade(
+            {
+                "dealId": "99",
+                "time": 1776240000,
+                "market": "BTC_USDT",
+                "side": "buy",
+                "amount": "0.02",
+                "price": "65000",
+                "fee": "1.3",
+                "feeAsset": "USDT",
+            }
+        )
+
+        self.assertEqual(event["source"], "whitebit")
+        self.assertEqual(event["event_type"], "buy")
+        self.assertEqual(event["quote_quantity"], 1300.0)
+        self.assertEqual(event["fee_asset"], "USDT")
+        # Second-based timestamps are recognized and converted, not treated
+        # as milliseconds; mutating the ms/seconds branch breaks this.
+        self.assertEqual(event["occurred_at"], "2026-04-15T08:00:00+00:00")
+
+    def test_sync_result_is_partial_when_source_cursor_reports_partial_coverage(self) -> None:
+        class PartialCoverageSource:
+            source_name = "partial-coverage"
+
+            def fetch_events(self, start_at, end_at, cursor=None):
+                return [], {"coverage": "partial"}
+
+            def fetch_lending_events(self, start_at, end_at, cursor=None):
+                return [], {"coverage": "complete"}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ledger = PortfolioLedger(Path(temp_dir))
+            result = sync_crypto_sources(
+                ledger,
+                [PartialCoverageSource()],
+                datetime(2026, 4, 1, tzinfo=timezone.utc),
+                datetime(2026, 6, 30, tzinfo=timezone.utc),
+                dry_run=True,
+            )["partial-coverage"]
+
+            self.assertEqual(result["status"], "partial")
+
+    def test_binance_activity_source_marks_coverage_partial_on_missing_symbol_info(
+        self,
+    ) -> None:
+        class FakeApi:
+            def get_symbol_info(self, symbol):
+                # Exchange metadata lookup returns nothing for this pair.
+                return None if symbol == "BADUSDT" else {
+                    "baseAsset": "BTC",
+                    "quoteAsset": "USDT",
+                }
+
+            def get_my_trades(self, **kwargs):
+                return []
+
+            def get_deposit_history(self, **kwargs):
+                return []
+
+            def get_withdraw_history(self, **kwargs):
+                return []
+
+        wrapper = type("Wrapper", (), {"client": FakeApi()})()
+        source = BinanceActivitySource(wrapper, symbols=["BTCUSDT", "BADUSDT"])
+
+        events, cursor = source.fetch_events(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+
+        # Skipping a symbol without metadata silently drops its trading
+        # activity, so the cursor must not claim complete coverage.
+        self.assertEqual(cursor["coverage"], "partial")
+
+    def test_whitebit_activity_source_marks_trade_only_history_partial(self) -> None:
+        class FakeClient:
+            def request_private(self, endpoint, data):
+                return [
+                    {
+                        "dealId": "9",
+                        "time": 1776240000,
+                        "market": "BTC_USDT",
+                        "side": "sell",
+                        "amount": "0.01",
+                        "price": "65000",
+                        "fee": "0",
+                        "feeAsset": "USDT",
+                    }
+                ]
+
+        source = WhiteBitActivitySource(FakeClient())
+        events, cursor = source.fetch_events(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["remote_id"], "BTC_USDT:9")
+        self.assertEqual(cursor["coverage"], "partial")
+
+    def test_crypto_sync_cli_accepts_just_key_value_dates(self) -> None:
+        args = parse_args(
+            ["from=2026-04-01", "to=2026-06-30", "--source", "okx", "--dry-run"]
+        )
+
+        self.assertEqual(args.from_date, "2026-04-01")
+        self.assertEqual(args.to_date, "2026-06-30")
+        self.assertEqual(args.source, ["okx"])
+        self.assertTrue(args.dry_run)
+
 
 if __name__ == "__main__":
     unittest.main()

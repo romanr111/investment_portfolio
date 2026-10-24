@@ -542,6 +542,306 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
 
         self.assertIn("CORR_COLLAPSE_IN_STRESS", result.holy_grail_red_flags["code"].tolist())
 
+    def test_data_quality_checks_pass_for_clean_monthly_dataset(self) -> None:
+        result = self._run()
+        checks = result.quality_checks.set_index("check")["passed"].to_dict()
+
+        self.assertTrue(checks["no_missing_monthly_dates"])
+        self.assertTrue(checks["consistent_frequency"])
+        self.assertTrue(checks["weights_sum_to_100"])
+        self.assertTrue(checks["minimum_history_window"])
+
+    def test_correlation_matrix_is_symmetric_with_unity_diagonal(self) -> None:
+        result = self._run()
+        corr = result.correlation_matrix
+
+        symmetry_gap = (corr - corr.T).abs().max().max()
+        self.assertLess(symmetry_gap, 1e-12)
+        for bucket in corr.columns:
+            self.assertAlmostEqual(float(corr.loc[bucket, bucket]), 1.0, places=10)
+
+    def test_covariance_window_uses_trailing_rows_for_sample_method(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=10, freq="D")
+        returns_a = [0.01, 0.01, 0.02, 0.01, 0.0, -0.02, -0.01, -0.03, -0.01, -0.02]
+        returns_b = [0.00, 0.01, 0.01, 0.02, 0.01, 0.03, 0.02, 0.04, 0.01, 0.02]
+        values_a = 100.0
+        values_b = 100.0
+        rows = []
+        for idx, date in enumerate(dates):
+            values_a *= 1.0 + returns_a[idx]
+            values_b *= 1.0 + returns_b[idx]
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "A",
+                    "market_value": values_a,
+                    "return_pct": returns_a[idx],
+                    "currency": "USD",
+                }
+            )
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "B",
+                    "market_value": values_b,
+                    "return_pct": returns_b[idx],
+                    "currency": "USD",
+                }
+            )
+
+        result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=1,
+            covariance_method="sample",
+            covariance_window=5,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+        ).run_analysis()
+        expected = pd.DataFrame({"A": returns_a[-5:], "B": returns_b[-5:]}).cov()
+        self.assertAlmostEqual(
+            float(result.covariance_matrix.loc["A", "B"]),
+            float(expected.loc["A", "B"]),
+            places=12,
+        )
+        self.assertEqual(int(result.management_rules["covariance_window_effective"]), 5)
+
+    def test_low_coverage_assets_are_excluded_from_covariance(self) -> None:
+        dates = pd.date_range("2024-01-31", periods=10, freq="ME")
+        rows = []
+        value_a = 100.0
+        value_b = 100.0
+        for idx, date in enumerate(dates):
+            value_a *= 1.0 + 0.01
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "A",
+                    "market_value": value_a,
+                    "currency": "USD",
+                }
+            )
+            if idx < 5:
+                value_b *= 1.0 + 0.01
+                rows.append(
+                    {
+                        "date": date,
+                        "asset_bucket": "B",
+                        "market_value": value_b,
+                        "currency": "USD",
+                    }
+                )
+
+        result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=1,
+            covariance_method="sample",
+            min_asset_coverage_pct=80.0,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+        ).run_analysis()
+        coverage = result.asset_coverage.set_index("asset_bucket")
+        self.assertFalse(bool(coverage.loc["B", "included_for_covariance"]))
+        self.assertIn("B", result.management_rules["assets_excluded_low_coverage"])
+        rc = result.risk_contribution_by_bucket.set_index("asset_bucket")
+        self.assertNotIn("B", rc.index)
+
+    def test_tail_risk_metrics_are_present_and_ordered(self) -> None:
+        result = self._run()
+        tail = result.tail_risk_metrics.iloc[0]
+
+        self.assertLessEqual(float(tail["cvar_95_pct"]), float(tail["var_95_pct"]))
+        self.assertLessEqual(float(tail["max_drawdown_pct"]), 0.0)
+        self.assertGreater(int(tail["portfolio_return_observations"]), 0)
+
+    def test_tail_risk_uses_lagged_weights(self) -> None:
+        two_period = pd.DataFrame(
+            [
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "A",
+                    "market_value": 100,
+                    "return_pct": 0.0,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "B",
+                    "market_value": 100,
+                    "return_pct": 0.0,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "A",
+                    "market_value": 200,
+                    "return_pct": 1.0,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "B",
+                    "market_value": 100,
+                    "return_pct": 0.0,
+                    "currency": "USD",
+                },
+            ]
+        )
+        analyzer = DalioHolyGrailAnalyzer(
+            two_period,
+            min_history_months=1,
+            min_covariance_observations=1,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+        )
+        result = analyzer.run_analysis()
+        tail = result.tail_risk_metrics.iloc[0]
+
+        self.assertEqual(int(tail["portfolio_return_observations"]), 1)
+        self.assertAlmostEqual(float(tail["var_95_pct"]), 50.0, places=8)
+
+    def test_risk_contribution_incomplete_data_is_flagged(self) -> None:
+        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
+        rows = []
+        old_value = 100.0
+        cash_value = 200.0
+        for date in dates:
+            old_value *= 1.01
+            cash_value *= 1.0001
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "Old",
+                    "market_value": old_value,
+                    "currency": "USD",
+                }
+            )
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "Cash",
+                    "market_value": cash_value,
+                    "currency": "USD",
+                }
+            )
+
+        new_value = 1000.0
+        for date in dates[-6:]:
+            new_value *= 1.05
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "NewHuge",
+                    "market_value": new_value,
+                    "currency": "USD",
+                }
+            )
+
+        analyzer = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=12,
+            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
+            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
+        )
+        result = analyzer.run_analysis()
+
+        self.assertFalse(result.management_rules["risk_contribution_data_complete"])
+        self.assertIsNone(result.management_rules["risk_contribution_breach_count"])
+        self.assertGreater(float(result.management_rules["rc_excluded_weight_pct"]), 50.0)
+
+    def test_log_return_type_transforms_simple_returns(self) -> None:
+        data = pd.DataFrame(
+            [
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "Stocks",
+                    "market_value": 1000,
+                    "return_pct": 0.10,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "Stocks",
+                    "market_value": 1100,
+                    "return_pct": 0.05,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "Bonds",
+                    "market_value": 1000,
+                    "return_pct": 0.02,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "Bonds",
+                    "market_value": 1020,
+                    "return_pct": 0.01,
+                    "currency": "USD",
+                },
+            ]
+        )
+        analyzer = DalioHolyGrailAnalyzer(
+            data,
+            min_history_months=1,
+            min_covariance_observations=1,
+            return_type="log",
+            scenario_shocks={"s": {"Stocks": 0.0, "Bonds": 0.0}},
+        )
+        normalized = analyzer._normalize_history()
+        stocks_first = normalized.loc[
+            (normalized["asset_bucket"] == "Stocks")
+            & (normalized["date"] == pd.Timestamp("2025-01-31")),
+            "return_pct",
+        ].iloc[0]
+        self.assertAlmostEqual(float(stocks_first), float(np.log1p(0.10)), places=12)
+
+    def test_log_return_type_rejects_minus_one_simple_return(self) -> None:
+        bad = pd.DataFrame(
+            [
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "A",
+                    "market_value": 100,
+                    "return_pct": -1.0,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "A",
+                    "market_value": 100,
+                    "return_pct": 0.01,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "B",
+                    "market_value": 100,
+                    "return_pct": 0.0,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "B",
+                    "market_value": 100,
+                    "return_pct": 0.0,
+                    "currency": "USD",
+                },
+            ]
+        )
+        with self.assertRaises(ValueError):
+            DalioHolyGrailAnalyzer(
+                bad,
+                min_history_months=1,
+                min_covariance_observations=1,
+                return_type="log",
+                scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+                factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+            ).run_analysis()
+
 
 if __name__ == "__main__":
     unittest.main()
