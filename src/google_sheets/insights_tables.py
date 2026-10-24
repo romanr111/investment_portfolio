@@ -145,8 +145,9 @@ def _holding_cells(row: dict) -> tuple[Any, ...]:
     )
 
 
-def _holdings_section(data: dict) -> InsightTab:
-    holdings = holdings_table(data)
+def _holdings_section(data: dict, holdings: Optional[dict] = None) -> InsightTab:
+    if holdings is None:
+        holdings = holdings_table(data)
     all_rows = holdings["rows"]
     regular_rows = holdings["regular_rows"]
     tiny_rows = holdings["tiny_rows"]
@@ -327,8 +328,10 @@ def _comparison_section(
     previous: Optional[dict],
     current_date: Optional[str],
     previous_date: Optional[str],
+    comparison: Optional[dict] = None,
 ) -> InsightTab:
-    comparison = snapshot_comparison(current, previous, current_date, previous_date)
+    if comparison is None:
+        comparison = snapshot_comparison(current, previous, current_date, previous_date)
     rows = [
         (
             "Category",
@@ -404,8 +407,9 @@ def _comparison_section(
     )
 
 
-def _income_section(data: dict) -> InsightTab:
-    income = income_breakdown(data)
+def _income_section(data: dict, income: Optional[dict] = None) -> InsightTab:
+    if income is None:
+        income = income_breakdown(data)
     rows = [
         (
             "Income source",
@@ -499,8 +503,11 @@ def _income_section(data: dict) -> InsightTab:
     )
 
 
-def _liquidity_section(data: dict, config: dict) -> InsightTab:
-    liquidity = liquidity_ladder(data, config)
+def _liquidity_section(
+    data: dict, config: dict, liquidity: Optional[dict] = None
+) -> InsightTab:
+    if liquidity is None:
+        liquidity = liquidity_ladder(data, config)
     rows = (
         ("Liquidity and balance sheet coverage",),
         ("Measure", "Amount USD", "Status / definition"),
@@ -599,8 +606,11 @@ def _concentration_section(data: dict) -> InsightTab:
     )
 
 
-def _fire_section(data: dict, config: dict) -> InsightTab:
-    fire = fire_progress(data, config)
+def _fire_section(
+    data: dict, config: dict, fire: Optional[dict] = None
+) -> InsightTab:
+    if fire is None:
+        fire = fire_progress(data, config)
     summary = (
         ("FIRE target progress",),
         ("Measure", "Value", "Status / definition"),
@@ -826,7 +836,7 @@ def build_portfolio_tab(
             ),
         )
     )
-    original = _holdings_section(combined_data)
+    original = _holdings_section(combined_data, holdings)
     blocks = [
         CellBlock("holdings", tuple(holding_rows), start_row=0, start_column=3),
         CellBlock("summary", tuple(summary_rows), start_row=0),
@@ -852,11 +862,15 @@ def build_portfolio_tab(
     for section in (
         allocation_section,
         _comparison_section(
-            combined_data, previous_snapshot, valuation_date, previous_date
+            combined_data,
+            previous_snapshot,
+            valuation_date,
+            previous_date,
+            comparison,
         ),
-        _income_section(combined_data),
-        _liquidity_section(combined_data, settings),
-        _fire_section(combined_data, settings),
+        _income_section(combined_data, income),
+        _liquidity_section(combined_data, settings, liquidity),
+        _fire_section(combined_data, settings, fire),
         _concentration_section(combined_data),
     ):
         for block in section.blocks:

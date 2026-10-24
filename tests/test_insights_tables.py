@@ -1,4 +1,7 @@
 import unittest
+from unittest import mock
+
+from src.google_sheets import insights_tables as insights_tables_module
 from src.google_sheets.insights_cells import CellValue, render_blocks
 from src.google_sheets.insights_tables import (
     build_portfolio_tab,
@@ -125,5 +128,40 @@ class InsightsTablesTests(unittest.TestCase):
                     self.assertNotIn(index, emphasized)
                 if row[0] == "Stocks":  # detail + tiny rows under the subtotal
                     self.assertIn(index, emphasized)
+
+    def test_build_portfolio_tab_does_not_recompute_derivations(self):
+        """build_portfolio_tab passes precomputed results to section builders."""
+        calls = {name: 0 for name in (
+            "snapshot_comparison",
+            "liquidity_ladder",
+            "income_breakdown",
+            "fire_progress",
+            "holdings_table",
+            "concentration_views",
+        )}
+        originals = {
+            name: getattr(insights_tables_module, name) for name in calls
+        }
+
+        def counting(name, original):
+            def wrapper(*args, **kwargs):
+                calls[name] += 1
+                return original(*args, **kwargs)
+            return wrapper
+
+        with mock.patch.multiple(
+            insights_tables_module,
+            **{name: counting(name, original) for name, original in originals.items()},
+        ):
+            # The tab must still render with real content.
+            tab = build_portfolio_tab(
+                current_snapshot(), previous_snapshot=previous_snapshot()
+            )
+        self.assertTrue(tab.blocks)
+        # Each O(data) derivation runs exactly once, inside build_portfolio_tab;
+        # section builders reuse the results instead of recomputing.
+        for name, count in calls.items():
+            with self.subTest(derivation=name):
+                self.assertEqual(count, 1, f"{name} ran {count} times, expected 1")
 
 
