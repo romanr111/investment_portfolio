@@ -15,10 +15,16 @@ run:
 adoption-preview titles:
     venv/bin/python main.py --adoption-preview {{titles}}
 
-# Apply a reviewed adoptions JSON (from adoption-preview) during a sheet update.
+# Dry-apply a reviewed adoptions JSON: validates the sheet update without writing.
+# Requires --adoption-preview output reviewed first.
 # Usage: just adoption-apply data/adoptions.json
 adoption-apply file:
     venv/bin/python -m src.portfolio_sync --adoptions-file {{file}}
+
+# LIVE variant: actually applies the reviewed adoptions to Google Sheets.
+# Usage: just adoption-apply-live data/adoptions.json
+adoption-apply-live file:
+    venv/bin/python -m src.portfolio_sync --adoptions-file {{file}} --write
 
 crypto-sync *args:
     venv/bin/python -m src.portfolio_ledger.cli {{args}}

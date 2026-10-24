@@ -169,6 +169,14 @@ def _build_cli() -> argparse.ArgumentParser:
         help="Validate sheet writes without applying them to Google Sheets.",
     )
     parser.add_argument(
+        "--write",
+        action="store_true",
+        help=(
+            "Enable live Google Sheets writeback. Without this flag the run "
+            "stays in dry-run mode and only validates."
+        ),
+    )
+    parser.add_argument(
         "--skip-dalio-analysis",
         dest="skip_dalio_analysis",
         action="store_true",
@@ -465,6 +473,23 @@ def _run_history_sync_only(args: argparse.Namespace) -> None:
     )
 
 
+def _resolve_dry_run(args: argparse.Namespace) -> bool:
+    """Live writeback requires --write; --write and --dry-run are exclusive."""
+    if args.write and args.dry_run:
+        raise ValueError("--write and --dry-run are mutually exclusive.")
+    dry_run = args.dry_run or not args.write
+    if not dry_run:
+        logger.warning(
+            "LIVE writeback enabled (--write): Google Sheets will be modified."
+        )
+    elif getattr(args, "adoptions_file", None):
+        logger.warning(
+            "Dry run only (--write not passed): adoptions from %s are validated but not applied.",
+            args.adoptions_file,
+        )
+    return dry_run
+
+
 def main() -> int:
     args = _build_cli().parse_args()
     logger.debug("Starting main function")
@@ -491,6 +516,7 @@ def main() -> int:
             return 0
         if args.adoptions_file and args.skip_sheet_update:
             raise ValueError("--adoptions-file requires the sheet update to run.")
+        dry_run = _resolve_dry_run(args)
         if args.dalio_only:
             if not args.dalio_input_csv:
                 history_csv = Path(args.history_csv_path)
@@ -590,7 +616,7 @@ def main() -> int:
                     if args.adoptions_file
                     else None
                 ),
-                dry_run=args.dry_run,
+                dry_run=dry_run,
             )
             logger.debug("Portfolio sheet update completed")
         else:

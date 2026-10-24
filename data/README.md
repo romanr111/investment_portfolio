@@ -79,10 +79,13 @@ are left intact; any cleanup is separate. No historical or thematic tabs are
 deleted and no suffixed copies are created.
 
 `dry_run=True` validates both destinations and returns the proposed tab/ID
-receipt without writes. Validate a synthetic test workbook and review it before
-production writeback. Keep adoption receipts, snapshots, credentials, and local
-configuration out of Git. Financial replay parity assumes the same snapshot
-and configuration; source freshness is correctly labelled Cached on replay.
+receipt without writes. The CLI defaults to dry-run: live writeback requires the
+explicit `--write` flag (`--write` and `--dry-run` are mutually exclusive).
+Validate a synthetic test workbook and review it before production writeback.
+`just adoption-apply` performs a dry run; `just adoption-apply-live` writes.
+Keep adoption receipts, snapshots, credentials, and local configuration out of
+Git. Financial replay parity assumes the same snapshot and configuration;
+source freshness is correctly labelled Cached on replay.
 
 ## Portfolio ledger
 

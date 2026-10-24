@@ -34,6 +34,7 @@ class MainDalioOnlyModeTests(unittest.TestCase):
             "adoption_preview": None,
             "adoptions_file": None,
             "dry_run": False,
+            "write": False,
         }
         base.update(overrides)
         return argparse.Namespace(**base)
