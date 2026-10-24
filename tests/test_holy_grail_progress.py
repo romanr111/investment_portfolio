@@ -61,6 +61,19 @@ class HolyGrailProgressTests(unittest.TestCase):
         self.assertEqual(result["as_of_date"], "2026-09-30")
         self.assertEqual(result["coverage"]["direct_pct"], 100.0)
 
+    def test_reconciliation_allows_whole_dollar_source_precision(self):
+        from analytics.holy_grail import calculate_progress
+        rows = exposures(20)
+        rows[0]["value_usd"] += .99
+        for difference, reconciled in ((.99, True), (1.01, False)):
+            with self.subTest(difference=difference):
+                result = calculate_progress(
+                    rows, independent_history(20), as_of_date="2026-09-30",
+                    total_assets=sum(r["value_usd"] for r in rows) - difference,
+                )
+                self.assertEqual("unreconciled_valuations" not in result["constraints"], reconciled)
+                self.assertEqual(result["target_achieved"], reconciled)
+
     def test_twenty_independent_streams_keep_the_actual_count(self):
         result = self.calculate(exposures(20), independent_history(20))
         self.assertAlmostEqual(result["effective_streams"], 20)

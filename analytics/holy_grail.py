@@ -132,7 +132,8 @@ def calculate_progress(exposures, monthly_returns, *, as_of_date, total_assets,
         result["constraints"] = ["invalid_or_short_exposure"]
         return result
     result["input_fingerprint"] = fingerprint({"exposures": exposures, "as_of_date": as_of_date})
-    if abs(sum(values) + cash_value - total_assets) > max(0.02, total_assets * 1e-6):
+    # DataSource truncates TOTAL_ASSETS to whole USD; components retain cents.
+    if abs(sum(values) + cash_value - total_assets) > max(1.0, total_assets * 1e-6):
         flags.add("unreconciled_valuations")
     coverage = result["coverage"]
     coverage["cash_pct"] = cash_value / total_assets * 100

@@ -36,6 +36,22 @@ class RiskEquivalentTests(unittest.TestCase):
                 self.assertEqual(len(result["checks"]),10)
                 json.dumps(result,allow_nan=False)
 
+    def test_reconciliation_allows_whole_dollar_source_precision(self):
+        from analytics.diversification_quality import calculate_quality
+        rows = positions()
+        rows[0]["value_usd"] += .99
+        for difference, reconciled in ((.99, True), (1.01, False)):
+            with self.subTest(difference=difference):
+                result = calculate_quality(
+                    rows, independent_history(), as_of_date="2026-09-30",
+                    total_assets=sum(r["value_usd"] for r in rows) - difference,
+                )
+                self.assertEqual("unreconciled_valuations" not in result["constraints"], reconciled)
+                if reconciled:
+                    self.assertIsNotNone(result["effective_streams"])
+                else:
+                    self.assertIsNone(result["effective_streams"])
+
     def test_positive_and_negative_correlations_have_different_meanings(self):
         base=independent_history(15)
         c=np.full((15,15),.5); np.fill_diagonal(c,1)

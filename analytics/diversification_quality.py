@@ -143,7 +143,8 @@ def calculate_quality(exposures, monthly_returns, *, as_of_date, total_assets,
     if total is None or total <= 0 or any(v is None or v < 0 for v in values):
         result["constraints"].append("invalid_or_short_exposure")
         return result
-    if abs(sum(values) - total) > max(.02, total * 1e-6):
+    # DataSource truncates TOTAL_ASSETS to whole USD; components retain cents.
+    if abs(sum(values) - total) > max(1.0, total * 1e-6):
         result["constraints"].append("unreconciled_valuations")
         return result
     if any(e.get("unsupported_risk") for e in exposures):
