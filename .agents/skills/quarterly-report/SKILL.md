@@ -63,44 +63,55 @@ For missing positions, use the same collector with `IB_FLEX_QUERY_ID_PORTFOLIO_S
 
 ### Holy Grail saved-data enrichment
 
-The optional `HOLY_GRAIL_DATA` block is calculated once in
-`DataSource.get_combined_data()` before persistence and Sheets publication.
-The HTML reads only that saved block through `saved_progress_view()` and
-rejects a different valuation date or holdings fingerprint. Preserve the four
-approved summary cards; show diversification in its dedicated section.
-Never fetch histories or calculate correlations from the report generator.
+The optional `DIVERSIFICATION_DATA` and legacy `HOLY_GRAIL_DATA` blocks are
+calculated once in `DataSource.get_combined_data()` before persistence. Render
+only saved data through `saved_diversification_view()`, validating date, versions
+and input fingerprint. Never fetch histories or calculate risk in the report.
+Preserve the four approved summary cards and all financial figures/privacy
+exclusions. Invalid new data must not fall back to a current-looking old result.
+Old snapshots show a labeled legacy count without a new quality score.
 
-For a historical quarter, validate the original snapshot's holdings/date first:
+For historical replay, validate quarter-end holdings and use a new derived copy:
 
 ```bash
 just holy-grail --snapshot VERIFIED_QUARTER_END_SNAPSHOT \
-  --output data/derived_snapshots/quarter_holy_grail.json
+  --output data/derived_snapshots/quarter_diversification.json --offline
 venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
   --year YEAR --quarter QUARTER --before VERIFIED_BASELINE \
-  --after data/derived_snapshots/quarter_holy_grail.json
+  --after data/derived_snapshots/quarter_diversification.json
 ```
 
-The enrichment command refuses overwrite, output in automatic snapshot folders,
-and changes to latest pointers. It preserves existing financial fields. Use
-`--offline` to reuse cached data. Historical enrichment is retrospective because
-today's retrieved histories may include revisions; it does not establish what
-was known at the original close. Keep September holdings even if sold later.
+The command refuses overwrite, automatic snapshot folders and latest-pointer
+changes, preserving financial fields. `--offline` reuses cached histories;
+`--config PATH --cache-dir PATH` can select private inputs explicitly. Retrieved
+or backfilled data is retrospective, including unverified publication vintages.
+Exclude future observations and preserve holdings sold after the quarter end.
 
-Method `holy_grail_progress_v1` uses common monthly USD returns, sample
-covariance and squared correlations weighted by absolute variance contributions.
-15 effective streams correspond to statistical 100%; reviewed net-return
-rationales, full coverage, 60 observations, cluster risk <=10% and recent36
-count >=75% of primary are also required for achievement. HYG lending proxies
-and the used-car CPI proxy are approximate, with omitted risks retained.
-36-59 observations are provisional; below36 withholds the percentage.
-Keep estimates distinct from approval; never remove unqualified holdings to
-improve the score. See README's Holy Grail progress section for full policy.
+Count version `risk_equivalent_streams_v1` uses sample-covariance DR squared on
+36–60 common monthly USD returns. Preserve “N ефективних джерел дохідності /
+ціль 15–20”, with risk-equivalence/subset qualifiers. This is not Dalio's
+proprietary methodology. A hedge can push the count beyond the number of
+exposures; show that warning. Below-target rounding must display “<15”.
 
-Mappings, qualifications, raw histories and provenance remain under ignored
-`data/`. Public diagnostics may contain percentages and generic risk labels,
-never balances, platform accounts or private rationale records. Missing coverage,
-weak proxies and drafts must remain visible. Do not change a draft to reviewed
-without an actual documented review.
+Policy version `diversification_policy_v1` gives ten points per passed check,
+with unknowns producing bounds, not reweighting or a confidence interval.
+All unknown: “Недостатньо даних”. Always show key concentration/breadth/
+counterparty failures, reserve share and input confidence. Cash can improve
+loss resilience without improving risky-asset diversification. All confirmed
+reserves: zero streams and no applicable score. Stablecoins are not exempt.
+
+Statistical checks need 60 observations, >=99% non-reserve suitable coverage
+and no material weak-proxy/stale limitation. Value checks use conservative
+bounds; materially stale valuations prevent their resolution. Bond shocks use
+dated duration inputs; unknown duration never implies protection. Expected-
+return rationale reviews remain separate from factual risk classification.
+Do not approve drafts or turn weak proxies suitable just by filling review fields.
+
+Keep mappings, source evidence, account IDs and rationale records under ignored
+`data/`. Public diagnostics show percentages and generic risk labels only.
+See `docs/diversification-methodology.md` for all ten thresholds, shock tables,
+private input records and replay constraints. Inspect desktop/mobile/print after
+generation; compare preserved sections against the prior HTML.
 
 ```bash
 just report YEAR QUARTER

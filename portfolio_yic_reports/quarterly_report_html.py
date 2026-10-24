@@ -70,6 +70,7 @@ class ReportData:
     alternative_asset_tables: List[DetailTable] = field(default_factory=list)
     summary_title: str = "Коротко за квартал"
     holy_grail: Optional[dict] = None
+    diversification: Optional[dict] = None
 
 
 CSS = """
@@ -571,6 +572,8 @@ def _render_holy_grail(view: Optional[dict]) -> str:
     <span class="sec-rule"></span>
   </div>
   <p class="hg-value">{_esc(view['headline'])}</p>
+  <p>{_esc(view.get('count_note', 'Попередній метод'))}. Впевненість у вхідних даних: {_esc(view.get('confidence_label', '-'))}.</p>
+  <p class="footnote">{_esc(view.get('critical_text', ''))}<br>{_esc(view.get('principal_constraint', ''))}<br>{_esc(view.get('headline_warning', ''))}</p>
   <p><strong>{_esc(view['effective'])}</strong> ефективних джерел дохідності / ціль 15-20</p>
   <p class="footnote">Станом на {_esc(view['as_of'])}. {_esc(view['status'])}.<br>
   Власна модель статистичної диверсифікації. Минулі кореляції не гарантують майбутньої незалежності.</p>
@@ -671,7 +674,7 @@ def render_report(data: ReportData) -> str:
 
 {alternative_section}
 
-{_render_holy_grail(data.holy_grail)}
+{_render_holy_grail(data.diversification or data.holy_grail)}
 
 <footer>
   <span>Квартальний звіт · {_esc(data.quarter_label)} {_esc(data.year_label)}</span>

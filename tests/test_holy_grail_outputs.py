@@ -28,15 +28,17 @@ class HolyGrailOutputTests(unittest.TestCase):
         return render_report(build_report_data(_make_analyzer(), "20260930", -6.8, 9.3,
                                                {"Stocks": 100}, {"Stocks": 100}, data))
 
-    def test_sheets_and_html_use_the_same_saved_target_offline(self):
+    def test_legacy_sheets_and_html_use_the_same_saved_count_offline(self):
         saved = self.saved()
+        del saved["DIVERSIFICATION_DATA"]
         with patch("analytics.holy_grail_data.collect_return_history", side_effect=AssertionError("Outputs must not collect data")):
             table = PortfolioTableBuilder(saved).build_central_columns([])
-            self.assertTrue(any(row[:2] == ["Holy Grail", 1.0] for row in table),
+            self.assertTrue(any(row[:2] == ["Диверсифікація /100", "Нова оцінка відсутня"] for row in table),
                             "The current spreadsheet does not display saved Holy Grail progress")
             document = self.html(saved)
             self.assertIn("Диверсифікація: Holy Grail", document)
-            self.assertIn("100,0%", document)
+            self.assertIn("Попередній метод", document)
+            self.assertNotIn('<p class="hg-value">100,0%</p>', document)
             self.assertIn("15,00", document)
             self.assertIn("30.09.2026", document)
 

@@ -39,7 +39,7 @@ class HolyGrailDataTests(unittest.TestCase):
             allow_network=False,
         )
         self.assertEqual(original, untouched)
-        self.assertEqual({k:v for k,v in result.items() if k != "HOLY_GRAIL_DATA"}, original)
+        self.assertEqual({k:v for k,v in result.items() if k not in {"HOLY_GRAIL_DATA", "DIVERSIFICATION_DATA"}}, original)
         self.assertAlmostEqual(result["HOLY_GRAIL_DATA"]["effective_streams"], 15)
         self.assertTrue(result["HOLY_GRAIL_DATA"]["target_achieved"])
 
@@ -116,7 +116,7 @@ class HolyGrailDataTests(unittest.TestCase):
             self.assertEqual(latest.read_text(), "original latest pointer")
             self.assertEqual(result["as_of_date"], "2026-09-30")
             self.assertIn("HOLY_GRAIL_DATA", result["data"])
-            self.assertEqual({k:v for k,v in result["data"].items() if k != "HOLY_GRAIL_DATA"}, payload["data"])
+            self.assertEqual({k:v for k,v in result["data"].items() if k not in {"HOLY_GRAIL_DATA", "DIVERSIFICATION_DATA"}}, payload["data"])
             with self.assertRaises(ValueError):
                 module.enrich_snapshot_file(source, source, allow_network=False)
             with self.assertRaises(ValueError):

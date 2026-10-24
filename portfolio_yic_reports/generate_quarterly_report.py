@@ -36,6 +36,7 @@ from analyze_portfolio_reports import (
 )
 from src.portfolio_ledger.contract import reclassify_cash_equivalents, STABLECOINS
 from analytics.holy_grail import saved_progress_view
+from analytics.diversification_view import saved_diversification_view
 
 from quarterly_report_html import (
     MINUS,
@@ -477,6 +478,7 @@ def build_report_data(
             after_data or {}, f"{date_obj.year}-Q{quarter}"
         ),
         holy_grail=saved_progress_view(after_data or {}, expected_date=date_obj.date().isoformat()),
+        diversification=saved_diversification_view(after_data or {}, expected_date=date_obj.date().isoformat()),
     )
 
 

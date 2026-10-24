@@ -299,6 +299,9 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     output = dict(data)
     as_of_date = _date(as_of_date or data.get("POSITION_DATA", {}).get("as_of_date")
                        or data.get("DATA_METADATA", {}).get("last_updated") or date.today().isoformat())
+    positions, cash, flags, provenance = [], 0., set(), {}
+    settings = {}
+    returns = monthly_returns if monthly_returns is not None else pd.DataFrame()
     try:
         settings = load_config() if config is None else config
         positions, cash, flags = extract_exposures(data, as_of_date, settings)
@@ -325,6 +328,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
             "estimated_progress_pct": None, "target_achieved": False,
             "constraints": ["analytics_failed", type(error).__name__],
         }
+    from analytics.diversification_inputs import enrich_quality
+    output['DIVERSIFICATION_DATA'] = enrich_quality(data,positions,cash,returns,settings,as_of_date,flags,provenance)
     return output
 
 
