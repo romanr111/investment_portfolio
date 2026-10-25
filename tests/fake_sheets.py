@@ -185,6 +185,8 @@ class FakeSpreadsheet:
                 ]
             elif key == "deleteBasicFilter":
                 by_id[value["range"]["sheetId"]].basic_filter = None
+            elif key == "clearBasicFilter":
+                by_id[value["sheetId"]].basic_filter = None
             elif key == "addConditionalFormatRule":
                 sheet_id = value["rule"]["ranges"][0]["sheetId"]
                 by_id[sheet_id].conditional_formats.insert(
