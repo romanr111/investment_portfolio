@@ -35,22 +35,20 @@ saved income principal, which may differ from market valuation.
 
 Each valuation date has one portfolio tab (`DD Mon YYYY`). The only shared
 supporting tab is `net_worth_timeline`. Same-date reruns update the same sheet
-IDs. Allocation, comparison, income, liquidity, FIRE, and exposure are sections
-on the main tab. Tiny holdings below USD 100 remain in expandable detail.
+IDs. The tab is compact-only: allocation, balance changes, receipts, liquidity,
+FIRE detail, exposure views, full holdings, benchmarks, and methodology
+sections are no longer generated.
 
-The default view preserves the original four zones: FIRE and performance on
-the left, holdings grouped by asset category in the middle, and portfolio
+The view keeps the original four zones: FIRE and performance on the left,
+holdings grouped by asset category in the middle, and portfolio
 totals/allocation plus estimated income on the right. Holdings show asset,
 USD value and unrealized P&L percentage. Neutral grey headers replace blue;
 numeric P&L cells use the original red/white/green conditional gradient
-(-30%, 0%, +50%). Repeated updates replace only the saved generator rule.
-Headers are in row 2; columns through the asset names are frozen. Accounts, native P&L amounts/currency, IB
-weights, comparisons, targets, liquidity, exposure, and methodology sit under
-one collapsed `Details` section. The filter is on the full holdings table
-inside that section, so filtering does not hide adjacent summary panels.
-Asset values and allocation weights omit redundant plus signs; balance changes
-and returns keep explicit signs. Zero and unknown coverage remain distinct in
-the detailed tables, and source warnings still appear in the summary.
+(-30%, 0%, +50%). Headers are in row 2; columns through the asset names are
+frozen. No Details section, row group, or basic filter is written; a tab that
+carries one from an earlier generator frame has it removed on the next
+refresh. Asset values and allocation weights omit redundant plus signs;
+balance changes and returns keep explicit signs.
 
 `refresh_from_snapshot(spreadsheet, snapshot_path, config_path=None,
 snapshot_dir="data/snapshots", *, adoptions=None, dry_run=False)` replays a saved

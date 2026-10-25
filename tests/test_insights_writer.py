@@ -1,7 +1,9 @@
 import unittest
 from tests.fake_sheets import FakeSpreadsheet
 from tests.fixtures_insights import current_snapshot
+from src.google_sheets.insights_cells import render_blocks
 from src.google_sheets.insights_refresh import refresh_insights
+from src.google_sheets.insights_tables import build_portfolio_tab
 
 
 class InsightsWriterTests(unittest.TestCase):
@@ -88,7 +90,6 @@ class InsightsWriterTests(unittest.TestCase):
 
 
     def test_headers_are_neutral_and_position_returns_have_the_original_gradient(self):
-        from src.google_sheets.insights_cells import render_blocks
         from src.google_sheets.insights_tables import build_portfolio_tab
 
         data = current_snapshot()
@@ -114,53 +115,130 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertGreater(
             points["maxpoint"]["color"]["green"], points["maxpoint"]["color"]["red"]
         )
-        self.assertEqual([r["startColumnIndex"] for r in rule["ranges"]], [5, 7])
+        self.assertEqual([r["startColumnIndex"] for r in rule["ranges"]], [5])
         aaa_row = next(
             r for (r, c), value in main.values.items() if c == 4 and value == "AAA"
         )
         self.assertAlmostEqual(main.values[(aaa_row, 6)], 0.0705)
 
-    def test_moving_details_unhides_previously_generated_rows(self):
+    def test_no_details_zone_leaves_no_filter_group_or_stale_pnl_columns(self):
+        tab = build_portfolio_tab(current_snapshot())
+        _, _, ranges = render_blocks(tab.blocks)
+        self.assertNotIn("details", ranges)
         book = FakeSpreadsheet()
         refresh_insights(book, current_snapshot(), config={})
         main = book.worksheet("04 Oct 2026")
-        old_start = next(iter(main.groups))[0]
-        self.assertIn(old_start, main.hidden_rows)
+        self.assertIsNone(main.basic_filter)
+        self.assertEqual(main.groups, {})
+        self.assertEqual(main.hidden_rows, set())
+
+    def test_adopted_tab_with_legacy_filter_has_it_removed_on_refresh(self):
+        from src.google_sheets.insights_writer import preview_adoption
+
+        book = FakeSpreadsheet()
+        main = book.add_worksheet("04 Oct 2026")
+        main.basic_filter = {
+            "range": {
+                "startRowIndex": 50,
+                "endRowIndex": 82,
+                "startColumnIndex": 0,
+                "endColumnIndex": 8,
+            }
+        }
+        approval = preview_adoption(main, [[0, main.row_count, 0, 12]])
+        refresh_insights(
+            book, current_snapshot(), config={}, adoptions={main.id: approval}
+        )
+        self.assertIsNone(book.worksheet("04 Oct 2026").basic_filter)
+
+    def test_pre_compact_recorded_row_group_is_pruned_but_unrecorded_stays(self):
+        import json
+
+        from src.google_sheets.insights_writer import MARKER_COLUMN, OWNERSHIP_MARKER
+
+        book = FakeSpreadsheet()
+        main = book.add_worksheet("04 Oct 2026")
+        # A tab written by the pre-compact generator: recorded details group at 50..192.
+        main.values[(1, MARKER_COLUMN + 1)] = OWNERSHIP_MARKER
+        main.values[(2, MARKER_COLUMN + 1)] = json.dumps(
+            {
+                "rows": 192,
+                "cols": 12,
+                "role": "main",
+                "ranges": [[0, 192, 0, 12]],
+                "row_groups": [{"start": 50, "end": 192}],
+            },
+            sort_keys=True,
+        )
+        main.groups[(50, 192)] = 1
+        refresh_insights(book, current_snapshot(), config={})
+        keys = [next(iter(req)) for req in book.batch_updates[-1]["requests"]]
+        self.assertIn("deleteDimensionGroup", keys)
+        self.assertNotIn((50, 192), main.groups)
+        # A live span the generator never recorded is left alone.
+        refresh_insights(book, current_snapshot(), config={})
+        main.groups[(40, 45)] = 2
+        refresh_insights(book, current_snapshot(), config={})
+        self.assertEqual(main.groups.get((40, 45)), 2)
+
+    def test_shrinking_holdings_never_teardowns_absent_row_groups(self):
+        book = FakeSpreadsheet()
         data = current_snapshot()
         data["IB_DATA"]["Stocks"].update({f"NEW{i}": 200 for i in range(40)})
         refresh_insights(book, data, config={})
-        self.assertNotIn(old_start, main.hidden_rows)
+        main = book.worksheet("04 Oct 2026")
+        stale_value_cell = len(
+            render_blocks(build_portfolio_tab(data).blocks)[0]
+        )
+        main.values[(stale_value_cell, 1)] = "generated earlier"
+        refresh_insights(book, current_snapshot(), config={})
+        self.assertIn(main.cell(stale_value_cell, 1).value, ("", None))
+        # Compact-only tabs never group rows, so no group teardown can run.
+        delete_requests = [
+            next(iter(req))
+            for body in book.batch_updates
+            for req in body["requests"]
+        ]
+        self.assertNotIn("deleteDimensionGroup", delete_requests)
 
+    def test_same_date_rewrite_prunes_stacked_duplicate_groups(self):
+        import json
 
-    def test_supported_partial_receipts_keep_native_currency_and_coverage(self):
+        from src.google_sheets.insights_writer import MARKER_COLUMN
+
+        book = FakeSpreadsheet()
         data = current_snapshot()
-        data["INCOME_RECEIPTS"] = {
-            "state": "Incomplete",
-            "coverage_start": "2026-09-01",
-            "coverage_end": "2026-09-30",
-            "rows": [
-                {
-                    "date": "2026-09-15",
-                    "source": "Synthetic receipt",
-                    "amount": 12.5,
-                    "currency": "HKD",
-                    "cash_treatment": "Reinvested",
-                }
-            ],
-        }
+        refresh_insights(book, data, config={})
+        main = book.worksheet("04 Oct 2026")
+        # A recorded span the API stacked as depth 2 is pruned once per depth.
+        span = (40, 45)
+        metadata = json.loads(main.values[(2, MARKER_COLUMN + 1)])
+        metadata["row_groups"] = [{"start": span[0], "end": span[1]}]
+        main.values[(2, MARKER_COLUMN + 1)] = json.dumps(metadata, sort_keys=True)
+        main.groups[span] = 2
+        refresh_insights(book, data, config={})
+        deletions = [
+            req["deleteDimensionGroup"]["range"]
+            for req in book.batch_updates[-1]["requests"]
+            if "deleteDimensionGroup" in req
+        ]
+        self.assertEqual(
+            sorted((req["startIndex"], req["endIndex"]) for req in deletions),
+            [span, span],
+        )
+        self.assertEqual(main.groups.get(span, 0), 0)
+
+
+    def test_supported_partial_receipts_mark_the_compact_income_as_partial(self):
+        data = current_snapshot()
+        # A missing income source flips the estimate state; receipts stay compact.
+        data["FIXED_INCOME_DATA"]["group_weighted_interest"].pop("Bonds")
         book = FakeSpreadsheet()
         refresh_insights(book, data, config={})
         sheet = book.worksheet("04 Oct 2026")
-        row = next(
-            r
-            for (r, c), value in sheet.values.items()
-            if c == 2 and value == "Synthetic receipt"
+        self.assertTrue(
+            any(v == "Monthly average (partial)" for v in sheet.values.values())
         )
-        self.assertEqual(sheet.values[(row, 3)], 12.5)
-        self.assertEqual(sheet.values[(row, 4)], "HKD")
-        self.assertEqual(sheet.values[(row, 5)], "Reinvested")
-        self.assertNotIn("$", sheet.formats[(row, 3)]["numberFormat"]["pattern"])
-        self.assertTrue(any(value == "Incomplete" for value in sheet.values.values()))
 
     def test_refresh_creates_only_main_and_timeline_and_reuses_sheet_ids(self):
         book = FakeSpreadsheet()
@@ -226,27 +304,24 @@ class InsightsWriterTests(unittest.TestCase):
             refresh_insights(book, current_snapshot(), config={})
         self.assertFalse(book.batch_updates)
 
-    def test_stale_recorded_row_group_is_not_deleted_by_the_next_write(self):
+    def test_stale_recorded_row_group_without_live_group_restores_visibility(self):
+        import json
+
+        from src.google_sheets.insights_writer import MARKER_COLUMN
+
         book = FakeSpreadsheet()
         data = current_snapshot()
         refresh_insights(book, data, config={})
         main = book.worksheet("04 Oct 2026")
-        self.assertTrue(main.groups)
-        # Recorded groups still live on the tab are pruned by their own range.
-        refresh_insights(book, data, config={})
-        self.assertIn(
-            "deleteDimensionGroup",
-            [next(iter(r)) for r in book.batch_updates[-1]["requests"]],
-        )
-        # Groups that vanished outside the generator are never deleted blindly.
+        # A recorded-but-absent group keeps row visibility, never a blind delete.
+        metadata = json.loads(main.values[(2, MARKER_COLUMN + 1)])
+        metadata["row_groups"] = [{"start": 40, "end": 45}]
+        main.values[(2, MARKER_COLUMN + 1)] = json.dumps(metadata, sort_keys=True)
         main.groups.clear()
         refresh_insights(book, data, config={})
-        self.assertNotIn(
-            "deleteDimensionGroup",
-            [next(iter(r)) for r in book.batch_updates[-1]["requests"]],
-        )
-        # The current frame's groups are still established.
-        self.assertTrue(main.groups)
+        keys = [next(iter(req)) for req in book.batch_updates[-1]["requests"]]
+        self.assertNotIn("deleteDimensionGroup", keys)
+        self.assertIn("updateDimensionProperties", keys)
 
     def test_live_row_group_metadata_parses_the_nested_api_shape(self):
         from src.google_sheets.insights_writer import _sheet_row_groups
@@ -281,13 +356,20 @@ class InsightsWriterTests(unittest.TestCase):
         self.assertIsNone(_sheet_row_groups({"properties": {}}))
 
     def test_same_date_rewrite_prunes_stacked_duplicate_groups(self):
+        import json
+
+        from src.google_sheets.insights_writer import MARKER_COLUMN
+
         book = FakeSpreadsheet()
         data = current_snapshot()
         refresh_insights(book, data, config={})
         main = book.worksheet("04 Oct 2026")
-        # The API nests another addDimensionGroup over the live span as depth 2.
-        (start, end), _count = next(iter(main.groups.items()))
-        main.groups[(start, end)] = 2
+        # A recorded span the API stacked as depth 2 is pruned once per depth.
+        span = (40, 45)
+        metadata = json.loads(main.values[(2, MARKER_COLUMN + 1)])
+        metadata["row_groups"] = [{"start": span[0], "end": span[1]}]
+        main.values[(2, MARKER_COLUMN + 1)] = json.dumps(metadata, sort_keys=True)
+        main.groups[span] = 2
         refresh_insights(book, data, config={})
         deletions = [
             req["deleteDimensionGroup"]["range"]
@@ -296,9 +378,9 @@ class InsightsWriterTests(unittest.TestCase):
         ]
         self.assertEqual(
             sorted((req["startIndex"], req["endIndex"]) for req in deletions),
-            [(start, end), (start, end)],
+            [span, span],
         )
-        self.assertEqual(main.groups[(start, end)], 1)
+        self.assertEqual(main.groups.get(span, 0), 0)
 
     def test_grid_shrink_moves_the_row_group_off_the_previous_span(self):
         book = FakeSpreadsheet()
@@ -306,15 +388,12 @@ class InsightsWriterTests(unittest.TestCase):
         grown["IB_DATA"]["Precious Metals"].update({"SIM-SILVER": 60.0})
         refresh_insights(book, grown, config={})
         main = book.worksheet("04 Oct 2026")
-        (old_start, old_end), _count = next(iter(main.groups.items()))
+        # Compact-only tabs carry no row groups; shrinking them is pure value/format teardown.
+        self.assertEqual(main.groups, {})
+        grown_rows = len(render_blocks(build_portfolio_tab(grown).blocks)[0])
+        main.values[(grown_rows, 1)] = "generated earlier"
         refresh_insights(book, current_snapshot(), config={})
-        remaining = dict(main.groups)
-        self.assertEqual(len(remaining), 1)
-        (new_start, new_end), count = next(iter(remaining.items()))
-        self.assertEqual(count, 1)
-        self.assertLess(new_end, old_end)
-        # Rows the deleted group hid beyond the shorter span stay visible.
-        self.assertNotIn(old_end - 1, main.hidden_rows)
+        self.assertIn(main.cell(grown_rows, 1).value, ("", None))
 
     def test_adopted_replacement_removes_a_legacy_single_column_pnl_gradient(self):
         from src.google_sheets.insights_writer import preview_adoption
@@ -358,8 +437,9 @@ class InsightsWriterTests(unittest.TestCase):
         )
         gradients = [r for r in main.conditional_formats if r.get("gradientRule")]
         self.assertEqual(len(gradients), 1)
-        # The managed replacement spans both P&L columns, not one.
-        self.assertGreater(len(gradients[0]["ranges"]), 1)
+        # The managed replacement targets the compact P&L column (F), not the
+        # removed details column.
+        self.assertEqual(gradients[0]["ranges"][0]["startColumnIndex"], 5)
 
     def test_growing_main_tab_cannot_overwrite_unowned_formula(self):
         from src.google_sheets.insights_cells import render_blocks
@@ -412,14 +492,12 @@ class InsightsWriterTests(unittest.TestCase):
         main.values[(1, 16)] = "manual note"
         ids = [s.id for s in book.sheets]
         refresh_insights(book, current_snapshot(), config={})
-        count = len(main.groups)
         refresh_insights(book, current_snapshot(), config={})
-        self.assertEqual(len(main.groups), count)
         self.assertEqual(main.cell(1, 16).value, "manual note")
         self.assertIn(main.cell(old_rows, 1).value, ("", None))
         self.assertEqual([s.id for s in book.sheets], ids)
         self.assertEqual(main.properties["frozenRowCount"], 2)
-        self.assertGreater(main.basic_filter["range"]["startRowIndex"], 25)
+        self.assertEqual(main.basic_filter, None)
 
     def test_legacy_timeline_dry_run_and_appending_past_the_last_grid_row(self):
         from copy import deepcopy

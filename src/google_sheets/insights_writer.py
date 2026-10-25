@@ -250,8 +250,12 @@ _LEGACY_PNL_POINTS = (
 )
 
 
-def _legacy_pnl_gradient(rules: Any) -> Any:
-    """Return the single-column P&L gradient from formatting.py, if still live."""
+def _legacy_pnl_gradient(rules: Any, row_limit: int = 0) -> Any:
+    """Return the single-column P&L gradient from formatting.py, if still live.
+
+    ``row_limit`` bounds the scan to the recorded generated row count so rules
+    referencing absurd row ranges never match an adopted legacy tab.
+    """
     for rule in rules if isinstance(rules, list) else []:
         signature = _gradient_signature(rule)
         if signature is None:
@@ -261,6 +265,7 @@ def _legacy_pnl_gradient(rules: Any) -> Any:
             len(ranges) == 1
             and ranges[0][3] == 5
             and ranges[0][4] == 6
+            and (not row_limit or ranges[0][2] <= row_limit <= 1000)
             and points == _LEGACY_PNL_POINTS
         ):
             return deepcopy(rule)
@@ -568,7 +573,12 @@ def _tab_requests(
     # single-column P&L gradient; when nothing was recorded yet, replace it on
     # this run instead of leaving two competing gradients on the tab.
     if not _gradient_signature(old_metadata.get("pnl_gradient")):
-        legacy = _legacy_pnl_gradient(conditional_formats)
+        row_count_for_legacy_scan = (
+            old_metadata.get("rows", 0) if isinstance(old_metadata, dict) else 0
+        )
+        legacy = _legacy_pnl_gradient(
+            conditional_formats, max(row_count_for_legacy_scan, 0)
+        )
         if legacy is not None:
             old_metadata = {**old_metadata, "pnl_gradient": deepcopy(legacy)}
     old_signature = _gradient_signature(old_metadata.get("pnl_gradient"))
@@ -604,7 +614,7 @@ def _tab_requests(
         )
 
     if "compact_allocation" in block_ranges:
-        compact_end = block_ranges["details"][0]
+        compact_end = block_ranges.get("details", (row_count,))[0]
         for (row, column), cell in typed_cells.items():
             number_format = _compact_format(cell) if row < compact_end else None
             if number_format:
@@ -682,6 +692,10 @@ def _tab_requests(
                     }
                 }
             )
+    else:
+        # Generator tabs that no longer render the filtered section keep any
+        # earlier basic filter from blocking rows that are still on the grid.
+        requests.append({"deleteBasicFilter": {"range": {"sheetId": sheet_id}}})
 
     previous_groups = old_metadata.get("row_groups", [])
     if isinstance(previous_groups, list):
@@ -895,7 +909,7 @@ def _tab_requests(
         status_rows = {
             row for (row, _), cell in typed_cells.items() if cell.kind == "status"
         }
-        for row in range(2, block_ranges["details"][0]):
+        for row in range(2, block_ranges.get("details", (row_count,))[0]):
             values = grid[row][:12]
             if all(value in ("", None) for value in values):
                 row_heights.append((row, 12))
