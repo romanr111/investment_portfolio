@@ -695,7 +695,18 @@ def _tab_requests(
     else:
         # Generator tabs that no longer render the filtered section keep any
         # earlier basic filter from blocking rows that are still on the grid.
-        requests.append({"deleteBasicFilter": {"range": {"sheetId": sheet_id}}})
+        requests.append(
+            {
+                "updateCells": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 0,
+                    },
+                    "fields": "basicFilter",
+                }
+            }
+        )
 
     previous_groups = old_metadata.get("row_groups", [])
     if isinstance(previous_groups, list):

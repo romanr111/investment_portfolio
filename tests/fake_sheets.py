@@ -148,6 +148,10 @@ class FakeSpreadsheet:
                 else:
                     r = value["range"]
                     s = by_id[r["sheetId"]]
+                    if value.get("fields") == "basicFilter":
+                        # Fields-mask-only clear: the generator removes a stale filter.
+                        s.basic_filter = None
+                        continue
                     for y in range(r.get("startRowIndex", 0), r["endRowIndex"]):
                         for x in range(
                             r.get("startColumnIndex", 0), r["endColumnIndex"]
