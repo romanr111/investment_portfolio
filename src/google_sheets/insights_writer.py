@@ -19,6 +19,9 @@ from src.google_sheets.insights_tables import InsightTab
 MARKER_COLUMN = 28  # Zero-based column AC. gspread cell coordinates are one-based.
 OWNERSHIP_MARKER = "portfolio_snapshot_generated_v2"
 MAX_DATA_COLUMNS = MARKER_COLUMN
+# Rendered grid is kept this many rows larger than the content; the tab does
+# not inherit the largest frame ever written.
+ROW_HEADROOM = 20
 
 _COLORS = {
     name: dict(
@@ -328,11 +331,14 @@ def _tab_requests(
 
     sheet_id = worksheet.id
     requests: list[dict[str, Any]] = []
-    requested_rows = max(row_count + 5, getattr(worksheet, "row_count", 0))
-    requested_columns = max(MARKER_COLUMN + 1, getattr(worksheet, "col_count", 0))
-    if requested_rows > getattr(
+    # Grow with headroom, but also shrink back after big layout removals: the
+    # grid tracks the render with a small buffer instead of the largest frame
+    # ever written (e.g. a pre-compact 1000-row tab keeps 980 empty rows).
+    requested_rows = row_count + ROW_HEADROOM
+    requested_columns = max(MARKER_COLUMN + 1, len(grid[0]))
+    if requested_rows != getattr(
         worksheet, "row_count", 0
-    ) or requested_columns > getattr(worksheet, "col_count", 0):
+    ) or requested_columns != getattr(worksheet, "col_count", 0):
         requests.append(
             {
                 "updateSheetProperties": {
@@ -348,6 +354,15 @@ def _tab_requests(
             }
         )
 
+    # Old-range clears must stay inside the TARGET grid: the resize request
+    # earlier in this same batch has already applied by the time the clear runs
+    # (each request applies in order), so a beyond-target clear crashes.
+    existing_rows = min(
+        getattr(worksheet, "row_count", 0) or requested_rows, requested_rows
+    )
+    existing_columns = min(
+        getattr(worksheet, "col_count", 0) or requested_columns, requested_columns
+    )
     for start_row, end_row, start_column, end_column in old_metadata.get("ranges", []):
         requests.append(
             {
@@ -355,9 +370,9 @@ def _tab_requests(
                     "range": {
                         "sheetId": sheet_id,
                         "startRowIndex": start_row,
-                        "endRowIndex": end_row,
+                        "endRowIndex": min(end_row, existing_rows),
                         "startColumnIndex": start_column,
-                        "endColumnIndex": end_column,
+                        "endColumnIndex": min(end_column, existing_columns),
                     },
                     "fields": "userEnteredValue,userEnteredFormat",
                 }

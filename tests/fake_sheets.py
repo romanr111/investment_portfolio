@@ -131,6 +131,14 @@ class FakeSpreadsheet:
                 s.properties.update(p.get("gridProperties", {}))
                 s.row_count = s.properties.get("rowCount", s.row_count)
                 s.col_count = s.properties.get("columnCount", s.col_count)
+                # Shrink matches the API: rows/columns beyond the new grid are
+                # gone, values included.
+                s.values = {
+                    c: v for c, v in s.values.items() if c[0] <= s.row_count and c[1] <= s.col_count
+                }
+                s.formats = {
+                    c: v for c, v in s.formats.items() if c[0] <= s.row_count and c[1] <= s.col_count
+                }
             elif key == "updateCells":
                 start = value.get("start")
                 if start is not None:
