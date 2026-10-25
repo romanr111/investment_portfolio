@@ -189,20 +189,35 @@ def load_config(path=CONFIG_PATH):
     return value
 
 
+def bound_exposure_record(records, identifier, fallback, source_identity=None):
+    """Index-keyed evidence is usable only when bound to the same economic holding."""
+    record = records.get(identifier)
+    positional = identifier.split(':', 1)[0] in {'crypto_lending', 'p2p', 'other_assets'}
+    if record is not None and (not positional or (source_identity and record.get('source_identity') == source_identity)):
+        return record
+    return records.get(fallback, {})
+
+
+def _source_identity(row, keys):
+    if all(isinstance(row.get(key), str) and row[key].strip() for key in keys):
+        return {key: row[key] for key in keys}
+    return None
+
+
 def extract_exposures(data, as_of_date, config):
     """Use the canonical saved values; aliases and rationale overrides stay private."""
     positions, flags = [], set()
     mappings = config.get("mappings", {})
     qualifications = config.get("qualifications", {})
 
-    def add(identifier, category, value, *, symbol=None, proxy=None, risks=()):
+    def add(identifier, category, value, *, symbol=None, proxy=None, risks=(), source_identity=None):
         amount = _number(value)
         if amount is None:
             flags.add("invalid_valuation")
             return
         if amount == 0:
             return
-        mapping = mappings.get(identifier, mappings.get("category:" + category, {}))
+        mapping = bound_exposure_record(mappings, identifier, "category:" + category, source_identity)
         provider = mapping.get("provider", "fred" if proxy == "CUSR0000SETA02" else "yfinance")
         market_symbol = mapping.get("symbol", proxy or symbol)
         is_proxy = mapping.get("kind", "proxy" if proxy else "direct") == "proxy"
@@ -215,7 +230,8 @@ def extract_exposures(data, as_of_date, config):
             "kind": "proxy" if is_proxy else "direct",
             "weak_proxy": bool(mapping.get("weak_proxy", is_proxy)),
             "risk_flags": sorted(set(risks) | set(mapping.get("risk_flags", []))),
-            "qualification": qualifications.get(identifier, qualifications.get(category, {"status": "draft"})),
+            "qualification": bound_exposure_record(qualifications, identifier, category, source_identity) or {"status": "draft"},
+            "source_identity": source_identity,
         })
 
     ib = data.get("IB_DATA", {})
@@ -252,7 +268,8 @@ def extract_exposures(data, as_of_date, config):
             risks = ["counterparty_risk_unmodeled", "liquidity_risk_unmodeled"]
             if category == "Crypto Lending":
                 risks.append("depeg_risk_unmodeled")
-            add(f"{key}:{index}", category, row.get(amount_key), proxy="HYG", risks=risks)
+            add(f"{key}:{index}", category, row.get(amount_key), proxy="HYG", risks=risks,
+                source_identity=_source_identity(row, ("account", "asset") if key == "crypto_lending" else ("account",)))
             if row.get("status") == "legacy" or row.get("coverage") == "partial":
                 flags.add("partial_valuations")
     other_rows = contract.get("other_assets")
@@ -260,7 +277,8 @@ def extract_exposures(data, as_of_date, config):
         other_rows = [{"carrying_value_usd": value} for value in data.get("OTHER_ASSETS", {}).values()]
     for index, row in enumerate(other_rows):
         add(f"other_assets:{index}", "Other Bets", row.get("carrying_value_usd"),
-            proxy="CUSR0000SETA02", risks=["resale_execution_risk_unmodeled", "local_market_risk_unmodeled"])
+            proxy="CUSR0000SETA02", risks=["resale_execution_risk_unmodeled", "local_market_risk_unmodeled"],
+            source_identity=_source_identity(row, ("asset_id",)))
         if row.get("status") == "legacy" or row.get("coverage") == "partial":
             flags.add("partial_valuations")
     cash = _number(data.get("CASH_DATA", {}).get("Total"))
@@ -269,6 +287,11 @@ def extract_exposures(data, as_of_date, config):
         cash = 0.0
     if data.get("CASH_DATA", {}).get("Cash_Equivalents"):
         flags.add("cash_equivalent_counterparty_risk")
+    # Inspect liabilities before net cash combines accounts with positive balances.
+    cash_components = list((data.get("CASH_DATA", {}).get("Breakdown") or {}).values())
+    cash_components.append(ib.get("Net_cash", 0))
+    if any(_number(value) is not None and _number(value) < 0 for value in cash_components):
+        flags.add("unsupported_borrowing")
     quality = data.get("DATA_QUALITY", {})
     for key in ("crypto", "cash"):
         if quality.get(key, {}).get("freshness") in {"stale", "partial", "snapshot_fallback"}:

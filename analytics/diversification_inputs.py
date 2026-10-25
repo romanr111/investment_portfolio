@@ -5,6 +5,7 @@ from datetime import date
 import pandas as pd
 
 from analytics.holy_grail import fingerprint, holdings_fingerprint, qualification_reviewed
+from analytics.holy_grail_data import bound_exposure_record
 from analytics.diversification_quality import COUNT_VERSION, POLICY_VERSION, calculate_quality
 
 
@@ -29,7 +30,7 @@ def prepare_quality_exposures(data,positions,cash,settings,as_of_date):
     rows=deepcopy(positions)
     contract=data.get('POSITION_DATA',{})
     for e in rows:
-        e['risk_record']=deepcopy(records.get(e['id'],records.get('category:'+e['category'],{})))
+        e['risk_record']=deepcopy(bound_exposure_record(records, e['id'], 'category:'+e['category'], e.get('source_identity')))
         e['valuation_stale']=False
         if e['category']=='Short Selling': e['unsupported_risk']=True
         if e['risk_record'].get('nonlinear_risk') or e['risk_record'].get('leveraged'): e['unsupported_risk']=True
@@ -82,7 +83,7 @@ def enrich_quality(data,positions,cash,returns,settings,as_of_date,flags,provena
                       configuration_fingerprint=fingerprint(settings.get('diversification',{})),
                       history_fingerprint=fingerprint(returns.to_json(date_format='iso')),
                       retrospective=as_of_date<date.today().isoformat(),source_provenance=provenance,
-                      cash_share_pct=100*float(cash)/float(data['TOTAL_ASSETS']),
+                      cash_share_pct=100*float(cash)/sum(float(e['value_usd']) for e in rows),
                       qualification_status='reviewed' if all(qualification_reviewed(e.get('qualification')) for e in positions) else 'pending')
         return result
     except Exception as error:

@@ -120,6 +120,13 @@ Extend ignored `data/holy_grail_config.json`, retaining existing `mappings`
 and `qualifications`. Optional `diversification` contains `exposures`, `policy`
 and `cash_components`. Exposure keys are canonical IDs (for example `ib:IHYG`)
 or `category:<name>` for facts genuinely shared by that category.
+Index-keyed entries (`crypto_lending:0`, `p2p:0`, `other_assets:0`) must also
+contain a matching `source_identity`: `{"account": "...", "asset": "..."}` for
+lending, `{"account": "..."}` for P2P, or `{"asset_id": "..."}` for cars.
+This applies to per-position mappings, qualifications and risk evidence. After
+source rows move, mismatched entries are ignored, leaving default weak proxies
+and unknown facts until the records are rebound. Entries without a stable source
+identity cannot establish position-specific evidence; family records remain valid.
 
 Each record needs non-empty `source`, `effective_from` (and optional
 `effective_to`) plus `reviewed_at` ISO date. Future reviews are rejected;
@@ -143,6 +150,11 @@ uses canonical Cash_Equivalents. Optional `cash_components` specify a canonical
 Breakdown key with `excludes_cash_equivalents: true`; only use demonstrably
 disjoint components. Unidentified remainder is `cash:unclassified`, not safe USD.
 Over-allocation fails the quality assessment while preserving normal reporting.
+Negative source cash balances, including broker cash and cash breakdown accounts,
+make both analytics estimates unavailable even when total net cash is positive.
+Reconciliation allows the source total's $1 display precision. After reconciliation,
+analytical percentages use the unrounded component sum; saved financial totals
+are preserved. Discrepancies beyond the allowed tolerance remain invalid.
 
 Do not infer returns from business carrying values. Car resale requires dated
 inventory/cost/proceeds/turnover records. HYG and used-car CPI are weak sensitivity

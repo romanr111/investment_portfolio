@@ -103,6 +103,14 @@ class HolyGrailProgressTests(unittest.TestCase):
                 self.assertIn(reason, result["constraints"])
                 self.assertAlmostEqual(result["effective_streams"], 15)
 
+    def test_future_rationale_reviews_cannot_confirm_the_target(self):
+        rows = exposures()
+        for row in rows:
+            row['qualification']['reviewed_at'] = '2999-01-01'
+        result = self.calculate(rows, independent_history())
+        self.assertFalse(result['target_achieved'])
+        self.assertIn('qualification_pending', result['constraints'])
+
     def test_missing_position_remains_in_portfolio_coverage(self):
         result = self.calculate(exposures(), independent_history().drop(columns="asset_0"))
         self.assertAlmostEqual(result["coverage"]["uncovered_pct"], 100 / 15)

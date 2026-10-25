@@ -62,7 +62,11 @@ def qualification_reviewed(record):
     if not all(isinstance(record.get(key), str) and record[key].strip() for key in required):
         return False
     try:
-        datetime.fromisoformat(record["reviewed_at"])
+        reviewed = datetime.fromisoformat(record["reviewed_at"])
+        if reviewed.tzinfo is not None:
+            reviewed = reviewed.astimezone(timezone.utc)
+        if reviewed.date() > datetime.now(timezone.utc).date():
+            return False
     except ValueError:
         return False
     return True
@@ -130,6 +134,9 @@ def calculate_progress(exposures, monthly_returns, *, as_of_date, total_assets,
         values = [math.nan]
     if not all(math.isfinite(v) and v >= 0 for v in values) or not math.isfinite(cash_value) or cash_value < 0:
         result["constraints"] = ["invalid_or_short_exposure"]
+        return result
+    if "unsupported_borrowing" in flags:
+        result["constraints"] = sorted(flags)
         return result
     result["input_fingerprint"] = fingerprint({"exposures": exposures, "as_of_date": as_of_date})
     # DataSource truncates TOTAL_ASSETS to whole USD; components retain cents.
@@ -219,6 +226,7 @@ def calculate_progress(exposures, monthly_returns, *, as_of_date, total_assets,
 
 
 CONSTRAINT_LABELS = {
+    "unsupported_borrowing": "Виявлено позиковий залишок; модель не підтримує оцінку з кредитним плечем.",
     "qualification_pending": "Очікувана дохідність після витрат ще потребує перевірки.",
     "weak_proxy": "Проксі лише частково відображають ризики фактичних інвестицій.",
     "uncovered_exposures": "Частина портфеля не має придатної історії дохідностей.",

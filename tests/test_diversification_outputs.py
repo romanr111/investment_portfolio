@@ -1,5 +1,6 @@
 """Shared saved views, not output-side risk calculations."""
 import unittest
+from html import escape
 from copy import deepcopy
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
@@ -26,6 +27,23 @@ class QualityOutputTests(unittest.TestCase):
             self.assertIn('Еквівалент за ризиком',html)
             self.assertNotIn('Ціль досягнута',html)
             self.assertNotIn('<p class="hg-value">100,0%</p>',html)
+
+    def test_rounded_source_total_keeps_the_saved_estimate_visible(self):
+        from analytics.diversification_view import saved_diversification_view
+        from test_holy_grail_data import snapshot_fixture
+        for extra in (.01, .99):
+            with self.subTest(extra=extra):
+                data = snapshot_fixture()
+                data['IB_DATA']['Stocks']['asset_0'] += extra
+                saved = input_cases.QualityInputTests().enrich(data)
+                quality = saved['DIVERSIFICATION_DATA']
+                self.assertAlmostEqual(sum(quality['coverage'].values()), 100)
+                view = saved_diversification_view(saved)
+                self.assertNotEqual(view['effective'], '-')
+                table = PortfolioTableBuilder(saved).build_central_columns([])
+                self.assertIn(view['effective'], str(table[10][:2]))
+                self.assertIn(escape(view['effective']), legacy_cases.HolyGrailOutputTests().html(saved))
+                self.assertEqual(saved['TOTAL_ASSETS'], 1500)
 
     def test_invalid_new_result_does_not_fall_back_to_legacy(self):
         from analytics.diversification_view import saved_diversification_view

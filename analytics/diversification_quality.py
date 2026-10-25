@@ -140,14 +140,16 @@ def calculate_quality(exposures, monthly_returns, *, as_of_date, total_assets,
     for check in checks: check['threshold']=thresholds[check['id']]
     total = _finite(total_assets)
     values = [_finite(e.get("value_usd")) for e in exposures]
-    if total is None or total <= 0 or any(v is None or v < 0 for v in values):
+    if total is None or total <= 0 or any(v is None or v < 0 for v in values) or sum(values) <= 0:
         result["constraints"].append("invalid_or_short_exposure")
         return result
     # DataSource truncates TOTAL_ASSETS to whole USD; components retain cents.
     if abs(sum(values) - total) > max(1.0, total * 1e-6):
         result["constraints"].append("unreconciled_valuations")
         return result
-    if any(e.get("unsupported_risk") for e in exposures):
+    # Normalize analytical shares to reconciled components, not the rounded display NAV.
+    total = sum(values)
+    if "unsupported_borrowing" in result["constraints"] or any(e.get("unsupported_risk") for e in exposures):
         result["constraints"].append("unsupported_leverage_or_nonlinear_risk")
         return result
     result["policy_fingerprint"] = fingerprint({"thresholds": thresholds, "shocks": shocks, "yield_shocks": yields, "version": POLICY_VERSION})
