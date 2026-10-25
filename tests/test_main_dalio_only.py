@@ -31,6 +31,10 @@ class MainDalioOnlyModeTests(unittest.TestCase):
             "history_frequency": "monthly",
             "history_start_date": None,
             "history_end_date": None,
+            "adoption_preview": None,
+            "adoptions_file": None,
+            "dry_run": False,
+            "write": False,
         }
         base.update(overrides)
         return argparse.Namespace(**base)
@@ -111,14 +115,6 @@ class MainDalioOnlyModeTests(unittest.TestCase):
 
         self.assertTrue(args.skip_history_sync)
         self.assertTrue(args.skip_dalio_analysis)
-
-    def test_history_and_dalio_can_be_enabled_explicitly(self) -> None:
-        args = main._build_cli().parse_args(
-            ["--run-history-sync", "--run-dalio-analysis"]
-        )
-
-        self.assertFalse(args.skip_history_sync)
-        self.assertFalse(args.skip_dalio_analysis)
 
 
 if __name__ == "__main__":

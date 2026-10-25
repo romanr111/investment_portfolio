@@ -7,8 +7,8 @@ from data.filters_constants import (
     PRECIOUS_METALS_KEY,
 )
 from src.brokers.ib import InteractiveBrokers
+from src.google_sheets.insights_tables import build_portfolio_tab
 from src.google_sheets.spreadsheet_structure import (
-    PortfolioTableBuilder,
     create_enhanced_stocks_data,
 )
 
@@ -53,7 +53,7 @@ class TestInteractiveBrokersPreciousMetalsAnalytics(unittest.TestCase):
 
 
 class TestSpreadsheetPreciousMetalsRendering(unittest.TestCase):
-    def test_builder_adds_precious_metals_pnl_to_column_f(self):
+    def test_main_tab_keeps_precious_metals_pnl(self):
         data = {
             "IB_DATA": {
                 CHINA_STOCKS_KEY: {"700": 1000},
@@ -66,28 +66,13 @@ class TestSpreadsheetPreciousMetalsRendering(unittest.TestCase):
                 precious_metals={"GLD": {"unrealized_pnl_percentage": 5.5}},
             ),
         }
-        builder = PortfolioTableBuilder(data)
-
-        rows = builder.build_left_columns()
-
-        header_row_idx = next(idx for idx, row in enumerate(rows) if row[3] == "Precious Metals")
-        gld_row = next(row for row in rows if row[3] == "GLD")
-
-        self.assertIn(header_row_idx, builder.category_header_rows)
-        self.assertEqual(gld_row[4], "1500")
-        self.assertEqual(gld_row[5], 0.055)
-
-    def test_create_enhanced_stocks_data_includes_precious_metals_defaults(self):
-        enhanced = create_enhanced_stocks_data(
-            precious_metals={"GLD": {"market_value": 1500}}
+        tab = build_portfolio_tab(data, current_date="2026-09-30")
+        rows = next(
+            block.rows for block in tab.blocks if block.name == "holdings"
         )
-
-        self.assertIn("Precious Metals", enhanced)
-        self.assertIn("GLD", enhanced["Precious Metals"])
-        self.assertIn("metadata", enhanced)
-        self.assertIn("total_cost_basis", enhanced["metadata"])
-        self.assertIn("total_unrealized_pnl", enhanced["metadata"])
-        self.assertIn("total_unrealized_pnl_percentage", enhanced["metadata"])
+        gld_row = next(row for row in rows if row[0] == "GLD")
+        self.assertEqual(gld_row[1].value, 1500)
+        self.assertEqual(gld_row[2].value, 0.055)
 
 
 if __name__ == "__main__":

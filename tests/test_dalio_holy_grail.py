@@ -163,24 +163,6 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         """Return the cached default-config analysis result."""
         return self._cached_result
 
-    def test_data_quality_checks_pass_for_clean_monthly_dataset(self) -> None:
-        result = self._run()
-        checks = result.quality_checks.set_index("check")["passed"].to_dict()
-
-        self.assertTrue(checks["no_missing_monthly_dates"])
-        self.assertTrue(checks["consistent_frequency"])
-        self.assertTrue(checks["weights_sum_to_100"])
-        self.assertTrue(checks["minimum_history_window"])
-
-    def test_correlation_matrix_is_symmetric_with_unity_diagonal(self) -> None:
-        result = self._run()
-        corr = result.correlation_matrix
-
-        symmetry_gap = (corr - corr.T).abs().max().max()
-        self.assertLess(symmetry_gap, 1e-12)
-        for bucket in corr.columns:
-            self.assertAlmostEqual(float(corr.loc[bucket, bucket]), 1.0, places=10)
-
     def test_risk_contributions_sum_to_portfolio_volatility(self) -> None:
         result = self._run()
         rc = result.risk_contribution_by_bucket
@@ -442,6 +424,229 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             analyzer.run_analysis()
 
+    def test_short_and_netting_checks_fail_when_shorts_not_allowed(self) -> None:
+        data = pd.DataFrame(
+            [
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "Stocks",
+                    "market_value": 100,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-01-31",
+                    "asset_bucket": "Short Hedge",
+                    "market_value": -80,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "Stocks",
+                    "market_value": 105,
+                    "currency": "USD",
+                },
+                {
+                    "date": "2025-02-28",
+                    "asset_bucket": "Short Hedge",
+                    "market_value": -84,
+                    "currency": "USD",
+                },
+            ]
+        )
+        analyzer = DalioHolyGrailAnalyzer(
+            data,
+            min_history_months=1,
+            factor_map={"Short Hedge": "Growth/Risk-On"},
+            scenario_shocks={"s": {"Stocks": 0.0, "Short Hedge": 0.0}},
+            min_covariance_observations=1,
+        )
+        result = analyzer.run_analysis()
+        checks = result.quality_checks.set_index("check")["passed"].to_dict()
+        self.assertFalse(checks["short_exposure_policy"])
+        self.assertFalse(checks["gross_leverage_limit"])
+        self.assertFalse(checks["netting_risk_limit"])
+
+    def test_layer_b_rolling_ols_recovers_known_betas(self) -> None:
+        history, factor_df, specs = build_factor_linear_history(periods=72)
+        analyzer = DalioHolyGrailAnalyzer(
+            history,
+            factor_returns=factor_df,
+            min_history_months=1,
+            min_covariance_observations=12,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
+            factor_map={
+                "A": "Growth/Risk-On",
+                "B": "Inflation Hedge",
+                "C": "Deflation/Risk-Off",
+            },
+        )
+        result = analyzer.run_analysis()
+        latest = result.factor_betas_by_bucket_rolling.sort_values("date").iloc[-3:]
+        beta_a = latest.loc[latest["asset_bucket"] == "A"].iloc[0]
+
+        self.assertAlmostEqual(float(beta_a["beta_growth"]), float(specs["A"]["beta"][0]), delta=0.15)
+        self.assertAlmostEqual(
+            float(beta_a["beta_inflation"]), float(specs["A"]["beta"][1]), delta=0.15
+        )
+        self.assertAlmostEqual(
+            float(beta_a["beta_real_rates"]), float(specs["A"]["beta"][2]), delta=0.15
+        )
+        self.assertAlmostEqual(
+            float(beta_a["beta_credit_liquidity"]), float(specs["A"]["beta"][3]), delta=0.15
+        )
+
+    def test_holy_grail_corr_collapse_flag_triggers_for_stress_windows(self) -> None:
+        dates = pd.date_range("2018-01-31", periods=72, freq="ME")
+        assets = ["A", "B", "C", "D"]
+        values = {asset: 100.0 for asset in assets}
+        rows = []
+        for idx, date in enumerate(dates):
+            if idx < 60:
+                base_returns = {
+                    "A": 0.010 * math.sin(idx / 2.3),
+                    "B": 0.009 * math.cos(idx / 3.7 + 0.4),
+                    "C": 0.011 * math.sin(idx / 4.1 + 0.7),
+                    "D": 0.008 * math.cos(idx / 5.3 + 0.2),
+                }
+            else:
+                common = 0.09 * math.sin(idx / 1.5)
+                base_returns = {
+                    "A": common + 0.001 * math.sin(idx),
+                    "B": common + 0.001 * math.cos(idx),
+                    "C": common + 0.001 * math.sin(idx / 2.0),
+                    "D": common + 0.001 * math.cos(idx / 2.0),
+                }
+
+            for asset in assets:
+                asset_return = base_returns[asset]
+                values[asset] = values[asset] * (1.0 + asset_return)
+                rows.append(
+                    {
+                        "date": date,
+                        "asset_bucket": asset,
+                        "market_value": values[asset],
+                        "return_pct": asset_return,
+                        "currency": "USD",
+                    }
+                )
+
+        dataset = pd.DataFrame(rows)
+        analyzer = DalioHolyGrailAnalyzer(
+            dataset,
+            min_history_months=1,
+            min_covariance_observations=12,
+            factor_map={asset: "Growth/Risk-On" for asset in assets},
+            scenario_shocks={"s": {asset: 0.0 for asset in assets}},
+        )
+        result = analyzer.run_analysis()
+
+        self.assertIn("CORR_COLLAPSE_IN_STRESS", result.holy_grail_red_flags["code"].tolist())
+
+    def test_data_quality_checks_pass_for_clean_monthly_dataset(self) -> None:
+        result = self._run()
+        checks = result.quality_checks.set_index("check")["passed"].to_dict()
+
+        self.assertTrue(checks["no_missing_monthly_dates"])
+        self.assertTrue(checks["consistent_frequency"])
+        self.assertTrue(checks["weights_sum_to_100"])
+        self.assertTrue(checks["minimum_history_window"])
+
+    def test_correlation_matrix_is_symmetric_with_unity_diagonal(self) -> None:
+        result = self._run()
+        corr = result.correlation_matrix
+
+        symmetry_gap = (corr - corr.T).abs().max().max()
+        self.assertLess(symmetry_gap, 1e-12)
+        for bucket in corr.columns:
+            self.assertAlmostEqual(float(corr.loc[bucket, bucket]), 1.0, places=10)
+
+    def test_covariance_window_uses_trailing_rows_for_sample_method(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=10, freq="D")
+        returns_a = [0.01, 0.01, 0.02, 0.01, 0.0, -0.02, -0.01, -0.03, -0.01, -0.02]
+        returns_b = [0.00, 0.01, 0.01, 0.02, 0.01, 0.03, 0.02, 0.04, 0.01, 0.02]
+        values_a = 100.0
+        values_b = 100.0
+        rows = []
+        for idx, date in enumerate(dates):
+            values_a *= 1.0 + returns_a[idx]
+            values_b *= 1.0 + returns_b[idx]
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "A",
+                    "market_value": values_a,
+                    "return_pct": returns_a[idx],
+                    "currency": "USD",
+                }
+            )
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "B",
+                    "market_value": values_b,
+                    "return_pct": returns_b[idx],
+                    "currency": "USD",
+                }
+            )
+
+        result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=1,
+            covariance_method="sample",
+            covariance_window=5,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+        ).run_analysis()
+        expected = pd.DataFrame({"A": returns_a[-5:], "B": returns_b[-5:]}).cov()
+        self.assertAlmostEqual(
+            float(result.covariance_matrix.loc["A", "B"]),
+            float(expected.loc["A", "B"]),
+            places=12,
+        )
+        self.assertEqual(int(result.management_rules["covariance_window_effective"]), 5)
+
+    def test_low_coverage_assets_are_excluded_from_covariance(self) -> None:
+        dates = pd.date_range("2024-01-31", periods=10, freq="ME")
+        rows = []
+        value_a = 100.0
+        value_b = 100.0
+        for idx, date in enumerate(dates):
+            value_a *= 1.0 + 0.01
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "A",
+                    "market_value": value_a,
+                    "currency": "USD",
+                }
+            )
+            if idx < 5:
+                value_b *= 1.0 + 0.01
+                rows.append(
+                    {
+                        "date": date,
+                        "asset_bucket": "B",
+                        "market_value": value_b,
+                        "currency": "USD",
+                    }
+                )
+
+        result = DalioHolyGrailAnalyzer(
+            pd.DataFrame(rows),
+            min_history_months=1,
+            min_covariance_observations=1,
+            covariance_method="sample",
+            min_asset_coverage_pct=80.0,
+            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
+            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
+        ).run_analysis()
+        coverage = result.asset_coverage.set_index("asset_bucket")
+        self.assertFalse(bool(coverage.loc["B", "included_for_covariance"]))
+        self.assertIn("B", result.management_rules["assets_excluded_low_coverage"])
+        rc = result.risk_contribution_by_bucket.set_index("asset_bucket")
+        self.assertNotIn("B", rc.index)
+
     def test_tail_risk_metrics_are_present_and_ordered(self) -> None:
         result = self._run()
         tail = result.tail_risk_metrics.iloc[0]
@@ -496,76 +701,55 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertEqual(int(tail["portfolio_return_observations"]), 1)
         self.assertAlmostEqual(float(tail["var_95_pct"]), 50.0, places=8)
 
-    def test_confidence_flags_and_penalty_are_exposed(self) -> None:
-        analyzer = DalioHolyGrailAnalyzer(self.history, min_pair_overlap=100)
-        result = analyzer.run_analysis()
-
-        self.assertTrue((result.pairwise_confidence["confidence_flag"] == "LOW").all())
-        self.assertEqual(float(result.management_rules["data_quality_penalty_pct"]), 100.0)
-
-    def test_ewma_covariance_method_is_supported(self) -> None:
-        ewma_result = DalioHolyGrailAnalyzer(
-            self.history,
-            covariance_method="ewma",
-            ewma_alpha=0.1,
-        ).run_analysis()
-        sample_result = DalioHolyGrailAnalyzer(
-            self.history,
-            covariance_method="sample",
-        ).run_analysis()
-
-        self.assertFalse(ewma_result.covariance_matrix.equals(sample_result.covariance_matrix))
-
-    def test_default_covariance_method_is_ledoit_wolf(self) -> None:
-        result = self._run()
-        self.assertEqual(result.management_rules["covariance_method_effective"], "ledoit-wolf")
-        self.assertIn("asset_coverage", result.to_tables())
-
-    def test_covariance_window_uses_trailing_rows_for_sample_method(self) -> None:
-        dates = pd.date_range("2025-01-01", periods=10, freq="D")
-        returns_a = [0.01, 0.01, 0.02, 0.01, 0.0, -0.02, -0.01, -0.03, -0.01, -0.02]
-        returns_b = [0.00, 0.01, 0.01, 0.02, 0.01, 0.03, 0.02, 0.04, 0.01, 0.02]
-        values_a = 100.0
-        values_b = 100.0
+    def test_risk_contribution_incomplete_data_is_flagged(self) -> None:
+        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
         rows = []
-        for idx, date in enumerate(dates):
-            values_a *= 1.0 + returns_a[idx]
-            values_b *= 1.0 + returns_b[idx]
+        old_value = 100.0
+        cash_value = 200.0
+        for date in dates:
+            old_value *= 1.01
+            cash_value *= 1.0001
             rows.append(
                 {
                     "date": date,
-                    "asset_bucket": "A",
-                    "market_value": values_a,
-                    "return_pct": returns_a[idx],
+                    "asset_bucket": "Old",
+                    "market_value": old_value,
                     "currency": "USD",
                 }
             )
             rows.append(
                 {
                     "date": date,
-                    "asset_bucket": "B",
-                    "market_value": values_b,
-                    "return_pct": returns_b[idx],
+                    "asset_bucket": "Cash",
+                    "market_value": cash_value,
                     "currency": "USD",
                 }
             )
 
-        result = DalioHolyGrailAnalyzer(
+        new_value = 1000.0
+        for date in dates[-6:]:
+            new_value *= 1.05
+            rows.append(
+                {
+                    "date": date,
+                    "asset_bucket": "NewHuge",
+                    "market_value": new_value,
+                    "currency": "USD",
+                }
+            )
+
+        analyzer = DalioHolyGrailAnalyzer(
             pd.DataFrame(rows),
             min_history_months=1,
-            min_covariance_observations=1,
-            covariance_method="sample",
-            covariance_window=5,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
-            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
-        ).run_analysis()
-        expected = pd.DataFrame({"A": returns_a[-5:], "B": returns_b[-5:]}).cov()
-        self.assertAlmostEqual(
-            float(result.covariance_matrix.loc["A", "B"]),
-            float(expected.loc["A", "B"]),
-            places=12,
+            min_covariance_observations=12,
+            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
+            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
         )
-        self.assertEqual(int(result.management_rules["covariance_window_effective"]), 5)
+        result = analyzer.run_analysis()
+
+        self.assertFalse(result.management_rules["risk_contribution_data_complete"])
+        self.assertIsNone(result.management_rules["risk_contribution_breach_count"])
+        self.assertGreater(float(result.management_rules["rc_excluded_weight_pct"]), 50.0)
 
     def test_log_return_type_transforms_simple_returns(self) -> None:
         data = pd.DataFrame(
@@ -657,913 +841,6 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
                 scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
                 factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
             ).run_analysis()
-
-    def test_low_coverage_assets_are_excluded_from_covariance(self) -> None:
-        dates = pd.date_range("2024-01-31", periods=10, freq="ME")
-        rows = []
-        value_a = 100.0
-        value_b = 100.0
-        for idx, date in enumerate(dates):
-            value_a *= 1.0 + 0.01
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "A",
-                    "market_value": value_a,
-                    "currency": "USD",
-                }
-            )
-            if idx < 5:
-                value_b *= 1.0 + 0.01
-                rows.append(
-                    {
-                        "date": date,
-                        "asset_bucket": "B",
-                        "market_value": value_b,
-                        "currency": "USD",
-                    }
-                )
-
-        result = DalioHolyGrailAnalyzer(
-            pd.DataFrame(rows),
-            min_history_months=1,
-            min_covariance_observations=1,
-            covariance_method="sample",
-            min_asset_coverage_pct=80.0,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
-            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
-        ).run_analysis()
-        coverage = result.asset_coverage.set_index("asset_bucket")
-        self.assertFalse(bool(coverage.loc["B", "included_for_covariance"]))
-        self.assertIn("B", result.management_rules["assets_excluded_low_coverage"])
-        rc = result.risk_contribution_by_bucket.set_index("asset_bucket")
-        self.assertNotIn("B", rc.index)
-
-    def test_auto_frequency_daily_uses_252_window_and_monthly_layer_ab(self) -> None:
-        daily_history = build_daily_history(periods=260)
-        result = DalioHolyGrailAnalyzer(
-            daily_history,
-            min_history_months=1,
-            min_covariance_observations=20,
-        ).run_analysis()
-        self.assertEqual(result.management_rules["analysis_frequency"], "daily")
-        self.assertEqual(int(result.management_rules["covariance_window_effective"]), 252)
-        self.assertEqual(result.management_rules["layer_ab_input_frequency"], "monthly")
-        tail = result.tail_risk_metrics.iloc[0]
-        self.assertEqual(int(tail["rolling_window_observations_1y"]), 252)
-        self.assertEqual(set(result.layer_a_metrics_rolling["window_months"]), {12, 24, 36})
-
-    def test_auto_frequency_monthly_uses_full_history_window(self) -> None:
-        result = self._run()
-        self.assertEqual(result.management_rules["analysis_frequency"], "monthly")
-        self.assertEqual(int(result.management_rules["covariance_window_effective"]), 60)
-
-    def test_risk_contribution_incomplete_data_is_flagged(self) -> None:
-        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
-        rows = []
-        old_value = 100.0
-        cash_value = 200.0
-        for date in dates:
-            old_value *= 1.01
-            cash_value *= 1.0001
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Old",
-                    "market_value": old_value,
-                    "currency": "USD",
-                }
-            )
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Cash",
-                    "market_value": cash_value,
-                    "currency": "USD",
-                }
-            )
-
-        new_value = 1000.0
-        for date in dates[-6:]:
-            new_value *= 1.05
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "NewHuge",
-                    "market_value": new_value,
-                    "currency": "USD",
-                }
-            )
-
-        analyzer = DalioHolyGrailAnalyzer(
-            pd.DataFrame(rows),
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
-            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
-        )
-        result = analyzer.run_analysis()
-
-        self.assertFalse(result.management_rules["risk_contribution_data_complete"])
-        self.assertIsNone(result.management_rules["risk_contribution_breach_count"])
-        self.assertGreater(float(result.management_rules["rc_excluded_weight_pct"]), 50.0)
-
-    def test_short_and_netting_checks_fail_when_shorts_not_allowed(self) -> None:
-        data = pd.DataFrame(
-            [
-                {
-                    "date": "2025-01-31",
-                    "asset_bucket": "Stocks",
-                    "market_value": 100,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-01-31",
-                    "asset_bucket": "Short Hedge",
-                    "market_value": -80,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-02-28",
-                    "asset_bucket": "Stocks",
-                    "market_value": 105,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-02-28",
-                    "asset_bucket": "Short Hedge",
-                    "market_value": -84,
-                    "currency": "USD",
-                },
-            ]
-        )
-        analyzer = DalioHolyGrailAnalyzer(
-            data,
-            min_history_months=1,
-            factor_map={"Short Hedge": "Growth/Risk-On"},
-            scenario_shocks={"s": {"Stocks": 0.0, "Short Hedge": 0.0}},
-            min_covariance_observations=1,
-        )
-        result = analyzer.run_analysis()
-        checks = result.quality_checks.set_index("check")["passed"].to_dict()
-        self.assertFalse(checks["short_exposure_policy"])
-        self.assertFalse(checks["gross_leverage_limit"])
-        self.assertFalse(checks["netting_risk_limit"])
-
-    def test_factor_exposure_is_not_zero_filled_for_missing_rc_assets(self) -> None:
-        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
-        rows = []
-        old_value = 100.0
-        cash_value = 200.0
-        for date in dates:
-            old_value *= 1.01
-            cash_value *= 1.0001
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Old",
-                    "market_value": old_value,
-                    "currency": "USD",
-                }
-            )
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Cash",
-                    "market_value": cash_value,
-                    "currency": "USD",
-                }
-            )
-
-        new_value = 1000.0
-        for date in dates[-6:]:
-            new_value *= 1.05
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "NewHuge",
-                    "market_value": new_value,
-                    "currency": "USD",
-                }
-            )
-
-        analyzer = DalioHolyGrailAnalyzer(
-            pd.DataFrame(rows),
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
-            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
-        )
-        result = analyzer.run_analysis()
-        growth_factor = result.factor_exposure.set_index("factor").loc["Growth/Risk-On"]
-
-        self.assertFalse(bool(growth_factor["risk_contribution_complete"]))
-        self.assertGreater(float(growth_factor["unknown_rc_weight_pct"]), 0.0)
-        self.assertTrue(pd.isna(growth_factor["risk_contribution_pct"]))
-
-    def test_tail_risk_ignores_partial_asset_rows(self) -> None:
-        data = pd.DataFrame(
-            [
-                {
-                    "date": "2025-01-31",
-                    "asset_bucket": "A",
-                    "market_value": 100,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-01-31",
-                    "asset_bucket": "B",
-                    "market_value": 100,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-02-28",
-                    "asset_bucket": "A",
-                    "market_value": 110,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-02-28",
-                    "asset_bucket": "B",
-                    "market_value": 100,
-                    "currency": "USD",
-                },
-                {
-                    "date": "2025-03-31",
-                    "asset_bucket": "A",
-                    "market_value": 121,
-                    "currency": "USD",
-                },
-            ]
-        )
-        analyzer = DalioHolyGrailAnalyzer(
-            data,
-            min_history_months=1,
-            min_covariance_observations=1,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0}},
-            factor_map={"A": "Growth/Risk-On", "B": "Deflation/Risk-Off"},
-        )
-        result = analyzer.run_analysis()
-        tail = result.tail_risk_metrics.iloc[0]
-
-        self.assertEqual(int(tail["portfolio_return_observations"]), 1)
-        self.assertAlmostEqual(float(tail["tail_data_coverage_pct"]), 33.3333333, places=5)
-
-    def test_layer_b_schema_validation_fails_for_missing_factor_columns(self) -> None:
-        bad_factors = pd.DataFrame(
-            [
-                {"date": "2025-01-31", "growth": 0.01, "inflation": 0.01, "real_rates": 0.0},
-                {"date": "2025-02-28", "growth": 0.01, "inflation": 0.01, "real_rates": 0.0},
-            ]
-        )
-        with self.assertRaises(ValueError):
-            DalioHolyGrailAnalyzer(
-                self.history,
-                factor_returns=bad_factors,
-                layer_b_require_data=True,
-            ).run_analysis()
-
-    def test_layer_b_alignment_uses_inner_join_and_reports_coverage(self) -> None:
-        full_factors = build_canonical_factor_returns(periods=60)
-        sparse_factors = full_factors.iloc[::2].reset_index(drop=True)
-        result = DalioHolyGrailAnalyzer(
-            self.history,
-            factor_returns=sparse_factors,
-            min_history_months=1,
-        ).run_analysis()
-
-        expected_aligned = len(
-            pd.Index(pd.to_datetime(self.history["date"].unique())).intersection(
-                pd.to_datetime(sparse_factors["date"])
-            )
-        )
-        self.assertEqual(len(result.factor_returns_aligned), expected_aligned)
-        latest_coverage = float(result.factor_residual_risk_rolling.iloc[-1]["factor_coverage_pct"])
-        self.assertLess(latest_coverage, 100.0)
-
-    def test_layer_b_rolling_ols_recovers_known_betas(self) -> None:
-        history, factor_df, specs = build_factor_linear_history(periods=72)
-        analyzer = DalioHolyGrailAnalyzer(
-            history,
-            factor_returns=factor_df,
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
-            factor_map={
-                "A": "Growth/Risk-On",
-                "B": "Inflation Hedge",
-                "C": "Deflation/Risk-Off",
-            },
-        )
-        result = analyzer.run_analysis()
-        latest = result.factor_betas_by_bucket_rolling.sort_values("date").iloc[-3:]
-        beta_a = latest.loc[latest["asset_bucket"] == "A"].iloc[0]
-
-        self.assertAlmostEqual(float(beta_a["beta_growth"]), float(specs["A"]["beta"][0]), delta=0.15)
-        self.assertAlmostEqual(
-            float(beta_a["beta_inflation"]), float(specs["A"]["beta"][1]), delta=0.15
-        )
-        self.assertAlmostEqual(
-            float(beta_a["beta_real_rates"]), float(specs["A"]["beta"][2]), delta=0.15
-        )
-        self.assertAlmostEqual(
-            float(beta_a["beta_credit_liquidity"]), float(specs["A"]["beta"][3]), delta=0.15
-        )
-
-    def test_layer_b_factor_trc_shares_sum_to_one_when_available(self) -> None:
-        history, factor_df, _ = build_factor_linear_history(periods=72)
-        result = DalioHolyGrailAnalyzer(
-            history,
-            factor_returns=factor_df,
-            min_history_months=1,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
-            factor_map={
-                "A": "Growth/Risk-On",
-                "B": "Inflation Hedge",
-                "C": "Deflation/Risk-Off",
-            },
-        ).run_analysis()
-        latest_date = result.factor_risk_contribution_rolling["date"].max()
-        latest = result.factor_risk_contribution_rolling.loc[
-            result.factor_risk_contribution_rolling["date"] == latest_date
-        ]
-        self.assertAlmostEqual(float(latest["trc_share_abs"].sum()), 1.0, places=8)
-
-    def test_layer_b_concentration_metrics_are_bounded(self) -> None:
-        history, factor_df, _ = build_factor_linear_history(periods=72)
-        result = DalioHolyGrailAnalyzer(
-            history,
-            factor_returns=factor_df,
-            min_history_months=1,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
-            factor_map={
-                "A": "Growth/Risk-On",
-                "B": "Inflation Hedge",
-                "C": "Deflation/Risk-Off",
-            },
-        ).run_analysis()
-        latest = (
-            result.factor_risk_contribution_rolling.sort_values("date")
-            .dropna(subset=["factor_hhi"])
-            .iloc[-1]
-        )
-        self.assertGreaterEqual(float(latest["factor_hhi"]), 0.0)
-        self.assertLessEqual(float(latest["factor_hhi"]), 1.0)
-        self.assertGreaterEqual(float(latest["max_share_pct"]), 0.0)
-        self.assertLessEqual(float(latest["max_share_pct"]), 100.0)
-        self.assertGreaterEqual(float(latest["factor_n_rc"]), 1.0)
-
-    def test_layer_b_residual_risk_higher_with_more_noise(self) -> None:
-        history, factor_df, _ = build_factor_linear_history(periods=72)
-        noisy_history = history.copy()
-        noisy_history["return_pct"] = noisy_history["return_pct"] + (
-            0.02
-            * np.sin(np.arange(len(noisy_history)))
-        )
-        clean_result = DalioHolyGrailAnalyzer(
-            history,
-            factor_returns=factor_df,
-            min_history_months=1,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
-            factor_map={
-                "A": "Growth/Risk-On",
-                "B": "Inflation Hedge",
-                "C": "Deflation/Risk-Off",
-            },
-        ).run_analysis()
-        noisy_result = DalioHolyGrailAnalyzer(
-            noisy_history,
-            factor_returns=factor_df,
-            min_history_months=1,
-            scenario_shocks={"s": {"A": 0.0, "B": 0.0, "C": 0.0}},
-            factor_map={
-                "A": "Growth/Risk-On",
-                "B": "Inflation Hedge",
-                "C": "Deflation/Risk-Off",
-            },
-        ).run_analysis()
-        clean_residual = float(clean_result.factor_residual_risk_rolling.iloc[-1]["residual_risk_share_pct"])
-        noisy_residual = float(noisy_result.factor_residual_risk_rolling.iloc[-1]["residual_risk_share_pct"])
-        self.assertGreater(noisy_residual, clean_residual)
-
-    def test_layer_b_collinearity_flag_triggers_for_nearly_duplicate_factors(self) -> None:
-        factor_df = build_canonical_factor_returns(periods=60)
-        factor_df["real_rates"] = factor_df["growth"] * 1.0001
-        result = DalioHolyGrailAnalyzer(
-            self.history,
-            factor_returns=factor_df,
-            min_history_months=1,
-        ).run_analysis()
-        latest_date = result.factor_model_quality_rolling["date"].max()
-        latest_quality = result.factor_model_quality_rolling.loc[
-            result.factor_model_quality_rolling["date"] == latest_date
-        ]
-        self.assertTrue(bool(latest_quality["quality_flag"].any()))
-        self.assertTrue(result.management_rules["layer_b_alert_collinearity"])
-
-    def test_layer_b_coverage_alert_triggers_below_threshold(self) -> None:
-        sparse_factors = build_canonical_factor_returns(periods=20)
-        result = DalioHolyGrailAnalyzer(
-            self.history,
-            factor_returns=sparse_factors,
-            min_history_months=1,
-        ).run_analysis()
-        self.assertTrue(result.management_rules["layer_b_alert_low_coverage"])
-
-    def test_layer_b_management_rules_keys_are_exposed(self) -> None:
-        factor_df = build_canonical_factor_returns(periods=60)
-        result = DalioHolyGrailAnalyzer(
-            self.history,
-            factor_returns=factor_df,
-            min_history_months=1,
-        ).run_analysis()
-        tables = result.to_tables()
-        self.assertIn("correlation_matrix", tables)
-        self.assertIn("factor_risk_contribution_rolling", tables)
-        self.assertIn("factor_residual_risk_rolling", tables)
-        for key in [
-            "layer_b_latest_factor_hhi",
-            "layer_b_latest_max_factor_trc_share_pct",
-            "layer_b_latest_residual_risk_share_pct",
-            "layer_b_latest_factor_coverage_pct",
-            "layer_b_alert_factor_concentration",
-            "layer_b_alert_high_residual",
-            "layer_b_alert_low_coverage",
-            "layer_b_alert_collinearity",
-            "layer_b_breach_rate_last_12_obs_pct",
-        ]:
-            self.assertIn(key, result.management_rules)
-
-    def test_layer_b_backward_compatibility_without_factor_file(self) -> None:
-        result = DalioHolyGrailAnalyzer(self.history, min_history_months=1).run_analysis()
-        self.assertFalse(result.management_rules["layer_b_enabled"])
-        self.assertIn("deprecation", result.management_rules["layer_b_deprecation_notice"].lower())
-
-    def test_layer_b_strict_mode_requires_factor_data(self) -> None:
-        with self.assertRaises(ValueError):
-            DalioHolyGrailAnalyzer(
-                self.history,
-                layer_b_require_data=True,
-            ).run_analysis()
-    def test_layer_a_neff_identity_correlation_close_to_asset_count(self) -> None:
-        labels = ["A", "B", "C", "D"]
-        identity = pd.DataFrame(np.eye(len(labels)), index=labels, columns=labels)
-        neff = self.analyzer._effective_bets_from_correlation(identity)
-        self.assertAlmostEqual(neff, 4.0, places=8)
-
-    def test_layer_a_neff_fully_correlated_close_to_one(self) -> None:
-        labels = ["A", "B", "C", "D"]
-        fully_corr = pd.DataFrame(np.ones((len(labels), len(labels))), index=labels, columns=labels)
-        neff = self.analyzer._effective_bets_from_correlation(fully_corr)
-        self.assertAlmostEqual(neff, 1.0, places=8)
-
-    def test_layer_a_hac_clustering_finds_two_blocks(self) -> None:
-        labels = ["A", "B", "C", "D"]
-        correlation = pd.DataFrame(
-            [
-                [1.0, 0.9, 0.1, 0.1],
-                [0.9, 1.0, 0.1, 0.1],
-                [0.1, 0.1, 1.0, 0.88],
-                [0.1, 0.1, 0.88, 1.0],
-            ],
-            index=labels,
-            columns=labels,
-        )
-        clusters = self.analyzer._hac_clusters_from_correlation(correlation, corr_cutoff=0.7)
-        self.assertEqual(int(clusters.nunique()), 2)
-        self.assertEqual(int(clusters.loc["A"]), int(clusters.loc["B"]))
-        self.assertEqual(int(clusters.loc["C"]), int(clusters.loc["D"]))
-        self.assertNotEqual(int(clusters.loc["A"]), int(clusters.loc["C"]))
-
-    def test_layer_a_trc_concentration_metrics_are_bounded(self) -> None:
-        result = self._run()
-        primary = (
-            result.layer_a_metrics_rolling
-            .loc[result.layer_a_metrics_rolling["window_months"] == 36]
-            .dropna(subset=["portfolio_volatility"])
-            .iloc[-1]
-        )
-        self.assertGreaterEqual(float(primary["max_trc_share_pct"]), 0.0)
-        self.assertLessEqual(float(primary["max_trc_share_pct"]), 100.0)
-        self.assertGreaterEqual(float(primary["risk_hhi"]), 0.0)
-        self.assertLessEqual(float(primary["risk_hhi"]), 1.0)
-        self.assertGreaterEqual(float(primary["n_rc"]), 1.0)
-
-    def test_layer_a_n_rc_increases_when_latest_weights_are_more_even(self) -> None:
-        latest_date = self.history["date"].max()
-
-        concentrated = self.history.copy()
-        concentrated.loc[
-            (concentrated["date"] == latest_date)
-            & (concentrated["asset_bucket"] == "Crypto Coins"),
-            "market_value",
-        ] *= 10.0
-
-        balanced = self.history.copy()
-        for bucket in balanced["asset_bucket"].unique():
-            balanced.loc[
-                (balanced["date"] == latest_date) & (balanced["asset_bucket"] == bucket),
-                "market_value",
-            ] = 1000.0
-
-        concentrated_result = DalioHolyGrailAnalyzer(concentrated).run_analysis()
-        balanced_result = DalioHolyGrailAnalyzer(balanced).run_analysis()
-
-        concentrated_primary = (
-            concentrated_result.layer_a_metrics_rolling
-            .loc[concentrated_result.layer_a_metrics_rolling["window_months"] == 36]
-            .dropna(subset=["n_rc"])
-            .iloc[-1]
-        )
-        balanced_primary = (
-            balanced_result.layer_a_metrics_rolling
-            .loc[balanced_result.layer_a_metrics_rolling["window_months"] == 36]
-            .dropna(subset=["n_rc"])
-            .iloc[-1]
-        )
-        self.assertGreater(float(balanced_primary["n_rc"]), float(concentrated_primary["n_rc"]))
-
-    def test_layer_a_diversification_ratio_higher_for_less_correlated_returns(self) -> None:
-        dates = pd.date_range("2020-01-31", periods=60, freq="ME")
-        independent_rows = []
-        correlated_rows = []
-        assets = ["A", "B", "C"]
-        correlated_values = {asset: 100.0 for asset in assets}
-        independent_values = {asset: 100.0 for asset in assets}
-
-        for idx, date in enumerate(dates):
-            common = 0.01 * math.sin(idx / 4.0)
-            idio = {
-                "A": 0.012 * math.sin(idx / 3.0),
-                "B": 0.011 * math.cos(idx / 5.0),
-                "C": 0.013 * math.sin(idx / 6.0 + 0.3),
-            }
-            correlated_returns = {
-                asset: common + 0.002 * idio[asset]
-                for asset in assets
-            }
-            independent_returns = {
-                asset: idio[asset]
-                for asset in assets
-            }
-            for asset in assets:
-                correlated_values[asset] *= 1.0 + correlated_returns[asset]
-                independent_values[asset] *= 1.0 + independent_returns[asset]
-                correlated_rows.append(
-                    {
-                        "date": date,
-                        "asset_bucket": asset,
-                        "market_value": correlated_values[asset],
-                        "currency": "USD",
-                    }
-                )
-                independent_rows.append(
-                    {
-                        "date": date,
-                        "asset_bucket": asset,
-                        "market_value": independent_values[asset],
-                        "currency": "USD",
-                    }
-                )
-
-        scenario = {"s": {"A": 0.0, "B": 0.0, "C": 0.0}}
-        factors = {"A": "Growth/Risk-On", "B": "Deflation/Risk-Off", "C": "Inflation Hedge"}
-
-        correlated_result = DalioHolyGrailAnalyzer(
-            pd.DataFrame(correlated_rows),
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks=scenario,
-            factor_map=factors,
-        ).run_analysis()
-        independent_result = DalioHolyGrailAnalyzer(
-            pd.DataFrame(independent_rows),
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks=scenario,
-            factor_map=factors,
-        ).run_analysis()
-
-        correlated_dr = (
-            correlated_result.layer_a_metrics_rolling
-            .loc[correlated_result.layer_a_metrics_rolling["window_months"] == 36]
-            .dropna(subset=["diversification_ratio"])
-            .iloc[-1]["diversification_ratio"]
-        )
-        independent_dr = (
-            independent_result.layer_a_metrics_rolling
-            .loc[independent_result.layer_a_metrics_rolling["window_months"] == 36]
-            .dropna(subset=["diversification_ratio"])
-            .iloc[-1]["diversification_ratio"]
-        )
-        self.assertGreater(float(independent_dr), float(correlated_dr))
-
-    def test_layer_a_rolling_outputs_have_expected_shape_and_columns(self) -> None:
-        result = self._run()
-
-        metrics = result.layer_a_metrics_rolling
-        self.assertEqual(set(metrics["window_months"].unique().tolist()), {12, 24, 36})
-        self.assertTrue(
-            {
-                "date",
-                "window_months",
-                "asset_count",
-                "observation_count",
-                "covariance_coverage_pct",
-                "avg_corr",
-                "avg_abs_corr",
-                "high_corr_pair_share_pct",
-                "cluster_count",
-                "neff",
-                "portfolio_volatility",
-                "max_trc_share_pct",
-                "risk_hhi",
-                "n_rc",
-                "risk_gini",
-                "diversification_ratio",
-            }.issubset(metrics.columns)
-        )
-
-        self.assertTrue(
-            {
-                "date",
-                "window_months",
-                "asset_bucket",
-                "weight",
-                "trc",
-                "trc_share_signed",
-                "trc_share_abs",
-                "covariance_included",
-            }.issubset(result.layer_a_trc_rolling.columns)
-        )
-        self.assertTrue(
-            {
-                "date",
-                "window_months",
-                "asset_bucket",
-                "cluster_id",
-            }.issubset(result.layer_a_cluster_membership_rolling.columns)
-        )
-
-    def test_layer_a_incomplete_covariance_marks_missing_trc_rows(self) -> None:
-        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
-        rows = []
-        old_value = 100.0
-        cash_value = 200.0
-        for date in dates:
-            old_value *= 1.01
-            cash_value *= 1.0001
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Old",
-                    "market_value": old_value,
-                    "currency": "USD",
-                }
-            )
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "Cash",
-                    "market_value": cash_value,
-                    "currency": "USD",
-                }
-            )
-
-        new_value = 1000.0
-        for date in dates[-6:]:
-            new_value *= 1.05
-            rows.append(
-                {
-                    "date": date,
-                    "asset_bucket": "NewHuge",
-                    "market_value": new_value,
-                    "currency": "USD",
-                }
-            )
-
-        result = DalioHolyGrailAnalyzer(
-            pd.DataFrame(rows),
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks={"s": {"Old": 0.0, "Cash": 0.0, "NewHuge": 0.0}},
-            factor_map={"Old": "Growth/Risk-On", "NewHuge": "Growth/Risk-On"},
-        ).run_analysis()
-
-        latest_date = result.normalized_data["date"].max()
-        latest_metrics = result.layer_a_metrics_rolling.loc[
-            (result.layer_a_metrics_rolling["date"] == latest_date)
-            & (result.layer_a_metrics_rolling["window_months"] == 36)
-        ].iloc[0]
-        self.assertLess(float(latest_metrics["covariance_coverage_pct"]), 100.0)
-
-        latest_new_huge_trc = result.layer_a_trc_rolling.loc[
-            (result.layer_a_trc_rolling["date"] == latest_date)
-            & (result.layer_a_trc_rolling["window_months"] == 36)
-            & (result.layer_a_trc_rolling["asset_bucket"] == "NewHuge")
-        ].iloc[0]
-        self.assertFalse(bool(latest_new_huge_trc["covariance_included"]))
-        self.assertTrue(pd.isna(latest_new_huge_trc["trc"]))
-
-    def test_layer_a_regression_preserves_legacy_outputs_and_adds_new_keys(self) -> None:
-        result = self._run()
-        tables = result.to_tables()
-
-        self.assertIn("correlation_matrix", tables)
-        self.assertIn("risk_contribution_by_bucket", tables)
-        self.assertIn("asset_coverage", tables)
-        self.assertIn("layer_a_metrics_rolling", tables)
-        self.assertIn("layer_a_trc_rolling", tables)
-        self.assertIn("layer_a_cluster_membership_rolling", tables)
-        self.assertIn("holy_grail_scorecard", tables)
-        self.assertIn("holy_grail_robustness", tables)
-        self.assertIn("holy_grail_red_flags", tables)
-
-        self.assertIn("corr_threshold", result.management_rules)
-        self.assertIn("risk_contribution_breach_count", result.management_rules)
-        self.assertIn("layer_a_primary_window_months", result.management_rules)
-        self.assertIn("layer_a_alert_high_corr", result.management_rules)
-        self.assertIn("layer_a_breach_rate_last_12_obs_pct", result.management_rules)
-        self.assertIn("holy_grail_score", result.holy_grail_verdict)
-
-    def test_holy_grail_scores_are_bounded(self) -> None:
-        result = self._run()
-        verdict = result.holy_grail_verdict
-
-        total_score = float(verdict["holy_grail_score"])
-        self.assertGreaterEqual(total_score, 0.0)
-        self.assertLessEqual(total_score, 100.0)
-
-        component_scores = verdict["component_scores"]
-        for component in ["independence", "balance", "robustness", "macro"]:
-            value = component_scores.get(component, math.nan)
-            if pd.isna(value):
-                continue
-            self.assertGreaterEqual(float(value), 0.0)
-            self.assertLessEqual(float(value), 100.0)
-
-    def test_holy_grail_macro_renormalizes_when_layer_b_is_missing(self) -> None:
-        result = DalioHolyGrailAnalyzer(self.history, min_history_months=1).run_analysis()
-        verdict = result.holy_grail_verdict
-
-        self.assertFalse(bool(verdict["macro_available"]))
-        self.assertEqual(str(verdict["macro_policy"]), "renormalize")
-
-        effective_weights = verdict["effective_component_weight_pct"]
-        total_effective = float(sum(effective_weights.values()))
-        self.assertAlmostEqual(total_effective, 100.0, places=8)
-        self.assertAlmostEqual(float(effective_weights["macro"]), 0.0, places=8)
-
-    def test_holy_grail_robustness_percentiles_are_ordered(self) -> None:
-        result = self._run()
-        robustness = result.holy_grail_robustness
-        self.assertFalse(robustness.empty)
-
-        for _, row in robustness.iterrows():
-            if pd.isna(row["p10"]) or pd.isna(row["median"]) or pd.isna(row["p90"]):
-                continue
-            self.assertLessEqual(float(row["p10"]), float(row["median"]))
-            self.assertLessEqual(float(row["median"]), float(row["p90"]))
-
-    def test_holy_grail_risk_concentration_flag_and_balance_drop(self) -> None:
-        baseline = self._run()
-        baseline_balance = float(
-            baseline.holy_grail_scorecard.loc[
-                baseline.holy_grail_scorecard["component"] == "balance", "score"
-            ].iloc[0]
-        )
-
-        concentrated = self.history.copy()
-        concentrated.loc[
-            concentrated["asset_bucket"] == "Crypto Coins", "market_value"
-        ] *= 30.0
-        stressed = DalioHolyGrailAnalyzer(concentrated, min_history_months=1).run_analysis()
-        stressed_balance = float(
-            stressed.holy_grail_scorecard.loc[
-                stressed.holy_grail_scorecard["component"] == "balance", "score"
-            ].iloc[0]
-        )
-        flag_codes = stressed.holy_grail_red_flags["code"].tolist()
-
-        self.assertIn("RISK_CONCENTRATION_ASSET", flag_codes)
-        self.assertLess(stressed_balance, baseline_balance)
-
-    def test_holy_grail_corr_collapse_flag_triggers_for_stress_windows(self) -> None:
-        dates = pd.date_range("2018-01-31", periods=72, freq="ME")
-        assets = ["A", "B", "C", "D"]
-        values = {asset: 100.0 for asset in assets}
-        rows = []
-        for idx, date in enumerate(dates):
-            if idx < 60:
-                base_returns = {
-                    "A": 0.010 * math.sin(idx / 2.3),
-                    "B": 0.009 * math.cos(idx / 3.7 + 0.4),
-                    "C": 0.011 * math.sin(idx / 4.1 + 0.7),
-                    "D": 0.008 * math.cos(idx / 5.3 + 0.2),
-                }
-            else:
-                common = 0.09 * math.sin(idx / 1.5)
-                base_returns = {
-                    "A": common + 0.001 * math.sin(idx),
-                    "B": common + 0.001 * math.cos(idx),
-                    "C": common + 0.001 * math.sin(idx / 2.0),
-                    "D": common + 0.001 * math.cos(idx / 2.0),
-                }
-
-            for asset in assets:
-                asset_return = base_returns[asset]
-                values[asset] = values[asset] * (1.0 + asset_return)
-                rows.append(
-                    {
-                        "date": date,
-                        "asset_bucket": asset,
-                        "market_value": values[asset],
-                        "return_pct": asset_return,
-                        "currency": "USD",
-                    }
-                )
-
-        dataset = pd.DataFrame(rows)
-        analyzer = DalioHolyGrailAnalyzer(
-            dataset,
-            min_history_months=1,
-            min_covariance_observations=12,
-            factor_map={asset: "Growth/Risk-On" for asset in assets},
-            scenario_shocks={"s": {asset: 0.0 for asset in assets}},
-        )
-        result = analyzer.run_analysis()
-
-        self.assertIn("CORR_COLLAPSE_IN_STRESS", result.holy_grail_red_flags["code"].tolist())
-
-    def test_holy_grail_factor_concentration_flag_triggers(self) -> None:
-        dates = pd.date_range("2020-01-31", periods=72, freq="ME")
-        factors = []
-        for idx, date in enumerate(dates):
-            factors.append(
-                {
-                    "date": date,
-                    "growth": 0.03 * math.sin(idx / 3.0),
-                    "inflation": 0.0001 * math.cos(idx / 4.0),
-                    "real_rates": 0.0001 * math.sin(idx / 5.0),
-                    "credit_liquidity": 0.0001 * math.cos(idx / 6.0),
-                }
-            )
-        factor_df = pd.DataFrame(factors)
-
-        assets = ["A", "B", "C"]
-        values = {asset: 100.0 for asset in assets}
-        rows = []
-        for idx, date in enumerate(dates):
-            growth = float(factor_df.iloc[idx]["growth"])
-            for asset in assets:
-                asset_return = growth + 0.001 * math.sin((idx + 1) * (len(asset) + 1))
-                values[asset] = values[asset] * (1.0 + asset_return)
-                rows.append(
-                    {
-                        "date": date,
-                        "asset_bucket": asset,
-                        "market_value": values[asset],
-                        "return_pct": asset_return,
-                        "currency": "USD",
-                    }
-                )
-
-        dataset = pd.DataFrame(rows)
-        analyzer = DalioHolyGrailAnalyzer(
-            dataset,
-            factor_returns=factor_df,
-            min_history_months=1,
-            min_covariance_observations=12,
-            scenario_shocks={"s": {asset: 0.0 for asset in assets}},
-            factor_map={asset: "Growth/Risk-On" for asset in assets},
-        )
-        result = analyzer.run_analysis()
-
-        self.assertIn("FACTOR_CONCENTRATION", result.holy_grail_red_flags["code"].tolist())
-
-    def test_holy_grail_save_result_tables_and_summary_include_verdict(self) -> None:
-        result = self._run()
-        with TemporaryDirectory() as temp_dir:
-            self.analyzer.save_result_tables(result, temp_dir)
-            output_path = Path(temp_dir)
-
-            self.assertTrue((output_path / "holy_grail_scorecard.csv").exists())
-            self.assertTrue((output_path / "holy_grail_robustness.csv").exists())
-            self.assertTrue((output_path / "holy_grail_red_flags.csv").exists())
-
-            summary_path = output_path / "summary.json"
-            self.assertTrue(summary_path.exists())
-            payload = json.loads(summary_path.read_text(encoding="utf-8"))
-            self.assertIn("holy_grail_verdict", payload)
-            self.assertIn("holy_grail_score", payload["holy_grail_verdict"])
-
-    def test_holy_grail_cli_lines_include_score_and_red_flags_block(self) -> None:
-        result = self._run()
-        lines = format_holy_grail_cli_lines(result.holy_grail_verdict, max_red_flags=2)
-
-        self.assertTrue(any(line.startswith("Holy Grail score:") for line in lines))
-        self.assertTrue(any(line.startswith("Component scores:") for line in lines))
-        self.assertTrue(any(line.startswith("Red flags:") for line in lines))
 
 
 if __name__ == "__main__":

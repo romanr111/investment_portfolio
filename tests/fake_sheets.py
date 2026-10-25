@@ -1,0 +1,258 @@
+"""Small stateful Sheets fake shared by generator integration tests."""
+
+from copy import deepcopy
+from types import SimpleNamespace
+import gspread
+from gspread.utils import a1_range_to_grid_range
+
+
+class FakeWorksheet:
+    def __init__(self, title, sheet_id, rows=200, cols=29):
+        self.title, self.id = title, sheet_id
+        self.row_count, self.col_count = rows, cols
+        self.values, self.formats, self.charts = {}, {}, []
+        # The API stacks repeated same-range groups as depth levels: model as spans with counts.
+        self.groups, self.hidden_columns, self.properties = {}, set(), {}
+        self.hidden_rows = set()
+        self.basic_filter = None
+        self.conditional_formats = []
+        self.spreadsheet = None
+        self.annotations = {}
+
+    def cell(self, row, column):
+        return SimpleNamespace(value=self.values.get((row, column)))
+
+    def get(self, range_name, **kwargs):
+        r = a1_range_to_grid_range(range_name)
+        end_row = min(r.get("endRowIndex", self.row_count), self.row_count)
+        end_col = min(r.get("endColumnIndex", self.col_count), self.col_count)
+        return [
+            [
+                self.values.get((row + 1, col + 1), "")
+                for col in range(r.get("startColumnIndex", 0), end_col)
+            ]
+            for row in range(r.get("startRowIndex", 0), end_row)
+        ]
+
+
+class FakeSpreadsheet:
+    def __init__(self):
+        self.sheets, self.batch_updates = [], []
+
+    def worksheets(self):
+        return list(self.sheets)
+
+    def worksheet(self, title):
+        for sheet in self.sheets:
+            if sheet.title == title:
+                return sheet
+        raise gspread.exceptions.WorksheetNotFound(title)
+
+    def add_worksheet(self, title, rows=200, cols=29, index=None):
+        sheet = FakeWorksheet(
+            title, max([s.id for s in self.sheets] + [0]) + 1, rows, cols
+        )
+        self.sheets.append(sheet)
+        sheet.spreadsheet = self
+        return sheet
+
+    def fetch_sheet_metadata(self, params=None):
+        # Real API shape: the span nests under "range" with one entry per depth.
+        sheets_meta = []
+        for s in self.sheets:
+            row_groups = []
+            for (start, end), count in sorted(s.groups.items()):
+                for depth in range(1, count + 1):
+                    row_groups.append(
+                        {
+                            "range": {
+                                "sheetId": s.id,
+                                "dimension": "ROWS",
+                                "startIndex": start,
+                                "endIndex": end,
+                            },
+                            "depth": depth,
+                        }
+                    )
+            sheets_meta.append(
+                {
+                    "properties": {"sheetId": s.id, "title": s.title},
+                    "charts": deepcopy(s.charts),
+                    "conditionalFormats": deepcopy(s.conditional_formats),
+                    "rowGroups": row_groups,
+                    "data": (
+                        [
+                            {
+                                "startRow": 0,
+                                "startColumn": 0,
+                                "rowData": [
+                                    {
+                                        "values": [
+                                            s.annotations.get((row, column), {})
+                                            for column in range(s.col_count)
+                                        ]
+                                    }
+                                    for row in range(
+                                        max([r for r, c in s.annotations] + [-1]) + 1
+                                    )
+                                ],
+                            }
+                        ]
+                        if params and params.get("includeGridData")
+                        else []
+                    ),
+                }
+            )
+        return {"sheets": sheets_meta}
+
+    def batch_update(self, body):
+        self.batch_updates.append(deepcopy(body))
+        replies = []
+        for request in body["requests"]:
+            by_id = {s.id: s for s in self.sheets}
+            key, value = next(iter(request.items()))
+            if key == "addSheet":
+                p = value["properties"]
+                self.sheets.append(
+                    FakeWorksheet(
+                        p["title"],
+                        p["sheetId"],
+                        p["gridProperties"]["rowCount"],
+                        p["gridProperties"]["columnCount"],
+                    )
+                )
+                self.sheets[-1].spreadsheet = self
+                self.sheets.insert(
+                    p.get("index", len(self.sheets) - 1), self.sheets.pop()
+                )
+            elif key == "updateSheetProperties":
+                p = value["properties"]
+                s = by_id[p["sheetId"]]
+                s.properties.update(p.get("gridProperties", {}))
+                s.row_count = s.properties.get("rowCount", s.row_count)
+                s.col_count = s.properties.get("columnCount", s.col_count)
+                # Shrink matches the API: rows/columns beyond the new grid are
+                # gone, values included.
+                s.values = {
+                    c: v for c, v in s.values.items() if c[0] <= s.row_count and c[1] <= s.col_count
+                }
+                s.formats = {
+                    c: v for c, v in s.formats.items() if c[0] <= s.row_count and c[1] <= s.col_count
+                }
+            elif key == "updateCells":
+                start = value.get("start")
+                if start is not None:
+                    s = by_id[start["sheetId"]]
+                    for y, row in enumerate(value.get("rows", [])):
+                        for x, cell in enumerate(row.get("values", [])):
+                            coord = (
+                                start.get("rowIndex", 0) + y + 1,
+                                start.get("columnIndex", 0) + x + 1,
+                            )
+                            self._check(s, coord)
+                            s.values[coord] = next(
+                                iter(cell.get("userEnteredValue", {}).values()), ""
+                            )
+                else:
+                    r = value["range"]
+                    s = by_id[r["sheetId"]]
+                    if value.get("fields") == "basicFilter":
+                        # Fields-mask-only clear: the generator removes a stale filter.
+                        s.basic_filter = None
+                        continue
+                    for y in range(r.get("startRowIndex", 0), r["endRowIndex"]):
+                        for x in range(
+                            r.get("startColumnIndex", 0), r["endColumnIndex"]
+                        ):
+                            self._check(s, (y + 1, x + 1))
+                            if "userEnteredValue" in value["fields"]:
+                                s.values.pop((y + 1, x + 1), None)
+                            if "userEnteredFormat" in value["fields"]:
+                                s.formats.pop((y + 1, x + 1), None)
+            elif key == "repeatCell":
+                r = value["range"]
+                s = by_id[r["sheetId"]]
+                for y in range(r.get("startRowIndex", 0), r["endRowIndex"]):
+                    for x in range(r.get("startColumnIndex", 0), r["endColumnIndex"]):
+                        self._check(s, (y + 1, x + 1))
+                        current = s.formats.setdefault((y + 1, x + 1), {})
+                        for field, setting in (
+                            value["cell"].get("userEnteredFormat", {}).items()
+                        ):
+                            # A nested Sheets field mask preserves sibling font properties.
+                            if field == "textFormat" and (
+                                "userEnteredFormat.textFormat." in value["fields"]
+                                or "userEnteredFormat.textFormat(" in value["fields"]
+                            ):
+                                current.setdefault(field, {}).update(deepcopy(setting))
+                            else:
+                                current[field] = deepcopy(setting)
+            elif key == "setBasicFilter":
+                by_id[value["filter"]["range"]["sheetId"]].basic_filter = value[
+                    "filter"
+                ]
+            elif key == "deleteBasicFilter":
+                by_id[value["range"]["sheetId"]].basic_filter = None
+            elif key == "clearBasicFilter":
+                by_id[value["sheetId"]].basic_filter = None
+            elif key == "addConditionalFormatRule":
+                sheet_id = value["rule"]["ranges"][0]["sheetId"]
+                by_id[sheet_id].conditional_formats.insert(
+                    value["index"], deepcopy(value["rule"])
+                )
+            elif key == "deleteConditionalFormatRule":
+                by_id[value["sheetId"]].conditional_formats.pop(value["index"])
+            elif key in ("addDimensionGroup", "deleteDimensionGroup"):
+                r = value["range"]
+                s = by_id[r["sheetId"]]
+                group = (r["startIndex"], r["endIndex"])
+                if key == "addDimensionGroup":
+                    s.groups[group] = s.groups.get(group, 0) + 1
+                elif s.groups.get(group, 0) > 1:
+                    # A delete lowers the depth of the group over the span.
+                    s.groups[group] -= 1
+                elif s.groups.get(group, 0) == 1:
+                    del s.groups[group]
+                else:
+                    raise KeyError(f"deleteDimensionGroup over absent group {group}")
+            elif key == "updateDimensionGroup":
+                group = value["dimensionGroup"]
+                r = group["range"]
+                if group.get("collapsed"):
+                    by_id[r["sheetId"]].hidden_rows.update(
+                        range(r["startIndex"], r["endIndex"])
+                    )
+            elif key == "autoResizeDimensions":
+                pass
+            elif key == "updateDimensionProperties":
+                r = value["range"]
+                s = by_id[r["sheetId"]]
+                if "hiddenByUser" in value["properties"]:
+                    hidden = (
+                        s.hidden_rows if r["dimension"] == "ROWS" else s.hidden_columns
+                    )
+                    if value["properties"]["hiddenByUser"]:
+                        hidden.update(range(r["startIndex"], r["endIndex"]))
+                    else:
+                        hidden.difference_update(range(r["startIndex"], r["endIndex"]))
+            elif key == "addChart":
+                chart = deepcopy(value["chart"])
+                sheet_id = chart["position"]["overlayPosition"]["anchorCell"]["sheetId"]
+                by_id[sheet_id].charts.append(chart)
+            elif key == "updateChartSpec":
+                chart = next(
+                    c
+                    for s in self.sheets
+                    for c in s.charts
+                    if c["chartId"] == value["chartId"]
+                )
+                chart["spec"] = deepcopy(value["spec"])
+            else:
+                raise AssertionError("Unsupported Sheets request: " + key)
+            replies.append({})
+        return {"replies": replies}
+
+    @staticmethod
+    def _check(sheet, coord):
+        if not (1 <= coord[0] <= sheet.row_count and 1 <= coord[1] <= sheet.col_count):
+            raise AssertionError("Write outside allocated sheet grid")

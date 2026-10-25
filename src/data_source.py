@@ -419,7 +419,11 @@ class DataSource:
 
         data = {
             "IB_DATA": self.ib_data,
-            "ENHANCED_STOCKS": self.ib.get_stock_positions_analytics(),
+            "ENHANCED_STOCKS": (
+                self.ib.get_stock_positions_analytics()
+                if callable(getattr(self.ib, "get_stock_positions_analytics", None))
+                else {}
+            ),
             "IB_PERFORMANCE": getattr(self.ib, "performance_ytd", {}),
             "INDEX_PERFORMANCE": getattr(self, "index_performance_data", {}),
             "CRYPTO_DATA": {
@@ -437,6 +441,7 @@ class DataSource:
                 "Other Bets": projected["other_assets_value_usd"],
             },
             "TOTAL_ASSETS": self.total_assets,
+            "FINANCIAL_FREEDOM_GOAL_TARGET": FINANCIAL_FREEDOM_GOAL,
             "FIN_FREEDOM_GOAL_PROGRESS": self.ff_progress,
             "ASSET_ALLOCATION": asset_allocation,
             "DATA_METADATA": {
