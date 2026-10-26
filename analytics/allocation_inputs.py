@@ -232,7 +232,7 @@ def calculate_allocation_score(data, positions, cash, returns, config, as_of_dat
 
 
 def validate_saved_allocation(result, data, expected_date=None, *, replay=True):
-    """Integrity plus independent replay from frozen, dated inputs."""
+    """Integrity plus main/sensitivity replay from frozen, dated inputs."""
     try:
         if not isinstance(result,dict) or result.get('version')!=VERSION:
             return False
@@ -256,6 +256,13 @@ def validate_saved_allocation(result, data, expected_date=None, *, replay=True):
             if 'unknown' in (p['left'],p['right']):p.update(correlation=None,kind='missing',observations=0,months=[],last_month=None)
         if pairs!=result['pairs']: return False
         expected=score_components(weights,correlation_map(pairs),result['sectors'],result['configuration']['calibration']['coefficient'])
+        if weights.get('car_business',0)>0:
+            sensitivity=[dict(p,correlation=cal['sensitivity_correlation']) if p['kind']=='modeled' else p for p in pairs]
+            alternate=score_components(weights,correlation_map(sensitivity),result['sectors'],cal['coefficient'])
+            if (not math.isclose(result['sensitivity_score'],alternate['score'],rel_tol=0,abs_tol=1e-8)
+                    or result['sensitivity_display_score']!=alternate['display_score']): return False
+        elif result['sensitivity_score'] is not None or result['sensitivity_display_score'] is not None:
+            return False
         return all(math.isclose(result[k],v,rel_tol=0,abs_tol=1e-8) for k,v in expected.items())
     except (ValueError,TypeError,KeyError,AttributeError,OverflowError):
         return False

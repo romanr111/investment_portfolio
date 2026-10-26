@@ -167,6 +167,25 @@ class AllocationIntegrationTests(unittest.TestCase):
         self.assertLess(q['sensitivity_score'],q['score'])
         self.assertEqual(q['calibration_fingerprint'],settings['calibration']['fingerprint'])
 
+    def test_full_replay_rejects_incorrect_business_sensitivity_even_with_valid_seal(self):
+        from copy import deepcopy
+        from analytics.allocation_inputs import validate_saved_allocation
+        from analytics.holy_grail import fingerprint
+        data,settings,history=allocation_fixture()
+        data['POSITION_DATA']['other_assets']=[dict(asset_id='car-one',carrying_value_usd=30)]
+        data['TOTAL_ASSETS']+=30
+        settings['profiles']['other_assets:0']=dict(as_of_date='2026-09-30',source='confirmed business model',
+            source_identity={'asset_id':'car-one'},components=[dict(group='car_business',share=1)])
+        saved=self.saved(data,settings,history)
+        self.assertTrue(validate_saved_allocation(saved['DIVERSIFICATION_DATA']['allocation_score'],saved))
+        for field in ['sensitivity_score','sensitivity_display_score']:
+            with self.subTest(field=field):
+                altered=deepcopy(saved)
+                q=altered['DIVERSIFICATION_DATA']['allocation_score']
+                q[field]=99
+                q['result_fingerprint']=fingerprint({k:v for k,v in q.items() if k!='result_fingerprint'})
+                self.assertFalse(validate_saved_allocation(q,altered,replay=True))
+
     def test_html_sheet_and_scoped_writer_share_one_percent_not_the_old_count(self):
         from test_holy_grail_outputs import HolyGrailOutputTests
         from test_holy_grail_outputs import sheet_table

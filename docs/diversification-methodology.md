@@ -72,7 +72,7 @@ The standalone historical writer uses the same saved view and checks the
 snapshot envelope date against the indicator before authentication or writing.
 
 
-Current headline: the independent `DIVERSIFICATION_DATA.indicator` described in
+Previous headline: the independent `DIVERSIFICATION_DATA.indicator` described in
 "Simple Holy Grail indicator (v1)" below. The ten-check policy sections document
 legacy diagnostics and do not gate the current headline.
 

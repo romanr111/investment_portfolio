@@ -4,6 +4,23 @@ import unittest
 import test_holy_grail_indicator as indicator_cases
 
 class SheetTests(unittest.TestCase):
+    def test_details_end_marker_conflict_refuses_write_before_touching_manual_rows(self):
+        from analytics.holy_grail_sheet import deliver
+        from unittest.mock import Mock, patch
+        import tempfile
+        grid=[[{} for _ in range(4)] for _ in range(200)]
+        for row,text in [(39,'Диверсифікація - Details'),(45,'Holy Grail - End'),
+                         (80,'UNRELATED USER DATA')]:
+            grid[row][0]={'userEnteredValue':{'stringValue':text}}
+        before={'grid':grid,'groups':[{'range':{'startIndex':40,'endIndex':100},'depth':1}],
+                'row_metadata':[{} for _ in grid],'properties':{'title':'QA'}}
+        book=Mock();book.id='qa'
+        for apply in [False,True]:
+            with self.subTest(apply=apply),tempfile.TemporaryDirectory() as directory,patch('analytics.holy_grail_sheet.read_state',return_value=before):
+                with self.assertRaisesRegex(ValueError,'end marker'):
+                    deliver(book,7,indicator_cases.IndicatorTests().enrich(),directory,apply=apply)
+        book.batch_update.assert_not_called()
+
     def test_scoped_planner_has_no_destructive_sheet_requests(self):
         self.assertIsNotNone(importlib.util.find_spec('analytics.holy_grail_sheet'))
         from analytics.holy_grail_sheet import plan_requests

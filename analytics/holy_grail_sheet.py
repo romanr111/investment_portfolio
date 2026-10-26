@@ -98,10 +98,15 @@ def _details(state):
     if len(matches)>1: raise ValueError('Ambiguous details ownership')
     if matches:
         start=matches[0]+1
-        ends=[g['range']['endIndex'] for g in state['groups'] if g['range']['startIndex']==start]
-        if ends: return start,max(ends)
+        group_ends=[g['range']['endIndex'] for g in state['groups'] if g['range']['startIndex']==start]
         ends=[i+1 for i,row in enumerate(grid) if i>=start and row[0].get('userEnteredValue',{}).get('stringValue')==END_MARKER]
-        if len(ends)==1: return start,ends[0]
+        if len(ends)>1: raise ValueError('Ambiguous details end markers')
+        if ends:
+            # A row group is not permission to consume cells beyond the marker.
+            if any(end!=ends[0] for end in group_ends):
+                raise ValueError('Details end marker conflicts with row group')
+            return start,ends[0]
+        if group_ends: return start,max(group_ends)
         if any(_occupied(c) for c in grid[start][:2]):
             raise ValueError('Populated details need an owned group or explicit end marker')
         return start,start
