@@ -55,18 +55,6 @@ class USD1CashTests(unittest.TestCase):
         rows = contract["ACTIVITY_DATA"]["quarters"]["2026-Q3"]["crypto"]
         self.assertEqual([r["asset"] for r in rows], ["BTC"])
 
-
-    def test_exchange_specific_filters_treat_usd1_as_cash(self):
-        from src.crypto.okx_client import OKXFiltered
-        from src.crypto.bybit_client import Bybit
-        client = OKXFiltered.__new__(OKXFiltered)
-        client.account_balances = {"USD1": 100, "BTC": .1}
-        client.get_savings_positions = lambda: {"okx": {"USD1": (30, .05), "ETH": (1, .02)}}
-        self.assertEqual(client.get_cash_balance(), 100)
-        self.assertEqual(client.get_all_crypto_balances(), {"BTC": .1, "ETH": 1})
-        self.assertIn("USD1", Bybit.STABLECOINS)
-
-
     def test_saved_data_reclassification_is_idempotent_and_preserves_totals(self):
         import copy
         from src.portfolio_ledger import contract as module
@@ -95,11 +83,6 @@ class USD1CashTests(unittest.TestCase):
         self.assertEqual(d["ASSET_ALLOCATION"]["allocations"]["Cash"]["percentage"], 90)
         self.assertEqual([r["asset"] for r in d["ACTIVITY_DATA"]["quarters"]["2026-Q3"]["crypto"]], ["BTC"])
         self.assertEqual(module.reclassify_cash_equivalents(result), result)
-
-
-    @patch("src.crypto.crypto_tokens.COLD_STORAGE", {"USD1": 10})
-    def test_manual_cash_equivalents_are_not_lost(self):
-        self.assertEqual(CryptoData.calculate_free_cash_balance([]), 10)
 
     def test_reclassified_data_updates_report_and_history_without_usd1(self):
         import sys

@@ -10,12 +10,32 @@ test-parallel:
 run:
     venv/bin/python -m src.portfolio_sync
 
+# Preview adopting existing hand-made worksheet tabs; prints the adoptions JSON.
+# Usage: just adoption-preview "04 Oct 2026,net_worth_timeline"
+adoption-preview titles:
+    venv/bin/python main.py --adoption-preview {{titles}}
+
+# Dry-apply a reviewed adoptions JSON: validates the sheet update without writing.
+# Requires --adoption-preview output reviewed first.
+# Usage: just adoption-apply data/adoptions.json
+adoption-apply file:
+    venv/bin/python -m src.portfolio_sync --adoptions-file {{file}}
+
+# LIVE variant: actually applies the reviewed adoptions to Google Sheets.
+# Usage: just adoption-apply-live data/adoptions.json
+adoption-apply-live file:
+    venv/bin/python -m src.portfolio_sync --adoptions-file {{file}} --write
+
 crypto-sync *args:
     venv/bin/python -m src.portfolio_ledger.cli {{args}}
 
 # Add risk analytics to a derived copy of a dated combined-data snapshot.
 holy-grail *args:
     venv/bin/python -m analytics.holy_grail_cli {{args}}
+
+# Update only the saved indicator in an existing dated worksheet.
+holy-grail-sheet *args:
+    venv/bin/python -m analytics.holy_grail_sheet {{args}}
 
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:

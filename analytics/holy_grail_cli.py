@@ -24,6 +24,8 @@ def main():
     print(json.dumps({"output": str(args.output.resolve()), "as_of_date": metric["as_of_date"],
                       "status": metric["status"], "effective_streams": metric["effective_streams"],
                       "estimated_progress_pct": metric["estimated_progress_pct"],
+                      "indicator": quality.get("indicator"),
+                      "allocation_score": quality.get("allocation_score"),
                       "target_achieved": metric["target_achieved"],
                       "diversification": {key: quality.get(key) for key in (
                           "status", "count_version", "effective_streams", "score_min", "score_max", "confidence")}}, ensure_ascii=False))

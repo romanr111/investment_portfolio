@@ -63,6 +63,19 @@ For missing positions, use the same collector with `IB_FLEX_QUERY_ID_PORTFOLIO_S
 
 ### Holy Grail saved-data enrichment
 
+For capital_diversification_v1, prefer validated DIVERSIFICATION_DATA.allocation_score.
+Show one capital-weighted 0-100% score for invested assets, Cash separately,
+the largest economic group and Car Resale correlation sensitivity 0.25/0.75.
+Use the frozen shipped calibration; never fit it to a portfolio or recalculate
+in outputs. Old DR-squared indicators are prior-model diagnostics. Read
+docs/diversification-methodology.md for classification, availability and replay.
+
+
+If allocation_score is absent, the validated `DIVERSIFICATION_DATA.indicator`
+count is a labeled prior-model diagnostic.
+The legacy ten-check policy below applies to prior diagnostics only; never use
+its unresolved checks to hide a valid new indicator.
+
 The optional `DIVERSIFICATION_DATA` and legacy `HOLY_GRAIL_DATA` blocks are
 calculated once in `DataSource.get_combined_data()` before persistence. Render
 only saved data through `saved_diversification_view()`, validating date, versions
@@ -132,3 +145,17 @@ Before delivery:
 Lead with a clickable link to the styled HTML, and PDF if actually produced and checked. Open the styled artifact when the available viewer renders it; retain Markdown as a secondary link or omit it unless useful. Never open only Markdown and present that as the publication result.
 
 State the quarter, actual input dates, validation obtained, and material data-quality or visual-review limits. Keep provenance receipts under local-only `data/` when useful; preserve private inputs and existing report history. Generate locally within the user's request. Publishing or sending the report to Telegram requires explicit authorization.
+
+
+### Prior risk-equivalent indicator
+
+Prefer allocation_score when present; the following describes prior DR-squared snapshots only.
+Owned Treasury positions are assets in the current configuration. Preserve
+maturity/duration distinctions: the confirmed <=1-year individual holding uses
+the disclosed, dated SHV proxy; direct long Treasury ETFs such as TLT keep their
+own histories. Never substitute a generic Bonds history or add a manual +1.
+Render its saved count (one decimal), direct-only same-month sensitivity, reserve,
+five-role coverage and model/input limits. Do not gate it on legacy check scores
+or re-fetch/recompute in HTML. See docs/diversification-methodology.md, Simple
+Holy Grail indicator, for replay and scoped sheet delivery. Preserve archive
+behavior and existing privacy/exclusion rules.

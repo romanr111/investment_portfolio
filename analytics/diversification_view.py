@@ -44,6 +44,12 @@ def _saved_diversification_view(data,expected_date=None):
     data=data.get('data',data)
     if 'DIVERSIFICATION_DATA' not in data: return _legacy(data,expected_date)
     q=data['DIVERSIFICATION_DATA']
+    if isinstance(q,dict) and 'allocation_score' in q:
+        from analytics.allocation_view import allocation_view
+        return allocation_view(data,expected_date)
+    if isinstance(q,dict) and 'indicator' in q:
+        from analytics.holy_grail_indicator_view import indicator_view
+        return indicator_view(data,expected_date)
     try:
         if not isinstance(q,dict) or q.get('count_version')!=COUNT_VERSION or q.get('policy_version')!=POLICY_VERSION:
             return _empty('Непідтримувана версія оцінки')

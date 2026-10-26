@@ -8,12 +8,17 @@ from unittest.mock import patch
 from test_holy_grail_data import snapshot_fixture
 from test_holy_grail_progress import exposures, independent_history
 from analytics.holy_grail_data import enrich_combined_data
-from src.google_sheets.spreadsheet_structure import PortfolioTableBuilder
+from src.google_sheets.insights_tables import build_portfolio_tab
+from src.google_sheets.insights_cells import render_blocks
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "portfolio_yic_reports"))
 from generate_quarterly_report import build_report_data
 from quarterly_report_html import render_report
 from test_quarterly_report_html import _make_analyzer
+
+
+def sheet_table(data):
+    return render_blocks(build_portfolio_tab(data).blocks)[0]
 
 
 class HolyGrailOutputTests(unittest.TestCase):
@@ -32,7 +37,7 @@ class HolyGrailOutputTests(unittest.TestCase):
         saved = self.saved()
         del saved["DIVERSIFICATION_DATA"]
         with patch("analytics.holy_grail_data.collect_return_history", side_effect=AssertionError("Outputs must not collect data")):
-            table = PortfolioTableBuilder(saved).build_central_columns([])
+            table = sheet_table(saved)
             self.assertTrue(any(row[:2] == ["Диверсифікація /100", "Нова оцінка відсутня"] for row in table),
                             "The current spreadsheet does not display saved Holy Grail progress")
             document = self.html(saved)

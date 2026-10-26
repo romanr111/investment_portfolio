@@ -83,6 +83,24 @@ python -m src.portfolio_sync --run-history-sync --run-dalio-analysis
 
 ## Диверсифікація та стійкість у Sheets і квартальному HTML
 
+Головний індикатор `capital_diversification_v1` показує **0-100% диверсифікації
+інвестованої частини**: ваги капіталу, кореляції економічних груп і секторна
+широта. Більше означає кращу диверсифікацію в межах моделі. Cash поза оцінкою.
+0-49% - концентрований; 50-79% - частково; 80-100% - добре диверсифікований.
+Шкала прив'язана до замороженого практичного взірця, не є рейтингом Даліо.
+
+У приватному `data/holy_grail_config.json` секція `allocation` вмикає розрахунок;
+її `profiles` містить точні датовані підтвердження індивідуальних активів.
+Публічні профілі й незмінне калібрування збережені в `analytics/models/`.
+Car Resale має явну модель кореляцій 0,25 та видиму перевірку при 0,75.
+Treasury 0-1, понад 1-10 і понад 10 років - різні групи активів.
+HTML і Sheets віддають перевагу збереженому `allocation_score`; пошкоджений
+новий блок не підміняється старим числом. Команди replay і scoped delivery
+нижче працюють з ним без повторного збору брокерських балансів.
+
+### Діагностика попередніх моделей
+
+
 `DataSource.get_combined_data()` додає опційні `DIVERSIFICATION_DATA` та
 `HOLY_GRAIL_DATA` до збереження і публікації. Sheets та HTML читають один
 збережений результат через `saved_diversification_view()`; представлення не
@@ -390,3 +408,10 @@ Required GitHub secrets:
 | `TELEGRAM_CHAT_ID` | Your chat ID (get via @userinfobot) |
 
 The workflow can also be triggered manually via `workflow_dispatch` for backfill.
+
+
+Holy Grail prefers the saved capital-weighted allocation score, with Cash
+outside its scope and explicit business-model sensitivity. Older DR-squared
+counts and policy checks remain prior-model diagnostics. Use `just holy-grail-sheet ... --dry-run` followed
+by `--apply` for scoped historical delivery without replacing a worksheet.
+See `docs/diversification-methodology.md` for inputs, limitations and verification.

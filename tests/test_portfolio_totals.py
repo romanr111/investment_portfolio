@@ -1,7 +1,7 @@
 """Tests for portfolio total assets and allocation reconciliation.
 
 Verifies that DataSource.calculate_total_assets does not double-count IB cash
-and that PortfolioTableBuilder allocation rows reconcile to net worth.
+and that typed portfolio allocation rows reconcile to net worth.
 """
 import unittest
 import json
@@ -13,28 +13,20 @@ import tempfile
 from data.assets_data import OTHER_BETS
 from src.allocation_calculator import AllocationCalculator
 from src.data_source import DataSource
+from src.google_sheets.insights_tables import build_portfolio_tab
 from src.brokers.ib import InteractiveBrokers
-from src.google_sheets.spreadsheet_structure import PortfolioTableBuilder
 from src.portfolio_history.unified_history import save_combined_data_snapshot_json
 from src.portfolio_ledger.contract import build_portfolio_contract
 from src.portfolio_ledger.storage import PortfolioLedger
 
 
-def _extract_allocation_rows(table):
-    rows = {}
-    for row in table:
-        if (
-            len(row) > 8
-            and row[6]
-            and row[6] != "Net worth"
-            and str(row[8]).endswith("%")
-        ):
-            rows[row[6]] = row[7]
-    return rows
+def _extract_allocation_rows(tab):
+    block = next(block for block in tab.blocks if block.name == "compact_allocation")
+    return {row[0]: row[1].value for row in block.rows[2:] if len(row) >= 3}
 
 
 def _sum_allocation_row_values(rows):
-    return sum(int(float(value)) for value in rows.values())
+    return sum(value for value in rows.values() if isinstance(value, (int, float)))
 
 
 class TestPortfolioTotals(unittest.TestCase):
@@ -44,9 +36,9 @@ class TestPortfolioTotals(unittest.TestCase):
             data_source = DataSource.__new__(DataSource)
             data_source._data_timestamp = 1.0
             data_source.ib_data = {
-                "China Stocks": {"700": 1100},
-                "Stocks": {"AAPL": 1800},
-                "Precious Metals": {"GLD": 500},
+                "China Stocks": {"700": 1100, "9988": 300},
+                "Stocks": {"AAPL": 1800, "NVDA": 400},
+                "Precious Metals": {"GLD": 500, "IAU": 200},
                 "Total Stocks Value": 2900,
                 "IB_Portfolio_Value": 3400,
             }
@@ -106,12 +98,14 @@ class TestPortfolioTotals(unittest.TestCase):
 
             snapshot = save_combined_data_snapshot_json(combined, temp_dir)
             restored = json.loads(snapshot.read_text())["data"]
-            rows = PortfolioTableBuilder(restored).build_left_columns()
+            tab = build_portfolio_tab(restored)
+            rows = next(block.rows for block in tab.blocks if block.name == "holdings")
             for symbol, expected in {"700": 0.10, "AAPL": -0.25, "GLD": 0.0}.items():
                 with self.subTest(symbol=symbol):
-                    row = next(row for row in rows if row[3] == symbol)
-                    self.assertGreater(len(row), 5, "Snapshot rendering lost column F")
-                    self.assertAlmostEqual(row[5], expected)
+                    row = next(row for row in rows if row[0] == symbol)
+                    self.assertGreater(len(row), 2, "Snapshot rendering lost P&L")
+                    self.assertEqual(row[2].kind, "percent")
+                    self.assertAlmostEqual(row[2].value, expected)
 
     def test_asset_allocation_uses_canonical_lending_and_p2p_values(self):
         data_source = DataSource.__new__(DataSource)
@@ -202,12 +196,12 @@ class TestPortfolioTotals(unittest.TestCase):
             "OTHER_ASSETS": {"Other Bets": 0},
         }
 
-        table = PortfolioTableBuilder(data).build_central_columns([])
+        table = build_portfolio_tab(data, current_date="2026-09-30")
         rows = _extract_allocation_rows(table)
 
-        self.assertEqual(rows["Stocks"], "400")
-        self.assertEqual(rows["Bonds"], "300")
-        self.assertEqual(rows["Cash"], "50")
+        self.assertEqual(rows["Stocks"], 400)
+        self.assertEqual(rows["Bonds"], 300)
+        self.assertEqual(rows["Cash"], 50)
 
     def test_allocation_rows_reconcile_with_net_worth_using_actual_category_values(self):
         data = {
@@ -234,20 +228,19 @@ class TestPortfolioTotals(unittest.TestCase):
         }
         data["ALLOCATIONS"] = AllocationCalculator(data).get_sorted_sector_allocations()
 
-        table = PortfolioTableBuilder(data).build_central_columns([])
+        table = build_portfolio_tab(data, current_date="2026-09-30")
         rows = _extract_allocation_rows(table)
 
-        self.assertEqual(rows["Stocks"], "400")
-        self.assertEqual(rows["Bonds"], "300")
-        self.assertEqual(rows["Other Bets"], "70")
-        self.assertEqual(rows["Crypto Lending"], "80")
-        self.assertEqual(rows["Precious Metals"], "50")
-        self.assertEqual(rows["Cash"], "260")
-        self.assertEqual(rows["Crypto Coins"], "40")
-        self.assertEqual(rows["Commodities"], "100")
-        self.assertEqual(rows["P2P Lending"], "30")
+        self.assertEqual(rows["Stocks"], 400)
+        self.assertEqual(rows["Bonds"], 300)
+        self.assertEqual(rows["Other Bets"], 70)
+        self.assertEqual(rows["Crypto Lending"], 80)
+        self.assertEqual(rows["Precious Metals"], 50)
+        self.assertEqual(rows["Cash"], 260)
+        self.assertEqual(rows["Crypto Coins"], 40)
+        self.assertEqual(rows["Commodities"], 100)
+        self.assertEqual(rows["P2P Lending"], 30)
         self.assertEqual(_sum_allocation_row_values(rows), data["TOTAL_ASSETS"])
-
 
     def test_get_combined_data_preserves_legacy_p2p_rate(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -298,7 +291,6 @@ class TestPortfolioTotals(unittest.TestCase):
             ]
             self.assertEqual(p2p[0], 30)
             self.assertAlmostEqual(p2p[1], 0.11)
-
 
 
 if __name__ == "__main__":

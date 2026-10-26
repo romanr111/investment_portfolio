@@ -564,6 +564,32 @@ def _render_holy_grail(view: Optional[dict]) -> str:
     if view is None:
         return ""
     rows = "".join(f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>" for label, value in view["rows"])
+    if view.get("allocation"):
+        drivers = "".join(f"<li>{_esc(text)}</li>" for text in view['drivers'])
+        return f"""
+<section id="holy-grail">
+  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">Диверсифікація інвестованої частини</h2><span class="sec-rule"></span></div>
+  <p class="hg-value">{_esc(view['headline'])}</p>
+  <p><strong>{_esc(view['status'])}</strong></p>
+  <p>{_esc(view.get('model_status', 'Модельна оцінка'))} станом на {_esc(view['as_of'])}. {_esc(view['coverage_summary'])}</p>
+  <ul>{drivers}</ul>
+  <details open><summary>Як отримано оцінку</summary>
+    <table class="hg-table"><tbody>{rows}</tbody></table>
+  </details>
+</section>
+"""
+    if view.get("indicator"):
+        return f"""
+<section id="holy-grail">
+  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">Диверсифікація: Holy Grail</h2><span class="sec-rule"></span></div>
+  <p class="hg-value">{_esc(view['headline'])}</p>
+  <p>Еквівалента джерел ризику / орієнтир 15–20.</p>
+  <p>{_esc(view['status'])} станом на {_esc(view['as_of'])}.</p>
+  <p class="footnote">{_esc(view['coverage_summary'])}<br>{_esc(view['principal_constraint'])}</p>
+  <table class="hg-table"><tbody>{rows}</tbody></table>
+</section>
+"""
+
     return f"""
 <section id="holy-grail">
   <div class="sec-label">

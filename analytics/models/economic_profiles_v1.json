@@ -1,0 +1,495 @@
+{
+  "ib:SPY": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://www.ssga.com/library-content/products/factsheets/etfs/us/factsheet-us-en-spy.pdf",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3970205958808238,
+          "Financials": 0.11397720455908818,
+          "Communication Services": 0.09948010397920415,
+          "Health Care": 0.09258148370325933,
+          "Consumer Discretionary": 0.08598280343931212,
+          "Industrials": 0.08048390321935613,
+          "Consumer Staples": 0.043691261747650464,
+          "Energy": 0.03399320135972805,
+          "Utilities": 0.018796240751849626,
+          "Real Estate": 0.016996600679864023,
+          "Materials": 0.016996600679864023
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa"
+  },
+  "ib:EFA": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://www.ishares.com/us/literature/fact-sheet/efa-ishares-msci-eafe-etf-fund-fact-sheet-en-us.pdf",
+    "components": [
+      {
+        "group": "equity_developed",
+        "share": 1,
+        "sectors": {
+          "Financials": 0.2619,
+          "Industrials": 0.1875,
+          "Information Technology": 0.111,
+          "Health Care": 0.0998,
+          "Consumer Discretionary": 0.0801,
+          "Consumer Staples": 0.0642,
+          "Materials": 0.059800000000000006,
+          "Energy": 0.0391,
+          "Communication Services": 0.038900000000000004,
+          "Utilities": 0.0366
+        }
+      }
+    ],
+    "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043"
+  },
+  "ib:MCHI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://www.ishares.com/us/literature/fact-sheet/mchi-ishares-msci-china-etf-fund-fact-sheet-en-us.pdf",
+    "components": [
+      {
+        "group": "equity_china",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 0.22440000000000002,
+          "Financials": 0.20879999999999999,
+          "Communication Services": 0.1784,
+          "Information Technology": 0.11449999999999999,
+          "Health Care": 0.0636,
+          "Materials": 0.054400000000000004,
+          "Industrials": 0.053399999999999996,
+          "Energy": 0.035699999999999996,
+          "Consumer Staples": 0.0279,
+          "Utilities": 0.018799999999999997
+        }
+      }
+    ],
+    "source_sha256": "03fc414552a98e67e0dcbf7909dc6bf0d01631fb8c3d505a0a7b765e95e59e61"
+  },
+  "ib:EWY": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://www.ishares.com/us/literature/fact-sheet/ewy-ishares-msci-south-korea-etf-fund-fact-sheet-en-us.pdf",
+    "components": [
+      {
+        "group": "equity_emerging",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.5156000000000001,
+          "Industrials": 0.1844,
+          "Financials": 0.10550000000000001,
+          "Consumer Discretionary": 0.053099999999999994,
+          "Communication Services": 0.0285,
+          "Health Care": 0.028300000000000002,
+          "Consumer Staples": 0.0216,
+          "Energy": 0.0141,
+          "Materials": 0.0137,
+          "Utilities": 0.0031
+        }
+      }
+    ],
+    "source_sha256": "f3746083568b2ba9e6a0139c4fc8d4658d0595dad52e5ac5e673d2b09141a57a"
+  },
+  "ib:EMXC": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf",
+    "components": [
+      {
+        "group": "equity_emerging",
+        "share": 1,
+        "sectors": {}
+      }
+    ]
+  },
+  "ib:KWEB": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "https://kraneshares.com/etf/kweb/",
+    "components": [
+      {
+        "group": "equity_china",
+        "share": 1,
+        "sectors": {}
+      }
+    ],
+    "themes": [
+      "ai"
+    ],
+    "theme_source": "https://kraneshares.com/etf/kweb/"
+  },
+  "ib:SHV": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "treasury_short",
+        "share": 1
+      }
+    ]
+  },
+  "ib:IEF": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "treasury_medium",
+        "share": 1
+      }
+    ]
+  },
+  "ib:TLT": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "treasury_long",
+        "share": 1
+      }
+    ]
+  },
+  "ib:LQD": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "credit_ig_usd",
+        "share": 1
+      }
+    ]
+  },
+  "ib:HYG": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "credit_hy_usd",
+        "share": 1
+      }
+    ]
+  },
+  "ib:IHYG.L": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "credit_hy_eur",
+        "share": 1
+      }
+    ]
+  },
+  "ib:IAU": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "gold",
+        "share": 1
+      }
+    ]
+  },
+  "ib:SLV": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "silver",
+        "share": 1
+      }
+    ]
+  },
+  "ib:DBC": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "commodities",
+        "share": 1
+      }
+    ]
+  },
+  "ib:BTC-USD": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "crypto",
+        "share": 1
+      }
+    ]
+  },
+  "ib:SPHY": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "credit_hy_usd",
+        "share": 1
+      }
+    ]
+  },
+  "ib:IHYG": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "credit_hy_eur",
+        "share": 1
+      }
+    ]
+  },
+  "ib:COMB": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "commodities",
+        "share": 1
+      }
+    ]
+  },
+  "ib:BRK B": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:GOOG": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Communication Services": 1
+        }
+      }
+    ]
+  },
+  "ib:AMZN": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 1
+        }
+      }
+    ]
+  },
+  "ib:META": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Communication Services": 1
+        }
+      }
+    ]
+  },
+  "ib:NKE": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 1
+        }
+      }
+    ]
+  },
+  "ib:SPGI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:COF": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:WHR": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 1
+        }
+      }
+    ]
+  },
+  "ib:MCO": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:CPRT": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Industrials": 1
+        }
+      }
+    ]
+  },
+  "ib:IBKR": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:UBER": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Industrials": 1
+        }
+      }
+    ]
+  },
+  "ib:BN": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_developed",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
+  "ib:9988": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_china",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 1
+        }
+      }
+    ]
+  },
+  "ib:BABA": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_china",
+        "share": 1,
+        "sectors": {
+          "Consumer Discretionary": 1
+        }
+      }
+    ]
+  },
+  "ib:BRK-B": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  }
+}

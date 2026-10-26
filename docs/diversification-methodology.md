@@ -1,4 +1,80 @@
-# Diversification quality and risk-equivalent streams
+# Portfolio diversification indicators
+
+## Capital-weighted score (current main indicator)
+
+`DIVERSIFICATION_DATA.allocation_score`, version `capital_diversification_v1`,
+answers how invested capital is spread across economic groups and equity sectors.
+More means greater diversity in this model. It is not a risk-adjusted return,
+variance, literal count of independent factors, or an official Dalio rating.
+Cash is outside the score and remains visible as a percentage of full NAV.
+
+With invested weights p, positive-clipped pair correlations r, conditional GICS
+sector shares s and sector breadth b=(1-sum(s^2))/(1-1/11):
+`D=2*sum(p_g*p_h*(1-r_gh)); B=sum(p_g^2*b_g); score=clip(A*D+25*B,0,100)`.
+Unknown sector mass goes to the largest known sector. Unknown pairs use r=1.
+Ticker/account splits and shared HYG lending proxies cannot create groups.
+Treasury groups are 0-1y (SHV), >1-10y (IEF), >10y (TLT).
+
+Frozen calibration in `analytics/models/capital_diversification_v1.json` uses
+October 2021 through September 2026 and the agreed six equal blocks: US equities;
+other equities (EFA/MCHI); Treasuries (SHV/TLT); gold; commodities; Car Resale.
+The coefficient is frozen, including for subsequent quarters and sensitivity.
+Car Resale has assumed correlations .25/.75 to public groups; these are not
+observed business returns or crisis forecasts. US used-car CPI is not used.
+Published factsheet "Other" and cash sectors remain unknown conservatively.
+Single-company sectors in `economic_profiles_v1.json` are reviewed economic
+classifications using the GICS vocabulary, not a licensed official GICS feed.
+KWEB has a confirmed China market profile but no verified quarter-end sector
+breakdown; it earns no invented sector breadth.
+
+Each pair uses its own real overlapping months in the fixed last-60 calendar grid,
+minimum 36. Store count and last month per pair; never fill missing returns.
+36-59 observations, lagged histories, cached balances or unknown sectors produce
+a provisional result. No hidden quality multiplier is applied. Unknown capital
+above 5%, or maximum missing-pair influence `2*A*sum(p_g*p_h)` above 5 score
+points, makes the main score unavailable. No invested assets: not applicable.
+
+The capital score follows the explicit Cash exclusion: typed Cash ledger rows
+`debt` (MY_DEBT personal liability) and `manual_reconciliation` remain outside its
+scope with a visible warning. They are not automatically brokerage financing.
+Negative broker/investment cash, negative position values/quantities and declared
+leveraged/nonlinear positions still block the score. Legacy diagnostics retain
+their stricter borrowing treatment. NAV and every financial amount stay intact.
+Reconciliation uses max($1, NAV*1e-6); invested weights normalize to the reconciled
+position sum. No phantom unknown asset is created for tolerated rounding.
+
+Private `holy_grail_config.json` enables the feature with an `allocation` object.
+The default calibration and public profiles are shipped; `allocation.profiles`
+contains exact dated private confirmations (e.g. the individual Treasury and
+identity-bound Car Resale). Unknown instruments require explicit profiles;
+regional exposure is not inferred from currency, listing venue or broker bucket.
+Historical replay adds this block while preserving older saved analytics.
+Normal pipeline enrichment collects unique histories once before persistence.
+HTML/Sheets display the same saved result; output rendering neither fetches nor
+recalculates it. Integrity validation checks frozen inputs; an explicit replay
+validation independently recomputes from the saved histories, not current config.
+
+Display floors the score, snapping only floating noise within 1e-8 of an integer.
+0-49: concentrated; 50-79: partly diversified; 80-100: well diversified within the
+model. Reference 100 is a practical threshold, not a theoretical maximum.
+Sheets writes display_score/100 with 0% format to B10. The other four summary
+rows contain conclusion, largest group, business sensitivity and date/Cash.
+Scoped updates preserve outside cells/formats/groups, backup before mutation,
+read back after timeout and never blindly repeat a write. Generated reports and
+private data are excluded from the PR. Live readiness requires actual rendering
+and production readback; synthetic tests are not production proof.
+
+The current v2 Sheets builder reserves A10:B14 for the shared summary. When
+benchmark rows would overlap, it places the intact performance panel below the
+summary. Details start below every populated panel, so their row group cannot
+hide unrelated holdings or income. Typed allocation_score cells use 0% formatting.
+The standalone historical writer uses the same saved view and checks the
+snapshot envelope date against the indicator before authentication or writing.
+
+
+Current headline: the independent `DIVERSIFICATION_DATA.indicator` described in
+"Simple Holy Grail indicator (v1)" below. The ten-check policy sections document
+legacy diagnostics and do not gate the current headline.
 
 This is our policy for long-term USD resilience, not Dalio's proprietary method,
 a forecast of independence, or an investment-attractiveness score.
@@ -21,7 +97,7 @@ The output reports modeled exposure count and flags hedge-driven counts.
 1.875. There is no automatic “Holy Grail achieved” claim. Compare thresholds
 before display rounding; 14.9996 displays `<15`, not `15.00`.
 
-Cash adds no streams. Only documented USD cash without unsecured dependencies
+Legacy policy only: Cash adds no streams. Only documented USD cash without unsecured dependencies
 and identified USD Treasury holdings with <=365 days remaining are analytical
 reserves. Stablecoins remain subject to issuer/platform risk, even if the
 financial pipeline calls them cash. Financial classifications never change.
@@ -175,3 +251,69 @@ Historical enrichment uses `just holy-grail --snapshot ... --output ... --offlin
 and an explicit HTML `--after` path. Originals/latest pointers remain unchanged.
 Exclude post-period observations and current holdings. Revised retrieved series
 are retrospective; observation dates do not imply publication-date availability.
+
+
+## Simple Holy Grail indicator (v1)
+
+`DIVERSIFICATION_DATA.indicator` is the primary risk-equivalent count. It is
+independent of the old ten-check score. The pipeline reuses the same collected
+monthly USD histories; reports and Sheets only render the frozen saved block.
+HYG is a disclosed lending/P2P proxy; US used-car CPI is a disclosed Car Resale
+valuation proxy, not actual business return. Compare the direct-only count on
+the identical monthly observations. The 36-month comparison requires all 36
+calendar observations ending at the primary history end. Never zero-fill gaps.
+
+All exposures have exactly one role: direct, model, confirmed short US Treasury
+reserve, Cash outside the count, or uncovered. Percentages use canonical NAV,
+with reconciliation tolerance max(1 USD, NAV * 1e-6). Cash stablecoins are not
+confirmed safe reserves. Named Treasury confirmations are private, dated, and
+expire at documented maturity or the confirmed <=365-day upper bound. Never
+infer Treasury status from the generic Bonds category.
+
+Current portfolio treatment: owned US Treasuries participate as assets. An
+identified ETF uses its own adjusted USD history. A confirmed individual Treasury
+with <=1 year remaining uses a disclosed SHV (0-1 year Treasury) total-return
+proxy when a full individual-security history is unavailable. The exact-position
+mapping has `valid_from`/`valid_until` dates and must be refreshed after its
+confirmed maturity bound. Invalid/expired mappings are not applied and remain
+visible as limitations. No generic Bonds override is used.
+
+Maturity/duration exposures remain distinct: short bills are not replaced with
+TLT (20+ year Treasury), intermediate notes, high yield or a generic bond series.
+Direct ETFs keep their own tickers and covariance histories; grouping only
+combines identical instruments/histories. SHV represents a rolling ETF sleeve,
+not the precise duration, coupon, costs or hold-to-maturity payoff of the owned
+bond. Short Treasuries can contribute little to DR-squared because their
+volatility is small, even when their capital allocation is large. Inclusion never
+means adding an automatic +1. The optional reserve role is retained for reading
+earlier saved configurations; the current confirmed holding is mapped as an asset.
+
+The headline is N equivalents / reference 15–20, rounded to one decimal (below
+15 must not round up to 15). Proxy/default/illiquidity omissions, cached balances,
+coverage, model notes, history date and sample length remain visible. A count
+above the number of exposures is hedge-driven, not a literal business count.
+All Cash/reserves yields not-applicable, never an achieved-diversification claim.
+Old blocks remain readable as prior models; malformed new blocks never fall
+back to old scores. Frozen fingerprints do not consult today's configuration.
+
+Historical replay preserves originals/latest pointers and financial fields:
+
+```bash
+just holy-grail --snapshot SOURCE --output NEW_DERIVED_PATH --config PRIVATE_CONFIG --offline
+venv/bin/python portfolio_yic_reports/generate_quarterly_report.py --year 2026 --quarter 3 --after NEW_DERIVED_PATH
+just holy-grail-sheet --snapshot NEW_DERIVED_PATH --spreadsheet-id ID --sheet-id GID --dry-run
+just holy-grail-sheet --snapshot NEW_DERIVED_PATH --spreadsheet-id ID --sheet-id GID --apply
+```
+
+The sheet command verifies the snapshot date against the selected tab title,
+backs up the bounded grid, checks for concurrent changes, and only edits
+A10:B14 and owned marker-based Details. It never deletes/recreates worksheets
+or rows. It refuses insufficient grid space and conflicts. Repeated writes
+replace only owned groups; foreign data/groups keep Details expanded. On write
+errors it reads back before any retry. Values, number format, groups and
+outside-scope state must match before delivery is reported verified.
+
+Ungrouped Details require an explicit `Holy Grail - End` boundary. Populated
+legacy sections without a group/end marker are refused rather than claimed as
+owned. Readback verifies final row visibility as well as group metadata.
+Unavailable new results retain the indicator layout and replace stale counts.

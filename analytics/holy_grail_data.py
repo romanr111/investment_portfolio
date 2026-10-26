@@ -135,8 +135,9 @@ def collect_return_history(exposures, *, as_of_date, cache_dir=CACHE_DIR, allow_
     histories, provenance, flags = {}, {}, set()
     deadline = time.monotonic() + 60
     attempted = set()
-    # A bounded cold refresh should cover the largest valuations first.
-    for exposure in sorted(exposures, key=lambda item: -float(item.get("value_usd", 0))):
+    # Refresh the main indicator's representatives before optional legacy
+    # individual histories, then cover the largest valuations first.
+    for exposure in sorted(exposures, key=lambda item: (item.get('collection_priority',1), -float(item.get("value_usd", 0)))):
         series, symbol = exposure.get("series"), exposure.get("symbol")
         if not series or not symbol or series in attempted:
             continue
@@ -218,6 +219,18 @@ def extract_exposures(data, as_of_date, config):
         if amount == 0:
             return
         mapping = bound_exposure_record(mappings, identifier, "category:" + category, source_identity)
+        if 'valid_from' in mapping or 'valid_until' in mapping:
+            try:
+                start = date.fromisoformat(mapping.get('valid_from', date.min.isoformat()))
+                end = date.fromisoformat(mapping.get('valid_until', date.max.isoformat()))
+                if start > end:
+                    raise ValueError('Reversed mapping validity')
+                if not start <= date.fromisoformat(as_of_date) <= end:
+                    flags.add('mapping_outside_validity')
+                    mapping = {}
+            except (ValueError, TypeError):
+                flags.add('invalid_mapping_dates')
+                mapping = {}
         provider = mapping.get("provider", "fred" if proxy == "CUSR0000SETA02" else "yfinance")
         market_symbol = mapping.get("symbol", proxy or symbol)
         is_proxy = mapping.get("kind", "proxy" if proxy else "direct") == "proxy"
@@ -310,7 +323,7 @@ def extract_exposures(data, as_of_date, config):
     if total is None:
         raise ValueError("Missing portfolio total")
     remainder = total - cash - sum(row["value_usd"] for row in positions)
-    if remainder > max(0.02, total * 1e-6):
+    if remainder > max(1.0, abs(total) * 1e-6):
         add("unallocated", "Unmapped", remainder)
         flags.add("unreconciled_positions")
     return positions, cash, flags
@@ -331,8 +344,15 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
         provenance = {}
         returns = monthly_returns
         if returns is None:
+            allocation_requests = []
+            if 'allocation' in settings:
+                from analytics.allocation_inputs import allocation_history_requests, allocation_settings
+                try:
+                    allocation_requests = allocation_history_requests(positions, allocation_settings(settings), as_of_date)
+                except (ValueError,TypeError,KeyError,OSError,AttributeError):
+                    pass  # Bad optional configuration must not poison prior diagnostics.
             returns, provenance, collection_flags = collect_return_history(
-                positions, as_of_date=as_of_date, cache_dir=cache_dir, allow_network=allow_network)
+                positions + allocation_requests, as_of_date=as_of_date, cache_dir=cache_dir, allow_network=allow_network)
             flags.update(collection_flags)
         summary = calculate_progress(
             positions, returns, as_of_date=as_of_date, total_assets=float(data["TOTAL_ASSETS"]),
@@ -353,6 +373,29 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
         }
     from analytics.diversification_inputs import enrich_quality
     output['DIVERSIFICATION_DATA'] = enrich_quality(data,positions,cash,returns,settings,as_of_date,flags,provenance)
+    from analytics.holy_grail_indicator import calculate_indicator
+    try:
+        output['DIVERSIFICATION_DATA']['indicator'] = calculate_indicator(
+            data, positions, cash, returns, settings, as_of_date, flags, provenance)
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        output['DIVERSIFICATION_DATA']['indicator'] = dict(
+            version='holy_grail_indicator_v1', status='unavailable', as_of_date=as_of_date,
+            effective_streams=None, warnings=['invalid_inputs'])
+    if 'allocation' in settings:
+        from analytics.allocation_inputs import allocation_settings, calculate_allocation_score
+        try:
+            allocation_config = allocation_settings(settings)
+        except (ValueError, TypeError, KeyError, OSError):
+            allocation_config = {}
+        # The optional policy diagnostics cannot determine score availability.
+        risky_ids = [p['id'] for p in positions if p.get('unsupported_risk')]
+        for p in positions:
+            record = bound_exposure_record(settings.get('diversification',{}).get('exposures',{}),
+                p['id'], 'category:'+p['category'], p.get('source_identity'))
+            if record.get('leveraged') or record.get('nonlinear_risk'): risky_ids.append(p['id'])
+        allocation_config['unsupported_ids'] = sorted(set(risky_ids))
+        output['DIVERSIFICATION_DATA']['allocation_score'] = calculate_allocation_score(
+            data, positions, cash, returns, allocation_config, as_of_date, flags, provenance)
     return output
 
 
@@ -373,6 +416,14 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
     as_of = _date(payload.get("as_of_date") or data.get("DATA_METADATA", {}).get("last_updated"))
     enriched = enrich_combined_data(data, as_of_date=as_of, config=config, cache_dir=cache_dir,
                                     allow_network=allow_network)
+    if 'allocation_score' in enriched.get('DIVERSIFICATION_DATA',{}):
+        # A historical upgrade is additive. Keep all prior models and their
+        # fingerprints exactly as they were saved, including failed old models.
+        allocation = enriched['DIVERSIFICATION_DATA']['allocation_score']
+        if 'HOLY_GRAIL_DATA' in data:
+            enriched['HOLY_GRAIL_DATA'] = data['HOLY_GRAIL_DATA']
+        if isinstance(data.get('DIVERSIFICATION_DATA'),dict):
+            enriched['DIVERSIFICATION_DATA'] = dict(data['DIVERSIFICATION_DATA'], allocation_score=allocation)
     result = dict(payload, data=enriched) if "data" in payload else enriched
     result["holy_grail_enrichment"] = {
         "source_snapshot_sha256": hashlib.sha256(raw).hexdigest(),

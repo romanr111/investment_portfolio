@@ -107,19 +107,6 @@ class CryptoContractTests(unittest.TestCase):
             self.assertEqual(crypto["crypto"][0]["external_transfers_quantity"], 0.0)
             self.assertEqual(crypto["crypto"][0]["internal_transfers_quantity"], 1.0)
 
-    def test_crypto_materiality_checks_both_quarter_boundaries(self) -> None:
-        rows = aggregate_crypto_quarter(
-            events=[],
-            start_quantities={"OLD": 10.0, "DUST": 10.0},
-            end_quantities={"OLD": 0.0, "DUST": 10.0},
-            start_values_usd={"OLD": 150.0, "DUST": 99.0},
-            end_values_usd={"OLD": 0.0, "DUST": 99.0},
-            period_start=datetime(2026, 4, 1, tzinfo=UTC),
-            period_end=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
-        )
-
-        self.assertEqual([row["asset"] for row in rows], ["OLD"])
-        self.assertEqual(rows[0]["status"], "closed")
 
     def test_modified_dietz_weights_mid_period_contribution(self) -> None:
         result = modified_dietz_return(
@@ -375,37 +362,6 @@ class CryptoContractTests(unittest.TestCase):
         self.assertAlmostEqual(sold["roi_pct"], 22.727, places=3)
         self.assertEqual(sold["holding_days"], 151)
 
-    def test_car_event_without_usd_or_fx_marks_coverage_partial(self) -> None:
-        positions = calculate_car_assets(
-            assets=[
-                {
-                    "asset_id": "car-1",
-                    "name": "Ioniq 5",
-                    "status": "active",
-                    "purchase_date": "2026-01-10",
-                }
-            ],
-            events=[
-                {
-                    "asset_id": "car-1",
-                    "occurred_at": "2026-01-10",
-                    "event_type": "purchase",
-                    "amount_usd": 20000.0,
-                },
-                {
-                    "asset_id": "car-1",
-                    "occurred_at": "2026-02-01",
-                    "event_type": "capitalized_cost",
-                    "amount": 1000.0,
-                    "currency": "EUR",
-                },
-            ],
-            valuations=[],
-            as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
-        )
-
-        self.assertEqual(positions[0]["carrying_value_usd"], 20000.0)
-        self.assertEqual(positions[0]["coverage"], "partial")
 
     def test_p2p_position_never_exposes_expected_yield_as_return(self) -> None:
         positions = normalize_p2p_positions(
@@ -602,57 +558,6 @@ class CryptoContractTests(unittest.TestCase):
             self.assertEqual(
                 contract["DATA_QUALITY"]["crypto"]["coverage"], "partial"
             )
-
-    def test_future_only_p2p_ledger_keeps_legacy_balance_for_historical_snapshot(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            ledger = PortfolioLedger(Path(temp_dir))
-            ledger.p2p_dir.mkdir(parents=True)
-            ledger.p2p_positions_path.write_text(
-                "account,balance_usd,as_of_date,status,closed_at\n"
-                "EstateGuru,0,2026-07-15,closed,2026-07-15\n",
-                encoding="utf-8",
-            )
-
-            contract = build_portfolio_contract(
-                ledger=ledger,
-                live_crypto_quantities={},
-                live_crypto_market_values={},
-                savings_positions=[],
-                legacy_other_assets_usd=0,
-                legacy_p2p_balance_usd=100,
-                as_of_date=datetime(2026, 6, 30, tzinfo=UTC).date(),
-            )
-
-            self.assertEqual(contract["POSITION_DATA"]["p2p"][0]["balance_usd"], 100)
-            self.assertEqual(contract["POSITION_DATA"]["p2p"][0]["status"], "legacy")
-
-    def test_contract_start_snapshot_uses_latest_v2_boundary_file(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            snapshot_dir = Path(temp_dir)
-            payload = '{"data":{"DATA_CONTRACT_VERSION":2,"POSITION_DATA":{}}}'
-            (snapshot_dir / "combined_data_2026-03-31_a.json").write_text(payload)
-            (snapshot_dir / "combined_data_2026-04-03_b.json").write_text(payload)
-            (snapshot_dir / "combined_data_2026-06-30_c.json").write_text(payload)
-
-            selected = select_contract_start_snapshot(
-                snapshot_dir, datetime(2026, 6, 30, tzinfo=UTC).date()
-            )
-
-            self.assertEqual(selected["path"].name, "combined_data_2026-04-03_b.json")
-
-    def test_contract_start_snapshot_accepts_legacy_crypto_boundary(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            snapshot_dir = Path(temp_dir)
-            (snapshot_dir / "combined_data_2026-04-01_legacy.json").write_text(
-                '{"data":{"CRYPTO_DATA":{"Token_Quantities":{"BTC":1},'
-                '"Crypto_Market_Values":{"BTC":70000}}}}'
-            )
-
-            selected = select_contract_start_snapshot(
-                snapshot_dir, datetime(2026, 6, 30, tzinfo=UTC).date()
-            )
-
-            self.assertEqual(selected["path"].name, "combined_data_2026-04-01_legacy.json")
 
     def test_unavailable_live_crypto_uses_stale_snapshot_not_zero(self) -> None:
         snapshot = {

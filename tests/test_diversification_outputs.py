@@ -7,19 +7,21 @@ from types import SimpleNamespace
 
 import test_diversification_inputs as input_cases
 import test_holy_grail_outputs as legacy_cases
-from src.google_sheets.spreadsheet_structure import PortfolioTableBuilder
+from test_holy_grail_outputs import sheet_table
 
 
 class QualityOutputTests(unittest.TestCase):
     def saved(self):
         from test_holy_grail_data import snapshot_fixture
-        return input_cases.QualityInputTests().enrich(snapshot_fixture())
+        saved = input_cases.QualityInputTests().enrich(snapshot_fixture())
+        saved["DIVERSIFICATION_DATA"].pop("indicator", None)
+        return saved
 
     def test_both_outputs_show_same_quality_and_count_without_fetching(self):
         from analytics.diversification_view import saved_diversification_view
         data=self.saved();view=saved_diversification_view(data)
         with patch('analytics.holy_grail_data.collect_return_history',side_effect=AssertionError('No output fetching')):
-            table=PortfolioTableBuilder(data).build_central_columns([])
+            table=sheet_table(data)
             self.assertEqual(table[9][:2],['Диверсифікація /100',view['score_cell']])
             html=legacy_cases.HolyGrailOutputTests().html(data)
             self.assertIn(view['headline'],html)
@@ -36,11 +38,12 @@ class QualityOutputTests(unittest.TestCase):
                 data = snapshot_fixture()
                 data['IB_DATA']['Stocks']['asset_0'] += extra
                 saved = input_cases.QualityInputTests().enrich(data)
+                saved['DIVERSIFICATION_DATA'].pop('indicator', None)
                 quality = saved['DIVERSIFICATION_DATA']
                 self.assertAlmostEqual(sum(quality['coverage'].values()), 100)
                 view = saved_diversification_view(saved)
                 self.assertNotEqual(view['effective'], '-')
-                table = PortfolioTableBuilder(saved).build_central_columns([])
+                table = sheet_table(saved)
                 self.assertIn(view['effective'], str(table[10][:2]))
                 self.assertIn(escape(view['effective']), legacy_cases.HolyGrailOutputTests().html(saved))
                 self.assertEqual(saved['TOTAL_ASSETS'], 1500)
