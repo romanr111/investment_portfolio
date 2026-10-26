@@ -64,7 +64,7 @@ def allocation_view(data, expected_date=None):
             if pairs:
                 top=pairs[0]
                 drivers.append('Найбільший зважений перетин: '+label_for(top['left'])+' / '+label_for(top['right'])+
-                               f"; кореляція {top['correlation']:.2f}.".replace('.',','))
+                               f"; кореляція {top['correlation']:.2f}".replace('.',',')+'.')
             sensitivity='Не застосовується' if q['sensitivity_display_score'] is None else str(q['sensitivity_display_score'])+'%'
             if q['sensitivity_display_score'] is not None:
                 drivers.append('Якщо кореляція Car Resale з ринками 0,75 замість 0,25: '+sensitivity+'. Обидва значення є припущеннями.')
