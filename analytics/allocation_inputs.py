@@ -47,6 +47,10 @@ def allocation_settings(settings):
     if method != 'capital_diversification_v2':
         raise ValueError('Unknown allocation method')
     config['method_version'] = method
+    for key in ('concentration_limits', 'linked_theses', 'concentration_decisions'):
+        if key in config and not isinstance(config[key], dict):
+            raise ValueError('Invalid ' + key + ' settings')
+        config.setdefault(key, {})
     public = json.loads(PROFILE_PATH.read_text()) if PROFILE_PATH.exists() else {}
     config['profiles'] = dict(public, **config.get('profiles', {}))
     return config
