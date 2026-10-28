@@ -37,8 +37,20 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         {'Модель бізнесу 0,75', 'Сценарний розкид', 'Прямі історії / моделі', 'Впевненість у даних'},
         {'Дата / Cash поза оцінкою', 'Статус', 'Прямі / проксі / без історії'},
     ]
+    view=saved_diversification_view(data)
+    if not view.get('indicator'): raise ValueError('A valid new indicator is required')
+    summary=view['sheet_summary'] if view.get('allocation') else [
+        ['Holy Grail: еквівалент джерел',view['sheet_number']],['Орієнтир','15–20'],
+        ['Дата позицій',view['as_of']],['Прямі історії / моделі',view['coverage_text']],
+        ['Статус',view['status']]]
+    # A saved concentration measurement extends the owned summary beyond 5 rows.
+    extra = max(0, len(summary) - 5) if view.get('allocation') else 0
+    allowed_labels.extend([{'Концентрація'}, {'Емітент', 'Концентрація'},
+                           {'Топ-4 / Core', 'Концентрація'}, {'Китай', 'Концентрація'}][:extra])
+    end_row = 9 + max(len(summary), 5)
+    if end_row > len(grid): raise ValueError('Insufficient summary rows; extend the sheet explicitly')
     if not grid[9][0].get('userEnteredValue', {}).get('stringValue', '') and any(
-            _occupied(cell) for row in grid[9:14] for cell in row[:2]):
+            _occupied(cell) for row in grid[9:end_row] for cell in row[:2]):
         raise ValueError('Summary cells are populated without an ownership label')
     for index, labels in enumerate(allowed_labels, start=9):
         left, right = grid[index][:2]
@@ -49,8 +61,6 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
             if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
                     'formulaValue' in cell.get('userEnteredValue', {})):
                 raise ValueError('Summary cells contain foreign metadata or formulas')
-    view=saved_diversification_view(data)
-    if not view.get('indicator'): raise ValueError('A valid new indicator is required')
     detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
     rows=[[a,b] for a,b in detail_rows]+[[END_MARKER,'']]
     end=details_start+len(rows)
@@ -62,9 +72,6 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
                 raise ValueError('Details cells contain foreign metadata or formulas')
     for row in grid[old_end:end]:
         if any(_occupied(c) for c in row[:2]): raise ValueError('New details overlap existing cells')
-    summary=[['Holy Grail: еквівалент джерел',view['sheet_number']],['Орієнтир','15–20'],
-             ['Дата позицій',view['as_of']],['Прямі історії / моделі',view['coverage_text']],['Статус',view['status']]]
-    if view.get('allocation'): summary=view['sheet_summary']
     requests=[_write(sheet_id,9,summary),_write(sheet_id,details_start-1,[['Диверсифікація - Details','']]),
               _write(sheet_id,details_start,rows)]
     if old_end>end: requests.append(_write(sheet_id,end,[['',''] for _ in range(old_end-end)]))
@@ -97,11 +104,11 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
     requests.extend([
       {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':9,'endRowIndex':10,'startColumnIndex':1,'endColumnIndex':2},
         'cell':{'userEnteredFormat':{'numberFormat':view.get('number_format') or ({'type':'PERCENT','pattern':'0%'} if view.get('allocation') else {'type':'NUMBER','pattern':'0.0'})}},'fields':'userEnteredFormat.numberFormat'}},
-      {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':9,'endRowIndex':14,'startColumnIndex':0,'endColumnIndex':2},
+      {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':9,'endRowIndex':end_row,'startColumnIndex':0,'endColumnIndex':2},
         'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}},
       {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':details_start-1,'endRowIndex':end,'startColumnIndex':0,'endColumnIndex':2},
         'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}}])
-    return requests,dict(summary=[9,14],details=[details_start-1,span_end],new_end=end,collapsed=safe)
+    return requests,dict(summary=[9,end_row],details=[details_start-1,span_end],new_end=end,collapsed=safe)
 
 
 def read_state(book, sheet_id):

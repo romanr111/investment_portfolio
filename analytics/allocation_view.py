@@ -1,4 +1,6 @@
 """Public whitelist for one saved capital diversity score. No market collection."""
+import math
+
 from analytics.allocation_inputs import validate_saved_allocation
 
 LABELS = ('Концентрований','Частково диверсифікований','Добре диверсифікований у межах моделі')
@@ -27,6 +29,182 @@ def _pct(value):
 
 def group_label(identifier, definitions):
     return definitions.get(identifier,{}).get('label','Непокриті позиції')
+
+
+def _num(value):
+    return isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value)
+
+
+def country_share(facts, name='china'):
+    for key, value in (facts.get('country_pct_equities') or {}).items():
+        if str(key).lower() == name:
+            return value
+    return None
+
+
+def _points(value):
+    return str(int(math.floor(value + 1e-8))) if value >= 0 else str(int(math.ceil(value - 1e-8)))
+
+
+SAFEGUARD_LABELS = {
+    'issuer_limit_breached': 'Емітент понад ліміт',
+    'core_below_target': 'Core нижче цілі',
+    'country_limit_breached': 'Китай понад ліміт',
+    'thesis_limit_breached': 'Теза понад ліміт',
+    'unresolved_breach': 'Нерозглянуте порушення ліміту',
+    'unknown_issuer_lookthrough': 'Частка емітентів у фондах не підтверджена',
+    'business_assumption_material': 'Бізнес-допущення суттєве для оцінки',
+}
+DECISION_TEXT = {'accept': 'рішення: прийнято', 'reduce': 'рішення: скоротити', 'exit': 'рішення: вийти'}
+THESIS_KEY = 'thesis_pct_equities'
+
+
+def _concentration(section):
+    """Structural read of the sibling `concentration_v1` block; malformed degrades to None."""
+    from analytics.concentration_v1 import VERSION
+    try:
+        block = section.get('concentration_v1')
+        if not isinstance(block, dict) or block.get('version') != VERSION:
+            return None
+        if block.get('status') == 'unavailable':
+            return {'unavailable': True, 'warnings': [str(w) for w in block.get('warnings') or []]}
+        facts, limits = block['facts'], block['limits']
+        if not isinstance(facts, dict) or not isinstance(limits, dict):
+            return None
+        largest, top4 = facts['largest_issuer'], facts['top4_issuers']
+        raw_id = largest['id'] if isinstance(largest['id'], str) else str(largest['id'])
+        issuer_id = raw_id.split(':', 1)[1] if raw_id.startswith('ib:') else raw_id
+        shares = dict(issuer_id=issuer_id, issuer_pct_equities=largest['pct_equities'],
+                      issuer_pct_nav=largest['pct_nav'], top4_pct_equities=top4['pct_equities'],
+                      top4_ids=[str(i) for i in top4.get('ids') or []],
+                      core_pct_equities=facts['core_pct_equities'], china_pct_equities=country_share(facts),
+                      unknown_lookthrough_pct_equities=facts.get('unknown_lookthrough_pct_equities'),
+                      business_pct_invested=facts.get('business_pct_invested'),
+                      score_excluding_car=facts.get('score_excluding_car'),
+                      thesis_pct_equities={str(k): v for k, v in (facts.get(THESIS_KEY) or {}).items()})
+        for key in ('issuer_pct_equities','top4_pct_equities','core_pct_equities'):
+            if not _num(shares[key]): return None
+        for key in ('issuer_pct_nav','china_pct_equities','unknown_lookthrough_pct_equities',
+                    'business_pct_invested','score_excluding_car'):
+            if shares[key] is not None and not _num(shares[key]): return None
+        if any(not _num(v) for v in shares['thesis_pct_equities'].values()): return None
+        for key, limit in limits.items():
+            if key == THESIS_KEY:
+                if not isinstance(limit, dict) or any(not _num(v) for v in limit.values()): return None
+            elif not _num(limit): return None
+        breaches = [dict(limit=item['limit'], value=item['value'], decision_id=item.get('decision_id'))
+                    for item in block.get('breaches') or []
+                    if isinstance(item, dict) and isinstance(item.get('limit'), str) and _num(item.get('value'))]
+        return dict(unavailable=False, limits=limits, shares=shares, breaches=breaches,
+                    warnings=[str(w) for w in block.get('warnings') or []])
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def concentration_section(section, decisions=None, as_of_date=None):
+    """Safeguard rows, sheet rows and uncapped breach facts from the saved block.
+
+    Returns None when no block is saved (today's render exactly) or when the
+    block is malformed; an unavailable block renders one explicit row.
+    """
+    from analytics.concentration_v1 import (WARNING_CORE, WARNING_COUNTRY, WARNING_ISSUER,
+                                            WARNING_THESIS, WARNING_UNRESOLVED, WARNING_UNKNOWN_LOOKTHROUGH)
+    block = _concentration(section)
+    if block is None:
+        return None
+    warn_labels = {WARNING_ISSUER: SAFEGUARD_LABELS[WARNING_ISSUER], WARNING_CORE: SAFEGUARD_LABELS[WARNING_CORE],
+                   WARNING_COUNTRY: SAFEGUARD_LABELS[WARNING_COUNTRY], WARNING_THESIS: SAFEGUARD_LABELS[WARNING_THESIS],
+                   WARNING_UNRESOLVED: SAFEGUARD_LABELS[WARNING_UNRESOLVED],
+                   WARNING_UNKNOWN_LOOKTHROUGH: SAFEGUARD_LABELS[WARNING_UNKNOWN_LOOKTHROUGH]}
+    if block['unavailable']:
+        note = 'Вимірювання концентрації недоступне'
+        named = block['warnings'][:2]
+        if named:
+            note += ': ' + ', '.join(warn_labels.get(w, w) for w in named)
+        return dict(unavailable=note, rows=[('Концентрація', note)], summary=[('Концентрація', note)], breach_facts=[])
+    shares, limits = block['shares'], block['limits']
+    decisions = decisions or {}
+
+    def decision_text(item):
+        record = (decisions or {}).get(item.get('decision_id')) if item.get('decision_id') else None
+        if isinstance(record, dict) and str(record.get('review_by') or '') >= str(as_of_date or ''):
+            text = DECISION_TEXT.get(str(record.get('decision')), 'рішення записане')
+            stamp = str(record.get('review_by') or '')
+            return text + ('; розгляд ' + '.'.join(reversed(stamp.split('-'))) if stamp else '')
+        return 'нерозглянуто'
+
+    def resolved(item):
+        return decision_text(item) != 'нерозглянуто'
+
+    def limit_for(key):
+        if key in limits and key != THESIS_KEY:
+            return limits[key], LIMIT_LABELS.get(key, key)
+        name = key.split(':', 1)[1] if ':' in key else key.split('.', 1)[1] if '.' in key else None
+        theses = limits.get(THESIS_KEY) or {}
+        if name and name in theses:
+            return theses[name], 'Теза ' + name
+        return limits.get(key), LIMIT_LABELS.get(key, key)
+
+    breach_rows, breach_facts = [], []
+    for item in sorted(block['breaches'], key=lambda item: 0 if not resolved(item) else 1):
+        limit, label = limit_for(item['limit'])
+        minimal = limit is not None and item.get('limit') == 'core_min_pct_equities'
+        nav = item.get('limit') == 'issuer_pct_nav'
+        against = _pct(limit) if limit is not None else ''
+        suffix = ' NAV' if nav else ''
+        value_text = (_pct(item['value']) + suffix + ' нижче цілі ' + against if minimal
+                      else _pct(item['value']) + suffix + ' понад ліміт ' + against + suffix)
+        text = value_text + ' · ' + decision_text(item)
+        breach_rows.append(('Порушення: ' + label, text))
+        breach_facts.append('Порушення ліміту: ' + label + ' ' + text)
+
+    rows = list(breach_rows)
+    issuer = f"{shares['issuer_id']}: {_pct(shares['issuer_pct_equities'])} акцій"
+    if shares['issuer_pct_nav'] is not None:
+        issuer += ' / ' + _pct(shares['issuer_pct_nav']) + ' NAV'
+    limit_issuer = limits.get('issuer_pct_equities')
+    if limit_issuer is not None:
+        issuer += ' · ліміт ' + _pct(limit_issuer)
+        if limits.get('issuer_pct_nav') is not None:
+            issuer += ' / ' + _pct(limits['issuer_pct_nav']) + ' NAV'
+    rows.append(('Концентрація - емітент', issuer))
+    if shares['core_pct_equities'] is not None:
+        rows.append(('Концентрація - core',
+                     _pct(shares['core_pct_equities']) + ' акцій · ціль ≥' + _pct(limits.get('core_min_pct_equities', 50))))
+    if shares['top4_pct_equities'] is not None:
+        rows.append(('Концентрація - топ-4',
+                     _pct(shares['top4_pct_equities']) + ' акцій у чотирьох найбільших · ліміт ' +
+                     _pct(limits.get('top4_pct_equities', 20)) + ' (' + ', '.join(shares['top4_ids'][:4]) + ')'))
+    if shares['china_pct_equities'] is not None:
+        rows.append(('Концентрація - Китай',
+                     _pct(shares['china_pct_equities']) + ' акцій · ліміт ' + _pct(limits.get('country_pct_equities_china', 10))))
+    for name, value in sorted(shares['thesis_pct_equities'].items()):
+        thesis_limit = (limits.get(THESIS_KEY) or {}).get(name)
+        rows.append(('Концентрація - теза ' + name,
+                     _pct(value) + ' акцій · ліміт ' + _pct(thesis_limit) if thesis_limit is not None else _pct(value) + ' акцій'))
+    if shares['unknown_lookthrough_pct_equities']:
+        rows.append(('Look-through не підтверджено', _pct(shares['unknown_lookthrough_pct_equities']) + ' акцій у фондах'))
+    if shares['business_pct_invested'] is not None:
+        rows.append(('Бізнес у інвестованій частині', _pct(shares['business_pct_invested'])))
+    if shares['score_excluding_car'] is not None:
+        rows.append(('Бал ігноруючи бізнес-допущення', _points(shares['score_excluding_car']) + ' зі 100'))
+    existing = {text for _, text in rows}
+    for warning in block['warnings']:
+        label = warn_labels.get(warning, warning)
+        if label not in existing:
+            rows.append(('Обмеження', label))
+    summary = [('Концентрація',
+                'Ліміти дотримані' if not block['breaches'] else
+                'Порушень: ' + str(len(block['breaches'])) + '; нерозглянутих: ' +
+                str(sum(1 for item in block['breaches'] if not resolved(item)))),
+               ('Емітент', issuer.split(' · ліміт')[0]),
+               ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities']) + ' акцій'),
+               ('Китай', (_pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-') + ' акцій')]
+    return dict(unavailable=None, rows=rows, summary=summary, breach_facts=breach_facts)
+
+
+LIMIT_LABELS = {'issuer_pct_equities': 'Емітент', 'issuer_pct_nav': 'Емітент / NAV', 'top4_pct_equities': 'Топ-4',
+                'core_min_pct_equities': 'Core', 'country_pct_equities_china': 'Китай'}
 
 
 def allocation_view(data, expected_date=None):
@@ -161,6 +339,17 @@ def allocation_view_v2(data, expected_date=None):
             else:
                 label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
                          'well_diversified': LABELS[2]}[result['category']]
+            if assessment['combined_dependent'] or assessment['business_dependent'] or assessment['window_dependent']:
+                scored = [(key, scenario) for key, scenario in result['scenarios'].items()
+                          if scenario.get('display_score') is not None]
+                if scored:
+                    worst_key, worst = min(scored, key=lambda item: (item[1]['display_score'], item[0]))
+                    when = ('при бізнесовій кореляції 0,75' if worst_key.endswith('_r075') else
+                            'при бізнесовій кореляції 0,25' if worst_key.endswith('_r025') else
+                            'за 36-місячним вікном' if worst_key.startswith('m36') else 'за 60-місячним вікном')
+                    worst_label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
+                                   'well_diversified': LABELS[2]}[worst['category']]
+                    label = worst_label + ' ' + when + ' · ' + label
             if result['status'] == 'provisional': label += ' · Попередня оцінка'
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
             definitions = result['configuration']['group_definitions']
@@ -172,6 +361,11 @@ def allocation_view_v2(data, expected_date=None):
                     ('Висновок', label), ('Сценарний розкид', scenario_range),
                     ('Cash від повного портфеля', _pct(cash)),
                     ('Непокрита інвестована частка', _pct(result['coverage']['unknown_pct_invested']))]
+            safeguards = concentration_section(data['DIVERSIFICATION_DATA'],
+                                               result['configuration'].get('concentration_decisions'),
+                                               result['as_of_date'])
+            if safeguards:
+                rows.extend(safeguards['rows'])
             for key, scenario in result['scenarios'].items():
                 value = str(scenario['display_score']) + ' зі 100' if scenario['score'] is not None else 'Недоступно: ' + str(scenario['reason'])
                 rows.append(('Сценарій ' + key, value))
@@ -228,10 +422,13 @@ def allocation_view_v2(data, expected_date=None):
             view.update(headline=str(result['display_score']) + ' зі 100', score_cell=result['display_score'],
                         sheet_number=result['display_score'], status=label, sheet_status=label,
                         largest_text=largest, sensitivity_text=scenario_range, rows=rows,
-                        drivers=['Найбільша група: ' + largest], risk_facts=public_facts[:3],
+                        drivers=['Найбільша група: ' + largest],
+                        risk_facts=((safeguards or {}).get('breach_facts') or []) + public_facts[:3],
+                        safeguard_summary=(safeguards or {}).get('summary') or [],
                         model_status='Попередня оцінка' if result['status'] == 'provisional' else 'Модельна оцінка')
     view['sheet_summary'] = [('Диверсифікація інвестованого капіталу', view['sheet_number']),
                              ('Висновок', view['status']), ('Найбільша група', view['largest_text']),
                              ('Сценарний розкид', view['sensitivity_text']),
-                             ('Дата / Cash поза оцінкою', view['as_of'] + ' / ' + view['coverage_summary'])]
+                             ('Дата / Cash поза оцінкою', view['as_of'] + ' / ' + view['coverage_summary'])] + \
+                            list(view.get('safeguard_summary') or [])
     return view

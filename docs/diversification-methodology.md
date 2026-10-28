@@ -68,7 +68,8 @@ read back after timeout and never blindly repeat a write. Generated reports and
 private data are excluded from the PR. Live readiness requires actual rendering
 and production readback; synthetic tests are not production proof.
 
-The current v2 Sheets builder reserves A10:B14 for the shared summary. When
+The current v2 Sheets builder reserves A10 for the shared summary - fourteen
+rows today, more when concentration safeguards extend it. When
 benchmark rows would overlap, it places the intact performance panel below the
 summary. Details start below every populated panel, so their row group cannot
 hide unrelated holdings or income. Typed allocation_score cells use 0% formatting.
@@ -333,6 +334,15 @@ unknown method is unavailable; a present but invalid v2 result never falls
 back to v1. v2 displays integer points out of 100, not a percentage. Cash is
 excluded from invested weights and shown separately as a share of full NAV.
 
+v2 is a group-level asset-class breadth metric: it rewards spreading invested
+capital across uncorrelated economic groups and across the eleven equity
+sectors. It does not see issuer-level or thesis-level concentration by
+construction - two issuers in the same group score exactly as their combined
+weight. That verdict therefore needs safeguards beside the score, not inside
+it; see the concentration block below. The historical 15-20 independent
+economic streams target stays an aspiration, not a reached state, and is not
+mixed into v2 trends.
+
 The model aggregates dated holdings into canonical economic groups, retaining
 unknown invested amounts in the denominator. For weights `p` and correlations
 `rho`, the similarity matrix has diagonal 1 and off-diagonal
@@ -352,6 +362,12 @@ scenario unavailable. Alternative scenarios do not replace an unavailable main
 result. Category changes across available scenarios are reported as dependence
 on assumptions or period, and the range is not a confidence interval.
 
+Because breadth is grouped, the score can rise while a named holding weight
+grows: measured on the frozen Q3 inputs, 52.35 -> 59.60 -> 63.48 as the China
+equity share goes 0 -> 19.5% -> 50% at a measured near-average China
+correlation of about 0.185. This is by design, and the concentration limits
+below, not the headline number, govern that verdict.
+
 Saved inputs include dated profiles, source histories, method and group
 representatives, evidence-review cutoff and fingerprints. Replay rebuilds
 holdings, scenarios and reviewed risk facts from saved inputs, without fetching
@@ -362,3 +378,37 @@ references whose original files are not independently verified during replay.
 The main result remains provisional when balance or sector evidence is partial.
 Public output contains only whitelisted group and risk summaries, never private
 holdings, source confirmations or account identifiers.
+
+### Concentration safeguards beside the score
+
+`DIVERSIFICATION_DATA.concentration_v1` adds the issuer and thesis verdict the
+score cannot see. Limits come from private `allocation.concentration_limits`
+on stricter defaults (largest issuer <=5% of equities and <=2% of NAV, top-4
+<=20% of equities, broad-market core >=50%, China <=10%, named thesis
+clusters <=10%); cluster membership from `allocation.linked_theses`; recorded
+`allocation.concentration_decisions` entries shaped
+`{id: {limit, decided_at, decision: accept|reduce|exit, reason, review_by}}`
+resolve a breach only when that record's `review_by` is on or after the
+block's as-of date. All three keys are frozen into the saved configuration
+fingerprint, so replay uses the same limits and decisions. Breaches, per-limit
+values and decision states render beside the headline score as rows or
+bullets - never as a second big number. Records without the block render
+unchanged, and an unavailable block shows a single unavailable row.
+
+### Offline what-if scenarios
+
+The enrichment CLI accepts repeatable `--what-if ID=+USD` deltas and prints a
+before/after comparison without changing anything:
+
+```bash
+just holy-grail --what-if ib:VOO=+20000 --offline
+just holy-grail --what-if ib:9988=-5000 --what-if ib:GOOG=+5000 --offline
+```
+
+Each delta moves one position and is funded from Cash (the net total returns
+to it); the run works on a temporary copy of the newest saved snapshot, or of
+the explicitly passed `--snapshot`, re-runs the same offline enrichment on
+that copy, and prints per-limit value, breach and decision state plus the v2
+score for both states. It writes no files, fetches no data and places no
+orders. Unknown or unprofiled ids exit with status 2 before any mutation, and
+missing offline history degrades the after state to unavailable.

@@ -300,9 +300,27 @@ def build_portfolio_tab(
         )
     )
     has_diversification = 'DIVERSIFICATION_DATA' in combined_data or 'HOLY_GRAIL_DATA' in combined_data
+    view = saved_diversification_view(combined_data, expected_date=valuation_date) if has_diversification else None
+    if view is not None and view.get('allocation'):
+        summary = [tuple(row) for row in view['sheet_summary']]
+        kind = view.get('number_kind', 'allocation_score')
+    elif view is not None and view.get('indicator'):
+        summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
+                   ('Дата позицій',view['as_of']),('Прямі історії / моделі',view['coverage_text']),('Статус',view['status'])]
+        kind = 'risk_equivalent'
+    elif view is not None:
+        summary = [('Диверсифікація /100',view['score_cell']),('Ефективні джерела / ціль',view['effective']+' / 15-20'),
+                   ('Дата оцінки',view['as_of']),('Впевненість у даних',view['sheet_status']),
+                   ('Прямі / проксі / без історії',view['coverage_text'])]
+        kind = 'number'
+    else:
+        summary = []
+        kind = 'number'
     performance_start = len(summary_rows) + 1
-    if has_diversification and performance_start + len(performance_rows) > 9:
-        performance_start = 15  # Reserve A10:B14 without losing benchmark rows.
+    if has_diversification:
+        summary_end = 9 + len(summary)  # the saved view owns sheet rows 10..summary_end
+        if performance_start + len(performance_rows) > 9:
+            performance_start = summary_end + 1  # Reserve summary rows without losing benchmark rows.
     blocks = [
         CellBlock("holdings", tuple(holding_rows), start_row=0, start_column=3),
         CellBlock("summary", tuple(summary_rows), start_row=0),
@@ -320,20 +338,6 @@ def build_portfolio_tab(
     diversification_groups = ()
     headers = {'holdings':1, 'compact_allocation':1, 'compact_income':1}
     if has_diversification:
-        view = saved_diversification_view(combined_data, expected_date=valuation_date)
-        if view.get('allocation'):
-            summary = view['sheet_summary']
-            kind = view.get('number_kind', 'allocation_score')
-        elif view.get('indicator'):
-            summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
-                       ('Дата позицій',view['as_of']),('Прямі історії / моделі',view['coverage_text']),('Статус',view['status'])]
-            kind = 'risk_equivalent'
-        else:
-            summary = [('Диверсифікація /100',view['score_cell']),('Ефективні джерела / ціль',view['effective']+' / 15-20'),
-                       ('Дата оцінки',view['as_of']),('Впевненість у даних',view['sheet_status']),
-                       ('Прямі / проксі / без історії',view['coverage_text'])]
-            kind = 'number'
-        summary = [tuple(row) for row in summary]
         label,value = summary[0]
         if isinstance(value,(int,float)):
             summary[0] = (label,CellValue(value,kind))
