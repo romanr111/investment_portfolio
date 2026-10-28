@@ -64,7 +64,7 @@ class HolyGrailDataTests(unittest.TestCase):
     def test_successful_history_is_reused_offline_and_future_returns_are_removed(self):
         module = self.module()
         self.assertTrue(hasattr(module, "collect_return_history"), "Persistent history collection is not implemented")
-        prices = pd.Series(range(100, 164), index=pd.date_range(end="2026-12-31", periods=64, freq="ME"))
+        prices = pd.Series(range(100, 164), index=pd.date_range(end="2026-12-31", periods=64, freq=pd.offsets.MonthEnd()))
         calls = []
         def fetch(symbol, start, end):
             calls.append(symbol)
