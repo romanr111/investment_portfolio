@@ -4,6 +4,15 @@ import unittest
 import test_holy_grail_indicator as indicator_cases
 
 class SheetTests(unittest.TestCase):
+    def test_owned_collapsed_group_with_foreign_cells_refuses_unhiding(self):
+        from analytics.holy_grail_sheet import plan_requests
+        grid = [[{} for _ in range(4)] for _ in range(100)]
+        grid[39][0] = {'userEnteredValue': {'stringValue': 'Диверсифікація - Details'}}
+        grid[50][2] = {'userEnteredValue': {'stringValue': 'unrelated data'}}
+        group = {'range': {'startIndex': 40, 'endIndex': 90}, 'depth': 1, 'collapsed': True}
+        with self.assertRaisesRegex(ValueError, 'foreign cells'):
+            plan_requests(indicator_cases.IndicatorTests().enrich(), 7, grid, [group], 40, 90)
+
     def test_many_pair_details_fit_and_remain_present(self):
         from analytics.holy_grail_sheet import plan_requests
         from unittest.mock import patch

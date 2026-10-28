@@ -72,10 +72,12 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
     if marker not in MARKERS and any(g['range']['startIndex'] == details_start for g in groups):
         raise ValueError('Details insertion conflicts with an unowned row group')
     owned=[g for g in groups if marker in MARKERS and g['range']['startIndex']==details_start]
+    span_end=max(end,old_end)
+    if owned and any(_occupied(c) for row in grid[details_start:span_end] for c in row[2:]):
+        raise ValueError('Details row group contains foreign cells')
     for g in sorted(owned,key=lambda x:-x.get('depth',1)):
         requests.append({'deleteDimensionGroup':{'range':{'sheetId':sheet_id,'dimension':'ROWS',
                         'startIndex':g['range']['startIndex'],'endIndex':g['range']['endIndex']}}})
-    span_end=max(end,old_end)
     foreign=[g for g in groups if g not in owned and g['range']['startIndex']<span_end and g['range']['endIndex']>details_start]
     if owned:
         segments=[]
