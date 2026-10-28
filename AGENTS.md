@@ -13,7 +13,7 @@ Personal portfolio automation: IB Gateway live data, dividend income estimates, 
   - `load_portfolios(year, quarter)` matches snapshots by XML `toDate` (last business day of quarter-start month for initial, last business day of quarter-end month for final). Tolerance +/-3 days.
   - `data/final_data.json` written by `just run` (YTD performance, current allocation).
   - Dated snapshots auto-archived to `data/snapshots/` on each pipeline run (start-of-quarter "Було" column).
-- Core/Satellite split is controlled by the hardcoded `CORE_SYMBOLS` set in `portfolio_yic_reports/analyze_portfolio_reports.py`; the bonds/gold table weights use the IBKR subset only (stocks + special assets), not the full portfolio.
+- Core/Satellite split is derived from the `core: true` flags in `analytics/models/economic_profiles_v1.json` (read once by `core_symbols()` in `portfolio_yic_reports/analyze_portfolio_reports.py`; the file is resolved beside the report script first, then via the installed analytics package; if neither location is readable the report aborts with a clear error, and no flagged profile renders 0%/100%). The bonds/gold table weights use the IBKR subset only (stocks + special assets), not the full portfolio.
 - Step-by-step runbook (preconditions, hardcoded one-off cleanup, CLI flags, verification): the `quarterly-report` skill in `.agents/skills/quarterly-report/SKILL.md`.
 
 ## Python project notes

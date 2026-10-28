@@ -38,6 +38,8 @@ import xml.etree.ElementTree as ET
 import glob
 import argparse
 import calendar
+import importlib.util
+import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Set, Optional
 from datetime import datetime, date
@@ -68,12 +70,58 @@ LONG_BONDS_GOLD_COMMODITIES = list(
     ).keys()
 )
 
-# Core symbols for Core/Satellite split (edit to match your rules)
-CORE_SYMBOLS = {
-    "VOO",
-    "QQQ",
-    "BRK B",
-}
+# Core symbols for the Core/Satellite split are derived from the public
+# economic profiles (analytics/models/economic_profiles_v1.json), where the
+# `core: true` flag marks broad-market building blocks shared with the
+# concentration measurement. The file is resolved beside this script first
+# and then on the installed analytics package, so a copied report script
+# still reaches the canonical file. No flagged profile renders the split as
+# 0%/100%; if no location is readable, or a found file is invalid, the
+# report aborts instead of reporting a split of unknown meaning.
+CORE_PROFILES_PATH = Path(__file__).resolve().parents[1] / "analytics" / "models" / "economic_profiles_v1.json"
+
+_CORE_SYMBOLS = None
+
+
+def _profiles_location():
+    if CORE_PROFILES_PATH.exists():
+        return CORE_PROFILES_PATH
+    try:
+        spec = importlib.util.find_spec("analytics")
+    except (ImportError, ValueError):
+        return None
+    for root in (spec.submodule_search_locations if spec is not None else ()):
+        candidate = Path(str(root)) / "models" / "economic_profiles_v1.json"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def core_symbols():
+    """Profile-derived core set, read once per process; agent-maintained JSON is the single source."""
+    global _CORE_SYMBOLS
+    if _CORE_SYMBOLS is None:
+        path = _profiles_location()
+        if path is None:
+            raise ValueError(
+                "Core/Satellite split: analytics/models/economic_profiles_v1.json is missing both beside "
+                "the report script and on the analytics package path; the report refuses to guess the core set"
+            )
+        try:
+            profiles = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise ValueError(
+                "Core/Satellite split: cannot read analytics/models/economic_profiles_v1.json "
+                + "(" + type(error).__name__ + "); the report refuses to guess the core set"
+            ) from error
+        if not isinstance(profiles, dict):
+            raise ValueError("Core/Satellite split: profiles JSON must be an object")
+        symbols = set()
+        for key, profile in profiles.items():
+            if isinstance(profile, dict) and profile.get("core") is True:
+                symbols.add(key.split(":", 1)[1] if isinstance(key, str) and ":" in key else str(key))
+        _CORE_SYMBOLS = frozenset(symbols)
+    return _CORE_SYMBOLS
 
 # Chinese equity symbols for China vs. rest split
 CHINA_EQUITY_SYMBOLS = {
@@ -609,7 +657,7 @@ class TableFormatter:
             if stock.is_excluded():
                 continue
             total_value += stock.usd_value
-            if stock.symbol in CORE_SYMBOLS:
+            if stock.symbol in core_symbols():
                 core_value += stock.usd_value
 
         if total_value <= 0:
