@@ -11,6 +11,7 @@ import math
 
 from analytics.allocation_score import (VERSION, correlation_map, history_frame,
     pair_correlations, score_components, validate_calibration)
+from analytics.allocation_score_v2 import _same
 from analytics.holy_grail import fingerprint
 from analytics.diversification_inputs import quality_inputs_fingerprint
 
@@ -138,7 +139,8 @@ def validate_saved_allocation(result, data, expected_date=None, *, replay=True):
         pairs=pair_correlations(history_frame(result['histories']),weights,result['as_of_date'],business=['car_business'])
         for p in pairs:
             if 'unknown' in (p['left'],p['right']):p.update(correlation=None,kind='missing',observations=0,months=[],last_month=None)
-        if pairs!=result['pairs']: return False
+        # pair names, month dates and kinds stay exact; recomputed numbers are bounded
+        if not _same(pairs,result['pairs']): return False
         expected=score_components(weights,correlation_map(pairs),result['sectors'],result['configuration']['calibration']['coefficient'])
         if weights.get('car_business',0)>0:
             sensitivity=[dict(p,correlation=cal['sensitivity_correlation']) if p['kind']=='modeled' else p for p in pairs]

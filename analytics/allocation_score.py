@@ -59,7 +59,7 @@ def monthly_window(frame, as_of_date):
     if np.isinf(frame.to_numpy(dtype=float)).any():
         raise ValueError('Non-finite return history')
     cutoff = completed_month_end(as_of_date)
-    return frame.reindex(pd.date_range(end=cutoff, periods=60, freq='ME'))
+    return frame.reindex(pd.date_range(end=cutoff, periods=60, freq=pd.offsets.MonthEnd()))
 
 
 def pair_correlations(frame, groups, as_of_date, *, business=(), business_correlation=.25):

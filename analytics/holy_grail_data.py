@@ -27,9 +27,9 @@ def _month_prices(prices, *, monthly=False):
         prices.index = prices.index.to_period("M").to_timestamp("M")
         if prices.index.has_duplicates:
             raise ValueError("Duplicate reference periods")
-        return prices.resample("ME").last()
-    values = prices.resample("ME").last()
-    timestamps = pd.Series(prices.index, index=prices.index).where(prices.notna()).resample("ME").last()
+        return prices.resample(pd.offsets.MonthEnd()).last()
+    values = prices.resample(pd.offsets.MonthEnd()).last()
+    timestamps = pd.Series(prices.index, index=prices.index).where(prices.notna()).resample(pd.offsets.MonthEnd()).last()
     # A quote early in a month is not a complete month's closing price.
     age = (values.index.to_series() - timestamps).dt.days
     return values.where(age <= 7)
