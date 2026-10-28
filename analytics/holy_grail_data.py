@@ -346,7 +346,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
         return output
 
     from copy import deepcopy
-    from analytics.allocation_inputs import allocation_history_requests, allocation_settings, _seal
+    from analytics.allocation_inputs import (allocation_history_requests, allocation_settings,
+                                             _seal, FATAL_FLAGS)
     from analytics.allocation_v2_inputs import calculate_allocation_score_v2, comparison_basis, _compare_basis
 
     existing = data.get('DIVERSIFICATION_DATA')
@@ -391,6 +392,26 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
             'status': 'unavailable', 'reason': 'previous_v2_invalid_or_absent'}
         _seal(saved)
     output['DIVERSIFICATION_DATA']['allocation_score_v2'] = saved
+    # Concentration facts measured beside the score on the same frozen inputs;
+    # a failed build stays explicit instead of silently omitting the block.
+    from analytics import concentration_v1
+    try:
+        # Mirror the score's own failure modes: the record's reconciled input
+        # flags and, when the score itself is unavailable, its failure reason.
+        blocking = set(saved.get('input_flags') or ()) & (FATAL_FLAGS | {'unsupported_risk'})
+        if saved.get('status') == 'unavailable' and saved.get('warnings'):
+            blocking |= set(saved['warnings']) & (FATAL_FLAGS | {'unsupported_risk'})
+        if blocking:
+            concentration = concentration_v1.unavailable_block(as_of_date, [sorted(blocking)[0]])
+        else:
+            concentration = concentration_v1.build_block(
+                positions, allocation_config, float(data['TOTAL_ASSETS']), as_of_date, v2_result=saved)
+            concentration_v1.match_decisions(
+                concentration, allocation_config.get('concentration_decisions'), as_of_date)
+    except Exception as error:
+        reason = str(error) or error.__class__.__name__
+        concentration = concentration_v1.unavailable_block(as_of_date, [reason])
+    output['DIVERSIFICATION_DATA']['concentration_v1'] = concentration
     return output
 
 
@@ -418,7 +439,10 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
         from copy import deepcopy
         result = deepcopy(payload)
         target = result['data'] if 'data' in result else result
-        target.setdefault('DIVERSIFICATION_DATA', {})['allocation_score_v2'] = enriched['DIVERSIFICATION_DATA']['allocation_score_v2']
+        target_dd = target.setdefault('DIVERSIFICATION_DATA', {})
+        target_dd['allocation_score_v2'] = enriched['DIVERSIFICATION_DATA']['allocation_score_v2']
+        if 'concentration_v1' in enriched['DIVERSIFICATION_DATA']:
+            target_dd['concentration_v1'] = deepcopy(enriched['DIVERSIFICATION_DATA']['concentration_v1'])
         result['allocation_score_v2_enrichment'] = {
             'source_snapshot_sha256': hashlib.sha256(raw).hexdigest(),
             'calculated_at': datetime.now(timezone.utc).isoformat(), 'retrospective': True,

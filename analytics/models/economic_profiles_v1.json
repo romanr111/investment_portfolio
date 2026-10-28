@@ -1,7 +1,7 @@
 {
   "ib:SPY": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ssga.com/library-content/products/factsheets/etfs/us/factsheet-us-en-spy.pdf",
     "components": [
       {
@@ -23,11 +23,12 @@
       }
     ],
     "complete_sector_profile": true,
-    "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa"
+    "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa",
+    "core": true
   },
   "ib:EFA": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ishares.com/us/literature/fact-sheet/efa-ishares-msci-eafe-etf-fund-fact-sheet-en-us.pdf",
     "components": [
       {
@@ -47,7 +48,8 @@
         }
       }
     ],
-    "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043"
+    "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043",
+    "core": true
   },
   "ib:MCHI": {
     "as_of_date": "2026-09-30",
@@ -99,31 +101,72 @@
   },
   "ib:EMXC": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf",
     "components": [
       {
         "group": "equity_emerging",
         "share": 1,
-        "sectors": {}
+        "sectors": {
+          "Information Technology": 0.49714113752633166,
+          "Financials": 0.19831477580499549,
+          "Industrials": 0.06209248670879728,
+          "Materials": 0.06108937706891363,
+          "Consumer Discretionary": 0.038118166315578295,
+          "Energy": 0.036814123783729565,
+          "Communication Services": 0.031999197512288094,
+          "Consumer Staples": 0.027083960276858263,
+          "Health Care": 0.01966094894171933,
+          "Utilities": 0.018958772193800783,
+          "Real Estate": 0.008727053866987662
+        }
       }
-    ]
+    ],
+    "sector_source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf; iShares fund page \"Sector Breakdown\", % of market value as of 2026-10-27; the 0.31% cash and/or derivatives row is excluded and the 11 GICS sectors are renormalized (raw sum 99.69%)",
+    "complete_sector_profile": true
   },
   "ib:KWEB": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
-    "source": "https://kraneshares.com/etf/kweb/",
+    "reviewed_at": "2026-10-28",
+    "source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf (fund details, sector breakdown and Top 10 Holdings as of 09/30/2026)",
     "components": [
       {
         "group": "equity_china",
         "share": 1,
-        "sectors": {}
+        "sectors": {
+          "Consumer Discretionary": 0.35769423558897245,
+          "Communication Services": 0.3449624060150376,
+          "Information Technology": 0.1432581453634085,
+          "Industrials": 0.05443609022556391,
+          "Consumer Staples": 0.04601503759398496,
+          "Real Estate": 0.04421052631578948,
+          "Financials": 0.009423558897243106
+        }
       }
     ],
     "themes": [
       "ai"
     ],
-    "theme_source": "https://kraneshares.com/etf/kweb/"
+    "theme_source": "https://kraneshares.com/etf/kweb/",
+    "sector_source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf; KWEB factsheet \"Sector Breakdown\", data from Bloomberg as of 09/30/2026; fractions renormalized from the raw 99.75% table sum (0.25% unclassified remainder)",
+    "complete_sector_profile": true,
+    "holdings": {
+      "issuers": {
+        "tencent": 0.1033,
+        "alibaba": 0.0855,
+        "pdd": 0.0814,
+        "meituan": 0.0697,
+        "netease": 0.0663,
+        "lenovo": 0.0616,
+        "ke_holdings": 0.044,
+        "jd_com": 0.0387,
+        "trip_com": 0.0347,
+        "baidu": 0.0319
+      },
+      "coverage": 0.6171,
+      "as_of_date": "2026-09-30",
+      "source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf (Top 10 Holdings as of 09/30/2026, excluding cash; issuer shares of fund NAV; coverage = top-10 sum)"
+    }
   },
   "ib:SHV": {
     "as_of_date": "2026-09-30",
@@ -452,7 +495,7 @@
   },
   "ib:9988": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
       {
@@ -462,11 +505,12 @@
           "Consumer Discretionary": 1
         }
       }
-    ]
+    ],
+    "issuer": "alibaba"
   },
   "ib:BABA": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
       {
@@ -476,7 +520,8 @@
           "Consumer Discretionary": 1
         }
       }
-    ]
+    ],
+    "issuer": "alibaba"
   },
   "ib:BRK-B": {
     "as_of_date": "2026-09-30",
@@ -491,5 +536,109 @@
         }
       }
     ]
+  },
+  "ib:VOO": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://investor.vanguard.com/investment-products/etfs/profile/voo; sector shares reflect the S&P 500 index profile recorded for ib:SPY (same underlying index as of 2026-09-30; Vanguard fund factsheet not fetched)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3970205958808238,
+          "Financials": 0.11397720455908818,
+          "Communication Services": 0.09948010397920415,
+          "Health Care": 0.09258148370325933,
+          "Consumer Discretionary": 0.08598280343931212,
+          "Industrials": 0.08048390321935613,
+          "Consumer Staples": 0.043691261747650464,
+          "Energy": 0.03399320135972805,
+          "Utilities": 0.018796240751849626,
+          "Real Estate": 0.016996600679864023,
+          "Materials": 0.016996600679864023
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true
+  },
+  "ib:VTI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.schwab.com/research/etfs/etfrc/vti; Schwab ETF report \"Sector Weightings\", % of assets as of 2026-04-28; fractions renormalized from the raw 100.1% table sum (0.1% rounding), reviewed against the Vanguard fund page",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.37462537462537465,
+          "Financials": 0.1178821178821179,
+          "Health Care": 0.0999000999000999,
+          "Communication Services": 0.0919080919080919,
+          "Industrials": 0.0919080919080919,
+          "Consumer Discretionary": 0.08591408591408592,
+          "Consumer Staples": 0.04195804195804196,
+          "Energy": 0.03596403596403597,
+          "Real Estate": 0.02097902097902098,
+          "Materials": 0.01998001998001998,
+          "Utilities": 0.01898101898101898
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true
+  },
+  "ib:VT": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.schwab.com/research/etfs/etfrc/vt; Schwab ETF report \"Sector Weightings\", % of assets as of 2026-02-27; fractions renormalized from the raw 100.1% table sum (0.1% rounding); VT maps wholly to the equity_us group (recorded simplification: one group carries the global fund)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3146853146853147,
+          "Financials": 0.16083916083916086,
+          "Industrials": 0.11188811188811189,
+          "Health Care": 0.08591408591408592,
+          "Consumer Discretionary": 0.08491508491508493,
+          "Communication Services": 0.07292707292707293,
+          "Consumer Staples": 0.04395604395604396,
+          "Materials": 0.04095904095904096,
+          "Energy": 0.03996003996003996,
+          "Utilities": 0.022977022977022976,
+          "Real Estate": 0.02097902097902098
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true
+  },
+  "ib:ACWI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf; iShares fund page \"Sector Breakdown\", % of market value as of 2026-10-27; the 0.37% cash and/or derivatives row is excluded and the 11 GICS sectors are renormalized (raw sum 99.62%); ACWI maps wholly to the equity_us group (recorded simplification: one group carries the global fund)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3206183497289701,
+          "Financials": 0.16332061834972897,
+          "Industrials": 0.10158602690222845,
+          "Health Care": 0.08964063441076088,
+          "Consumer Discretionary": 0.08552499498092751,
+          "Communication Services": 0.07357960248945994,
+          "Consumer Staples": 0.04928729170849227,
+          "Energy": 0.043264404738004414,
+          "Materials": 0.03453121863079703,
+          "Utilities": 0.023790403533427023,
+          "Real Estate": 0.014856454527203373
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true
   }
 }

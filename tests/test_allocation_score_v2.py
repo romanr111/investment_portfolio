@@ -182,7 +182,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(result['data']['HOLY_GRAIL_DATA'], before['data']['HOLY_GRAIL_DATA'])
         q = result['data']['DIVERSIFICATION_DATA']
         self.assertIn('allocation_score_v2', q)
-        self.assertEqual({k: v for k, v in q.items() if k != 'allocation_score_v2'}, before['data']['DIVERSIFICATION_DATA'])
+        self.assertEqual({k: v for k, v in q.items() if k not in ('allocation_score_v2', 'concentration_v1')}, before['data']['DIVERSIFICATION_DATA'])
         self.assertIn('allocation_score_v2_enrichment', result)
 
     def test_replay_rejects_cleared_leverage_guard_in_frozen_evidence(self):
