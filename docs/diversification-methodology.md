@@ -51,7 +51,8 @@ Historical records embed their calibration and profiles. `allocation.profiles`
 contained exact dated private confirmations (e.g. the individual Treasury and
 identity-bound Car Resale). Unknown instruments require explicit profiles;
 regional exposure is not inferred from currency, listing venue or broker bucket.
-Historical replay adds this block while preserving older saved analytics.
+Historical v1 records already contain this block. New enrichment calculates v2
+and preserves existing historical analytics; it does not regenerate v1.
 Normal pipeline enrichment collects unique histories once before persistence.
 HTML/Sheets display the same saved result; output rendering neither fetches nor
 recalculates it. Integrity validation checks frozen inputs; an explicit replay
@@ -75,7 +76,9 @@ The standalone historical writer uses the same saved view and checks the
 snapshot envelope date against the indicator before authentication or writing.
 
 
-Previous headline: the independent `DIVERSIFICATION_DATA.indicator` described in
+The following count, policy, and indicator sections describe historical saved
+records only; their original calculators are retired. The previous headline was
+the independent `DIVERSIFICATION_DATA.indicator` described in
 "Simple Holy Grail indicator (v1)" below. The ten-check policy sections document
 legacy diagnostics and do not gate the current headline.
 
@@ -115,8 +118,8 @@ its values and percentage-to-15 headline must not be mixed into new-method trend
 
 ## Ten-check policy
 
-`diversification_policy_v1` defaults below are editable private policy inputs,
-not Dalio's thresholds or the user's personal loss limits.
+`diversification_policy_v1` used the defaults below as editable private policy
+inputs, not Dalio's thresholds or the user's personal loss limits.
 
 | Check | Pass threshold |
 |---|---|
@@ -242,13 +245,13 @@ Ukraine operating risks remain omitted. Do not manufacture residual returns.
 Actual listing currency, quote units and historical FX are handled by the
 existing shared collector; do not add dividends again to adjusted histories.
 
-New `DIVERSIFICATION_DATA` saves count/policy versions, score bounds, ten checks,
-confidence, coverage/reserves, scenarios, dates, qualifications and input/config/
-history/policy fingerprints. The pipeline calculates before persistence and
-reuses one bounded history collection. Both outputs only render saved data.
-Invalid or mismatched new blocks withhold results. Never reuse a changed-input
-score. Private data/evidence remain ignored; public views whitelist generic
-labels, percentages and counts. No trades or automatic reallocation are included.
+Historical `DIVERSIFICATION_DATA` records contain count/policy versions, score
+bounds, ten checks, confidence, coverage/reserves, scenarios, dates,
+qualifications and input/config/history/policy fingerprints. Reports and Sheets
+render the saved records. Invalid or mismatched blocks withhold results. Never
+reuse a changed-input score. Private data/evidence remain ignored; public views
+whitelist generic labels, percentages and counts. No trades or automatic
+reallocation are included.
 
 Historical enrichment uses `just holy-grail --snapshot ... --output ... --offline`
 and an explicit HTML `--after` path. Originals/latest pointers remain unchanged.
@@ -258,9 +261,9 @@ are retrospective; observation dates do not imply publication-date availability.
 
 ## Simple Holy Grail indicator (v1)
 
-`DIVERSIFICATION_DATA.indicator` is the primary risk-equivalent count. It is
-independent of the old ten-check score. The pipeline reuses the same collected
-monthly USD histories; reports and Sheets only render the frozen saved block.
+`DIVERSIFICATION_DATA.indicator` was the primary risk-equivalent count, independent
+of the ten-check score. Reports and Sheets render the frozen saved block; new
+enrichment no longer calculates it.
 HYG is a disclosed lending/P2P proxy; US used-car CPI is a disclosed Car Resale
 valuation proxy, not actual business return. Compare the direct-only count on
 the identical monthly observations. The 36-month comparison requires all 36
@@ -299,7 +302,7 @@ All Cash/reserves yields not-applicable, never an achieved-diversification claim
 Old blocks remain readable as prior models; malformed new blocks never fall
 back to old scores. Frozen fingerprints do not consult today's configuration.
 
-Historical replay preserves originals/latest pointers and financial fields:
+Adding v2 to a historical snapshot preserves originals/latest pointers and financial fields:
 
 ```bash
 just holy-grail --snapshot SOURCE --output NEW_DERIVED_PATH --config PRIVATE_CONFIG --offline

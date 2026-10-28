@@ -165,8 +165,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail_data import enrich_combined_data, enrich_snapshot_file
         data, settings, histories = allocation_fixture()
-        from tests.test_holy_grail_data import legacy_enrich
-        old = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import saved_legacy_fixture
+        old = saved_legacy_fixture('allocation')
         payload = {'as_of_date': '2026-09-30', 'data': old, 'holy_grail_enrichment': {'prior': True}}
         before = deepcopy(payload)
         settings['method_version'] = 'capital_diversification_v2'
@@ -505,8 +505,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from tests.test_allocation_score import allocation_fixture
         from analytics.diversification_view import saved_diversification_view
         data, settings, histories = allocation_fixture()
-        from tests.test_holy_grail_data import legacy_enrich
-        saved = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import saved_legacy_fixture
+        saved = saved_legacy_fixture('allocation')
         view = saved_diversification_view(saved)
         self.assertIn('Попередня методика capital_diversification_v1', str(view))
 
@@ -528,8 +528,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail_data import enrich_combined_data
         data, settings, histories = allocation_fixture()
-        from tests.test_holy_grail_data import legacy_enrich
-        old = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import saved_legacy_fixture
+        old = saved_legacy_fixture('allocation')
         old['DIVERSIFICATION_DATA']['custom_history'] = {'nested': ['preserve']}
         before = deepcopy(old['DIVERSIFICATION_DATA'])
         settings['method_version'] = 'capital_diversification_v2'

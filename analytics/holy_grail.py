@@ -1,24 +1,13 @@
-"""Pure, versioned progress toward risk-balanced independent return streams.
-
-This is a statistical model, not Dalio's proprietary methodology or a forecast.
-Collection and output adapters must not recalculate its saved results.
-"""
-from datetime import datetime, timezone
+"""Fingerprints and historical progress views for saved portfolio records."""
+from datetime import datetime
 from decimal import Decimal
 import hashlib
 import json
 import math
 
-import numpy as np
 import pandas as pd
 
-from analytics.dalio_holy_grail import (
-    correlation_clusters,
-    portfolio_variance_contributions,
-)
-
 METHOD_VERSION = "holy_grail_progress_v1"
-TARGET_STREAMS = 15
 
 
 def fingerprint(value):
@@ -53,176 +42,6 @@ def completed_month_end(as_of_date):
     if stamp != month.end_time.normalize():
         month -= 1
     return month.end_time.normalize()
-
-
-def qualification_reviewed(record):
-    required = ("rationale", "costs", "principal_risks", "reviewer", "reviewed_at")
-    if not isinstance(record, dict) or record.get("status") != "reviewed":
-        return False
-    if not all(isinstance(record.get(key), str) and record[key].strip() for key in required):
-        return False
-    try:
-        reviewed = datetime.fromisoformat(record["reviewed_at"])
-        if reviewed.tzinfo is not None:
-            reviewed = reviewed.astimezone(timezone.utc)
-        if reviewed.date() > datetime.now(timezone.utc).date():
-            return False
-    except ValueError:
-        return False
-    return True
-
-
-def _statistics(frame, values):
-    covariance = frame.cov().to_numpy(dtype=float)
-    sigma = np.sqrt(np.diag(covariance))
-    if not np.isfinite(covariance).all() or (sigma <= 0).any():
-        return None
-    weights = np.asarray(values, dtype=float)
-    variance, contributions = portfolio_variance_contributions(weights, covariance)
-    gross_risk = float((np.abs(weights) * sigma).sum())
-    if variance <= gross_risk ** 2 * 1e-12:
-        return None
-    risk_total = float(np.abs(contributions).sum())
-    if risk_total <= 0:
-        return None
-    shares = np.abs(contributions) / risk_total
-    correlation = covariance / np.outer(sigma, sigma)
-    correlation = np.clip(correlation, -1.0, 1.0)
-    effective = float(1.0 / (shares @ np.square(correlation) @ shares))
-    clusters = correlation_clusters(pd.DataFrame(correlation, index=frame.columns, columns=frame.columns))
-    cluster_risk = pd.Series(shares, index=frame.columns).groupby(clusters).sum()
-    return {
-        "effective_streams": effective,
-        "max_cluster_risk_share_pct": float(cluster_risk.max() * 100),
-        "cluster_count": int(len(cluster_risk)),
-        "risk_shares": dict(zip(frame.columns, (shares * 100).tolist())),
-        "diversification_ratio": float(gross_risk / math.sqrt(variance)),
-    }
-
-
-def calculate_progress(exposures, monthly_returns, *, as_of_date, total_assets,
-                       cash_value=0.0, input_flags=(), config_hash="", generated_at=None):
-    """Calculate a JSON-safe summary from dated holdings and monthly USD returns.
-
-    Exposure dictionaries carry id, series, value_usd, category, kind,
-    weak_proxy and qualification. Missing exposures remain in coverage totals.
-    Identical series are aggregated before estimating risk.
-    """
-    cutoff = completed_month_end(as_of_date)
-    flags = set(input_flags)
-    result = {
-        "method_version": METHOD_VERSION, "as_of_date": str(as_of_date),
-        "calculated_at": generated_at or datetime.now(timezone.utc).isoformat(),
-        "return_window_start": None, "return_window_end": None,
-        "observation_count": 0, "effective_streams": None,
-        "estimated_progress_pct": None, "target_streams": TARGET_STREAMS,
-        "target_range": [15, 20], "target_achieved": False,
-        "qualification_status": "pending", "status": "unavailable",
-        "scope": "covered_subset", "modeled": any(e.get("kind") == "proxy" for e in exposures),
-        "coverage": {"direct_pct": 0.0, "proxy_pct": 0.0, "uncovered_pct": 0.0, "cash_pct": 0.0},
-        "concentration": {}, "stability": {}, "constraints": [],
-        "input_fingerprint": None,
-        "configuration_fingerprint": config_hash,
-    }
-    if not math.isfinite(float(total_assets)) or total_assets <= 0:
-        result["constraints"] = ["invalid_portfolio_total"]
-        return result
-    total_assets, cash_value = float(total_assets), float(cash_value)
-    try:
-        values = [float(e["value_usd"]) for e in exposures]
-    except (ValueError, TypeError, KeyError):
-        values = [math.nan]
-    if not all(math.isfinite(v) and v >= 0 for v in values) or not math.isfinite(cash_value) or cash_value < 0:
-        result["constraints"] = ["invalid_or_short_exposure"]
-        return result
-    if "unsupported_borrowing" in flags:
-        result["constraints"] = sorted(flags)
-        return result
-    result["input_fingerprint"] = fingerprint({"exposures": exposures, "as_of_date": as_of_date})
-    # DataSource truncates TOTAL_ASSETS to whole USD; components retain cents.
-    if abs(sum(values) + cash_value - total_assets) > max(1.0, total_assets * 1e-6):
-        flags.add("unreconciled_valuations")
-    coverage = result["coverage"]
-    coverage["cash_pct"] = cash_value / total_assets * 100
-    active = [e for e in exposures if e["value_usd"] > 0]
-    if not active and abs(cash_value - total_assets) <= 0.02:
-        result.update(effective_streams=0.0, estimated_progress_pct=0.0, status="available",
-                      scope="whole_portfolio", qualification_status="not_applicable")
-        result["constraints"] = sorted(flags | {"cash_has_no_independent_streams"})
-        return result
-
-    frame = monthly_returns.copy()
-    frame.index = pd.to_datetime(frame.index).tz_localize(None).normalize()
-    if frame.index.has_duplicates or not frame.index.is_month_end.all():
-        flags.add("invalid_monthly_history")
-        frame = pd.DataFrame()
-    else:
-        frame = frame.loc[frame.index <= cutoff].sort_index()
-        # Restrict the calendar window, not merely the number of nonmissing rows.
-        frame = frame.loc[frame.index.to_period("M") >= cutoff.to_period("M") - 59]
-        frame = frame.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
-
-    grouped = {}
-    for exposure in active:
-        series = exposure.get("series")
-        eligible = (series in frame.columns and frame[series].notna().sum() >= 36
-                    and frame[series].dropna().std() > 0)
-        kind = exposure.get("kind", "direct")
-        if eligible:
-            coverage["proxy_pct" if kind == "proxy" else "direct_pct"] += exposure["value_usd"] / total_assets * 100
-            grouped[series] = grouped.get(series, 0.0) + exposure["value_usd"]
-        else:
-            coverage["uncovered_pct"] += exposure["value_usd"] / total_assets * 100
-        if not qualification_reviewed(exposure.get("qualification")):
-            flags.add("qualification_pending")
-        if exposure.get("weak_proxy"):
-            flags.add("weak_proxy")
-        flags.update(exposure.get("risk_flags", []))
-    for key in coverage:
-        coverage[key] = round(coverage[key], 10)
-    if coverage["uncovered_pct"] > 1e-8:
-        flags.add("uncovered_exposures")
-    else:
-        result["scope"] = "whole_portfolio"
-    result["qualification_status"] = "pending" if "qualification_pending" in flags else "reviewed"
-    if not grouped:
-        result["constraints"] = sorted(flags | {"insufficient_history"})
-        return result
-    aligned = frame[list(grouped)].dropna()
-    result["observation_count"] = len(aligned)
-    if len(aligned) < 36:
-        result["constraints"] = sorted(flags | {"insufficient_common_history"})
-        return result
-    if aligned.index[-1] != cutoff:
-        flags.add("stale_return_history")
-    if len(aligned) < 60:
-        flags.add("short_history")
-    statistics = _statistics(aligned, list(grouped.values()))
-    recent_frame = aligned.loc[aligned.index.to_period("M") >= cutoff.to_period("M") - 35]
-    recent = _statistics(recent_frame, list(grouped.values())) if len(recent_frame) == 36 else None
-    if statistics is None:
-        result["constraints"] = sorted(flags | {"degenerate_covariance"})
-        return result
-    count = statistics["effective_streams"]
-    stability_ratio = recent["effective_streams"] / count if recent else None
-    if statistics["max_cluster_risk_share_pct"] > 10.0 + 1e-9:
-        flags.add("risk_concentration")
-    if stability_ratio is None:
-        flags.add("insufficient_recent_history")
-    elif stability_ratio < 0.75:
-        flags.add("unstable_diversification")
-    result.update(
-        return_window_start=aligned.index[0].date().isoformat(),
-        return_window_end=aligned.index[-1].date().isoformat(),
-        effective_streams=count,
-        estimated_progress_pct=min(100.0, 100.0 * count / TARGET_STREAMS),
-        concentration=statistics,
-        stability={"recent_36m_effective_streams": recent["effective_streams"] if recent else None, "ratio": stability_ratio},
-        target_achieved=bool(count >= TARGET_STREAMS - 1e-9 and not flags),
-        status="provisional" if flags else "available",
-        constraints=sorted(flags),
-    )
-    return result
 
 
 CONSTRAINT_LABELS = {

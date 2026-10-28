@@ -9,10 +9,8 @@ from pathlib import Path
 import json
 import math
 
-import pandas as pd
-
 from analytics.allocation_score import (VERSION, correlation_map, history_frame,
-    history_payload, monthly_window, pair_correlations, score_components, validate_calibration)
+    pair_correlations, score_components, validate_calibration)
 from analytics.holy_grail import fingerprint
 from analytics.diversification_inputs import quality_inputs_fingerprint
 
@@ -111,125 +109,6 @@ def allocation_history_requests(positions, config, as_of_date):
 def _seal(result):
     result['result_fingerprint'] = fingerprint({k:v for k,v in result.items() if k != 'result_fingerprint'})
     return result
-
-
-def calculate_allocation_score(data, positions, cash, returns, config, as_of_date, flags=(), provenance=None):
-    """One persisted calculation with complete private replay inputs."""
-    result = dict(version=VERSION, scope='invested_assets', as_of_date=as_of_date,
-                  status='unavailable', score=None, raw_score=None, display_score=None,
-                  sensitivity_score=None, sensitivity_display_score=None, warnings=[],
-                  groups=[], pairs=[], sectors={}, profiles=[], coverage={},
-                  holdings_fingerprint=quality_inputs_fingerprint(data))
-    try:
-        config = deepcopy(config)
-        if not validate_calibration(config['calibration']):
-            raise ValueError('invalid_calibration')
-        config['group_definitions'] = {g:dict(label=label,representative=symbol)
-                                       for g,(label,symbol) in GROUPS.items()}
-        result.update(configuration=config, configuration_fingerprint=fingerprint(config),
-                      calibration_fingerprint=config['calibration']['fingerprint'],
-                      source_provenance=deepcopy(provenance or {}))
-        total = float(data['TOTAL_ASSETS']); cash = float(cash)
-        flags = set(flags)
-        breakdown = data.get('CASH_DATA',{}).get('Breakdown',{}) or {}
-        excluded_cash_keys = {'debt','manual_reconciliation'}
-        investment_cash = [v for k,v in breakdown.items() if k not in excluded_cash_keys]
-        investment_cash.append(data.get('IB_DATA',{}).get('Net_cash',0))
-        has_margin = any(float(v)<0 for v in investment_cash)
-        excluded_liability = any(float(v)<0 for k,v in breakdown.items() if k in excluded_cash_keys)
-        if has_margin:
-            flags.add('unsupported_borrowing')
-        elif excluded_liability:
-            # These typed ledger rows belong to the Cash scope explicitly
-            # excluded by this score. Preserve the stricter legacy diagnostics.
-            flags.discard('unsupported_borrowing')
-            flags.add('cash_liabilities_outside_scope')
-        values = [float(p['value_usd']) for p in positions]
-        if (not math.isfinite(total) or total <= 0 or not math.isfinite(cash) or cash < 0
-                or any(not math.isfinite(v) or v < 0 for v in values)):
-            raise ValueError('invalid_valuation')
-        if abs(sum(values)+cash-total) > max(1., total*1e-6):
-            raise ValueError('unreconciled_valuations')
-        if set(flags) & FATAL_FLAGS:
-            raise ValueError(sorted(set(flags)&FATAL_FLAGS)[0])
-        risk_records = config.get('unsupported_ids', [])
-        quantities = [r.get('quantity') for r in data.get('POSITION_DATA',{}).get('crypto',[])]
-        for rows in data.get('ENHANCED_STOCKS',{}).values():
-            if isinstance(rows,dict):
-                quantities.extend(r.get('quantity') for r in rows.values() if isinstance(r,dict))
-        if any(float(v)<0 for v in quantities if v is not None):
-            raise ValueError('unsupported_risk')
-        if any(p.get('unsupported_risk') or p['category']=='Short Selling' or p['id'] in risk_records for p in positions):
-            raise ValueError('unsupported_risk')
-        invested = sum(values)
-        result['coverage'] = dict(cash_pct_nav=cash/total*100, invested_pct_nav=invested/total*100,
-                                  unknown_pct_invested=0., missing_pair_max_points=0.)
-        frozen_frame = monthly_window(returns, as_of_date)
-        if invested == 0:
-            result.update(status='not_applicable')
-            return _seal(result)
-        amounts, sector_amounts = {}, {}
-        unknown, model_value = 0., 0.
-        for position, value in zip(positions, values):
-            if value == 0:
-                continue
-            profile = profile_for(position, config, as_of_date)
-            if profile is None:
-                unknown += value
-                amounts['unknown'] = amounts.get('unknown',0.)+value
-                continue
-            result['profiles'].append(dict(position_id=position['id'], definition=profile))
-            model_value += value if position.get('kind')=='proxy' or any(c['group']=='car_business' for c in profile['components']) else 0.
-            for c in profile['components']:
-                g=c['group'];amount=value*c['share']
-                amounts[g]=amounts.get(g,0.)+amount
-                if g.startswith('equity_'):
-                    counts=sector_amounts.setdefault(g,{})
-                    for k,s in c.get('sectors',{}).items(): counts[k]=counts.get(k,0.)+amount*s
-            if 'ai' in profile.get('themes',[]):
-                result['warnings'].append('confirmed_ai_theme')
-        weights={g:v/invested for g,v in amounts.items() if v > 0}
-        sectors={g:{k:v/amounts[g] for k,v in rows.items()} for g,rows in sector_amounts.items()}
-        group_frame=pd.DataFrame(index=frozen_frame.index)
-        for g in weights:
-            series='yf:'+GROUPS[g][1] if g in GROUPS and GROUPS[g][1] else None
-            if series in frozen_frame: group_frame[g]=frozen_frame[series]
-        group_frame=history_frame(history_payload(group_frame))
-        pairs=pair_correlations(group_frame,weights,as_of_date,business=['car_business'])
-        # Unknown profiles cannot receive the business-model independence bonus.
-        for p in pairs:
-            if 'unknown' in (p['left'],p['right']): p.update(correlation=None,kind='missing',observations=0,months=[],last_month=None)
-        coefficient=config['calibration']['coefficient']
-        uncertainty=2*coefficient*sum(weights[p['left']]*weights[p['right']] for p in pairs if p['correlation'] is None)
-        result['coverage'].update(unknown_pct_invested=unknown/invested*100, missing_pair_max_points=uncertainty,
-                                  modeled_pct_invested=model_value/invested*100)
-        result.update(groups=[dict(id=g,weight=weights[g]) for g in sorted(weights)],sectors=sectors,pairs=pairs,
-                      histories=history_payload(group_frame),history_fingerprint=fingerprint(history_payload(group_frame)),
-                      positions=deepcopy(positions),cash_value=cash,input_flags=sorted(flags),
-                      window_start=frozen_frame.index[0].date().isoformat(),window_end=frozen_frame.index[-1].date().isoformat())
-        if unknown/invested > .05+1e-12 or uncertainty > 5+1e-10:
-            raise ValueError('insufficient_coverage')
-        components=score_components(weights,correlation_map(pairs),sectors,coefficient)
-        sensitivity=[dict(p,correlation=.75) if p['kind']=='modeled' else p for p in pairs]
-        business=weights.get('car_business',0)>0
-        result.update(components)
-        if business:
-            alternate=score_components(weights,correlation_map(sensitivity),sectors,coefficient)
-            result.update(sensitivity_score=alternate['score'],sensitivity_display_score=alternate['display_score'])
-        warnings=result['warnings']
-        if unknown: warnings.append('unknown_profiles')
-        if uncertainty: warnings.append('unknown_correlations')
-        if set(flags)&BALANCE_FLAGS: warnings.append('partial_or_cached_valuations')
-        if 'cash_liabilities_outside_scope' in flags: warnings.append('cash_liabilities_outside_scope')
-        if any(p['kind']=='measured' and (p['observations']<60 or p['last_month']!=result['window_end']) for p in pairs):
-            warnings.append('partial_pair_history')
-        if any(sum(s.values()) < 1-1e-8 for s in sectors.values()): warnings.append('unknown_sectors')
-        result.update(status='provisional' if warnings else 'modeled',warnings=sorted(set(warnings)))
-    except (ValueError,TypeError,KeyError,AttributeError,OverflowError) as error:
-        code=str(error) if str(error) in (FATAL_FLAGS|{'invalid_calibration','unsupported_risk','insufficient_coverage'}) else 'invalid_inputs'
-        result.update(status='unavailable',score=None,raw_score=None,display_score=None,
-                      sensitivity_score=None,sensitivity_display_score=None,warnings=[code])
-    return _seal(result)
 
 
 def validate_saved_allocation(result, data, expected_date=None, *, replay=True):

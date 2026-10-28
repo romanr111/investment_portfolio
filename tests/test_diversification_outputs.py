@@ -5,15 +5,14 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
-import test_diversification_inputs as input_cases
+from test_holy_grail_data import saved_legacy_fixture
 import test_holy_grail_outputs as legacy_cases
 from test_holy_grail_outputs import sheet_table
 
 
 class QualityOutputTests(unittest.TestCase):
     def saved(self):
-        from test_holy_grail_data import snapshot_fixture
-        saved = input_cases.QualityInputTests().enrich(snapshot_fixture())
+        saved = saved_legacy_fixture()
         saved["DIVERSIFICATION_DATA"].pop("indicator", None)
         return saved
 
@@ -37,8 +36,8 @@ class QualityOutputTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 data = snapshot_fixture()
                 data['IB_DATA']['Stocks']['asset_0'] += extra
-                saved = input_cases.QualityInputTests().enrich(data)
-                saved['DIVERSIFICATION_DATA'].pop('indicator', None)
+                saved = data
+                saved['DIVERSIFICATION_DATA'] = saved_legacy_fixture('quality_'+str(extra))
                 quality = saved['DIVERSIFICATION_DATA']
                 self.assertAlmostEqual(sum(quality['coverage'].values()), 100)
                 view = saved_diversification_view(saved)

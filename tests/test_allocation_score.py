@@ -85,12 +85,9 @@ def allocation_fixture():
 
 
 class AllocationIntegrationTests(unittest.TestCase):
-    def saved(self, data=None, settings=None, history=None):
-        from test_holy_grail_data import legacy_enrich as enrich_combined_data
-        original,config,returns=allocation_fixture()
-        return enrich_combined_data(data if data is not None else original,
-            config={'allocation':settings if settings is not None else config},
-            monthly_returns=history if history is not None else returns,allow_network=False)
+    def saved(self, name='allocation'):
+        from test_holy_grail_data import saved_legacy_fixture
+        return saved_legacy_fixture(name)
 
     def test_saved_result_replays_and_stale_or_corrupt_data_never_falls_back(self):
         from analytics.allocation_inputs import validate_saved_allocation
@@ -103,36 +100,6 @@ class AllocationIntegrationTests(unittest.TestCase):
         q['score']=99
         self.assertEqual(saved_diversification_view(saved)['headline'],'Дані недоступні')
 
-    def test_rounding_unknowns_and_cached_balances_have_explicit_statuses(self):
-        for delta in [-.99,.99,-1.01,1.01]:
-            data,_,_=allocation_fixture();data['TOTAL_ASSETS']+=delta
-            q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-            self.assertEqual(q['score'] is not None,abs(delta)<1)
-        data,settings,_=allocation_fixture();data['DATA_QUALITY']={'crypto':{'freshness':'stale'}}
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertEqual(q['status'],'provisional')
-        self.assertIsNotNone(q['score'])
-
-    def test_unknown_position_stays_in_denominator_and_can_block_main_score(self):
-        data,_,_=allocation_fixture();data['IB_DATA']['Stocks']['UNMAPPED']=.01;data['TOTAL_ASSETS']+=.01
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertIsNotNone(q['score']);self.assertGreater(q['coverage']['unknown_pct_invested'],0)
-        data['IB_DATA']['Stocks']['UNMAPPED']=10;data['TOTAL_ASSETS']=120
-        self.assertIsNone(self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']['score'])
-
-    def test_all_cash_and_one_known_asset_need_no_fake_correlations(self):
-        data,_,_=allocation_fixture();data['IB_DATA']={};data['CASH_DATA']['Total']=110
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertEqual(q['status'],'not_applicable');self.assertIsNone(q['score'])
-        data['IB_DATA']={'Stocks':{'SPY':100}};data['CASH_DATA']['Total']=10
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertGreater(q['score'],0);self.assertLessEqual(q['score'],25)
-
-    def test_split_accounts_and_identical_lookthrough_cannot_change_score(self):
-        data,settings,history=allocation_fixture();base=self.saved()['DIVERSIFICATION_DATA']['allocation_score']['score']
-        data['IB_DATA']['Stocks']={'SPY':45,'DUPLICATE':45}
-        settings['profiles']['ib:DUPLICATE']=settings['profiles']['ib:SPY']
-        self.assertEqual(self.saved(data,settings,history)['DIVERSIFICATION_DATA']['allocation_score']['score'],base)
 
     def test_expired_and_reassigned_profiles_are_uncovered(self):
         from analytics.allocation_inputs import profile_for
@@ -143,27 +110,12 @@ class AllocationIntegrationTests(unittest.TestCase):
         config['profiles']['ib:SPY']['source_identity']={'asset_id':'car-one'}
         self.assertIsNone(profile_for(p,config,'2026-09-30'))
 
-    def test_business_sensitivity_uses_the_same_fixed_coefficient(self):
-        data,settings,history=allocation_fixture()
-        data['POSITION_DATA']['other_assets']=[dict(asset_id='car-one',carrying_value_usd=30)]
-        data['TOTAL_ASSETS']+=30
-        settings['profiles']['other_assets:0']=dict(as_of_date='2026-09-30',source='user confirmed model',
-            source_identity={'asset_id':'car-one'},components=[dict(group='car_business',share=1)])
-        q=self.saved(data,settings,history)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertIsNotNone(q['sensitivity_score'])
-        self.assertLess(q['sensitivity_score'],q['score'])
-        self.assertEqual(q['calibration_fingerprint'],settings['calibration']['fingerprint'])
 
     def test_full_replay_rejects_incorrect_business_sensitivity_even_with_valid_seal(self):
         from copy import deepcopy
         from analytics.allocation_inputs import validate_saved_allocation
         from analytics.holy_grail import fingerprint
-        data,settings,history=allocation_fixture()
-        data['POSITION_DATA']['other_assets']=[dict(asset_id='car-one',carrying_value_usd=30)]
-        data['TOTAL_ASSETS']+=30
-        settings['profiles']['other_assets:0']=dict(as_of_date='2026-09-30',source='confirmed business model',
-            source_identity={'asset_id':'car-one'},components=[dict(group='car_business',share=1)])
-        saved=self.saved(data,settings,history)
+        saved=self.saved('business')
         self.assertTrue(validate_saved_allocation(saved['DIVERSIFICATION_DATA']['allocation_score'],saved))
         for field in ['sensitivity_score','sensitivity_display_score']:
             with self.subTest(field=field):
@@ -193,43 +145,28 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_private_sources_and_usd_values_are_not_published(self):
         from test_holy_grail_outputs import HolyGrailOutputTests
-        data,settings,history=allocation_fixture()
-        settings['profiles']['ib:SPY']['source']='https://private.example/SECRET-CONFIRMATION'
-        saved=self.saved(data,settings,history)
+        from analytics.holy_grail import fingerprint
+        saved=self.saved()
+        q=saved['DIVERSIFICATION_DATA']['allocation_score']
+        q['source_provenance']={'private': 'SECRET-CONFIRMATION'}
+        q['result_fingerprint']=fingerprint({k:v for k,v in q.items() if k!='result_fingerprint'})
         html=HolyGrailOutputTests().html(saved)
         self.assertNotIn('SECRET-CONFIRMATION',html)
 
     def test_cash_only_liability_and_accounting_adjustment_are_outside_score_but_margin_blocks(self):
-        data,_,_=allocation_fixture()
+        from analytics.holy_grail_data import enrich_combined_data
+        data,settings,history=allocation_fixture()
         data['CASH_DATA']['Breakdown']={'ib_cash':20,'debt':-1,'manual_reconciliation':-9}
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
+        q=enrich_combined_data(data,config={'allocation':settings},monthly_returns=history,
+                               allow_network=False)['DIVERSIFICATION_DATA']['allocation_score_v2']
         self.assertIsNotNone(q['score'])
         self.assertIn('cash_liabilities_outside_scope',q['warnings'])
         data['CASH_DATA']['Breakdown']['ib_cash']=-1
-        self.assertIsNone(self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']['score'])
+        q=enrich_combined_data(data,config={'allocation':settings},monthly_returns=history,
+                               allow_network=False)['DIVERSIFICATION_DATA']['allocation_score_v2']
+        self.assertIsNone(q['score'])
+        self.assertIn('unsupported_borrowing',q['warnings'])
 
-    def test_pair_uncertainty_gate_blocks_even_under_five_percent_unknown_capital(self):
-        data,_,_=allocation_fixture();data['IB_DATA']['Stocks']['UNMAPPED']=2;data['TOTAL_ASSETS']+=2
-        q=self.saved(data=data)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertLess(q['coverage']['unknown_pct_invested'],5)
-        self.assertGreater(q['coverage']['missing_pair_max_points'],5)
-        self.assertEqual(q['status'],'unavailable')
-
-    def test_partial_and_lagged_pairs_preserve_real_dates_and_never_fill_returns(self):
-        _,_,history=allocation_fixture();history.loc[history.index[-1],'yf:SHV']=np.nan
-        q=self.saved(history=history)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertEqual(q['status'],'provisional')
-        self.assertEqual(q['pairs'][0]['observations'],59)
-        self.assertEqual(q['pairs'][0]['last_month'],'2026-08-31')
-        self.assertIsNone(q['histories']['treasury_short']['2026-09-30T00:00:00.000'])
-
-    def test_future_duplicate_and_non_month_end_histories_are_rejected_or_excluded(self):
-        _,_,history=allocation_fixture()
-        history.loc[pd.Timestamp('2026-10-31')]=10000
-        q=self.saved(history=history)['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertEqual(q['pairs'][0]['observations'],60)
-        history.index=list(history.index[:-1])+[pd.Timestamp('2026-10-15')]
-        self.assertIsNone(self.saved(history=history)['DIVERSIFICATION_DATA']['allocation_score']['score'])
 
     def test_maturity_groups_use_distinct_representatives(self):
         import json
@@ -258,11 +195,16 @@ class AllocationIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(result['DIVERSIFICATION_DATA']['allocation_score_v2']['score'])
 
     def test_signed_quantities_and_nonlinear_risk_cannot_hide_behind_positive_values(self):
+        from analytics.holy_grail_data import enrich_combined_data
         data,settings,history=allocation_fixture()
         data['POSITION_DATA']['crypto']=[{'asset':'BTC','quantity':-1,'value_usd':10}]
         data['TOTAL_ASSETS']+=10
         history['yf:BTC-USD']=history['yf:IAU']
-        self.assertIsNone(self.saved(data,settings,history)['DIVERSIFICATION_DATA']['allocation_score']['score'])
+        q=enrich_combined_data(data,config={'allocation':settings},monthly_returns=history,
+                               allow_network=False)['DIVERSIFICATION_DATA']['allocation_score_v2']
+        self.assertIsNone(q['score'])
+        self.assertIn('unsupported_risk',q['warnings'])
+
 
     def test_sector_count_cannot_exceed_eleven_or_create_more_than_25_points(self):
         from analytics.allocation_score import score_components
@@ -289,8 +231,8 @@ class AllocationIntegrationTests(unittest.TestCase):
         from unittest.mock import patch
         from analytics.holy_grail_data import enrich_combined_data
         data,_,history=allocation_fixture()
-        from test_holy_grail_data import legacy_enrich
-        data = legacy_enrich(data, monthly_returns=history, config={})
+        from test_holy_grail_data import saved_legacy_fixture
+        data = saved_legacy_fixture('allocation')
         with patch('analytics.holy_grail_data.collect_return_history',return_value=(history,{},set())):
             saved=enrich_combined_data(data,config={'allocation':[]},allow_network=False)
         self.assertIsNotNone(saved['HOLY_GRAIL_DATA']['effective_streams'])

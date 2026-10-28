@@ -30,11 +30,6 @@ def portfolio_variance_contributions(weights: np.ndarray, covariance: np.ndarray
     return float(contributions.sum()), contributions
 
 
-def correlation_clusters(correlation: pd.DataFrame, corr_cutoff: float = 0.70):
-    """Share the legacy analyzer's absolute-correlation HAC implementation."""
-    return DalioHolyGrailAnalyzer._hac_clusters_from_correlation(correlation, corr_cutoff)
-
-
 DEFAULT_FACTOR_MAP: Dict[str, str] = {
     "Stocks": "Growth/Risk-On",
     "Other Bets": "Growth/Risk-On",

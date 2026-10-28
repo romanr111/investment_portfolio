@@ -5,9 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from test_holy_grail_data import snapshot_fixture
-from test_holy_grail_progress import exposures, independent_history
-from test_holy_grail_data import legacy_enrich as enrich_combined_data
+from test_holy_grail_data import saved_legacy_fixture
 from src.google_sheets.insights_tables import build_portfolio_tab
 from src.google_sheets.insights_cells import render_blocks
 
@@ -23,11 +21,7 @@ def sheet_table(data):
 
 class HolyGrailOutputTests(unittest.TestCase):
     def saved(self):
-        return enrich_combined_data(
-            snapshot_fixture(), as_of_date="2026-09-30", allow_network=False,
-            monthly_returns=independent_history().rename(columns=lambda s: "yf:" + s),
-            config={"qualifications": {"Stocks": exposures()[0]["qualification"]}},
-        )
+        return saved_legacy_fixture("qualified")
 
     def html(self, data):
         return render_report(build_report_data(_make_analyzer(), "20260930", -6.8, 9.3,

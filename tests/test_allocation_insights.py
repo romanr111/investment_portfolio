@@ -1,17 +1,16 @@
 """The current v2 Sheets pipeline reserves the agreed summary without collisions."""
 import unittest
 
-from test_holy_grail_data import legacy_enrich as enrich_combined_data
+from test_holy_grail_data import saved_legacy_fixture
 from src.google_sheets.insights_tables import build_portfolio_tab
 from src.google_sheets.insights_cells import render_blocks
-from test_allocation_score import allocation_fixture
 
 
 class AllocationInsightsTests(unittest.TestCase):
     def saved(self):
-        data,config,history=allocation_fixture()
+        data=saved_legacy_fixture('allocation')
         data['INDEX_PERFORMANCE']={str(i):dict(name='Benchmark '+str(i),rate_of_return_pct=i) for i in range(5)}
-        return enrich_combined_data(data,config={'allocation':config},monthly_returns=history,allow_network=False)
+        return data
 
     def test_new_summary_keeps_all_benchmarks_and_has_no_overlapping_blocks(self):
         data=self.saved();tab=build_portfolio_tab(data)
