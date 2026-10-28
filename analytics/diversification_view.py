@@ -4,7 +4,7 @@ import math
 
 from analytics.holy_grail import saved_progress_view
 from analytics.diversification_inputs import quality_inputs_fingerprint
-from analytics.diversification_quality import COUNT_VERSION, POLICY_VERSION, CHECK_IDS, summarize_checks
+from analytics.diversification_quality import COUNT_VERSION, POLICY_VERSION, summarize_checks
 
 CHECK_LABELS = dict(family_concentration='Концентрація сімей ризику',issuer_concentration='Концентрація емітента',
                     breadth='Статистична широта',stability='Стійкість за 36 місяців',recession='Рецесія',

@@ -2,8 +2,6 @@
 from copy import deepcopy
 from datetime import date
 
-import pandas as pd
-
 from analytics.holy_grail import fingerprint, holdings_fingerprint, qualification_reviewed
 from analytics.holy_grail_data import bound_exposure_record
 from analytics.diversification_quality import COUNT_VERSION, POLICY_VERSION, calculate_quality

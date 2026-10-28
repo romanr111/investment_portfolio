@@ -13,7 +13,7 @@ import pandas as pd
 
 from analytics.allocation_score import (VERSION, correlation_map, history_frame,
     history_payload, monthly_window, pair_correlations, score_components, validate_calibration)
-from analytics.holy_grail import completed_month_end, fingerprint
+from analytics.holy_grail import fingerprint
 from analytics.diversification_inputs import quality_inputs_fingerprint
 
 GROUPS = {
