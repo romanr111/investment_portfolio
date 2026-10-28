@@ -46,11 +46,10 @@ def allocation_settings(settings):
     config = deepcopy(settings['allocation'])
     if not isinstance(config, dict):
         raise ValueError('Invalid allocation settings')
-    method = config.get('method_version', VERSION)
-    if method not in {VERSION, 'capital_diversification_v2'}:
+    method = config.get('method_version', 'capital_diversification_v2')
+    if method != 'capital_diversification_v2':
         raise ValueError('Unknown allocation method')
-    if method == VERSION and 'calibration' not in config:
-        config['calibration'] = json.loads(MODEL_PATH.read_text())
+    config['method_version'] = method
     public = json.loads(PROFILE_PATH.read_text()) if PROFILE_PATH.exists() else {}
     config['profiles'] = dict(public, **config.get('profiles', {}))
     return config

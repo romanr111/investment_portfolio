@@ -63,26 +63,16 @@ For missing positions, use the same collector with `IB_FLEX_QUERY_ID_PORTFOLIO_S
 
 ### Holy Grail saved-data enrichment
 
-For capital_diversification_v1, prefer validated DIVERSIFICATION_DATA.allocation_score.
-Show one capital-weighted 0-100% score for invested assets, Cash separately,
-the largest economic group and Car Resale correlation sensitivity 0.25/0.75.
-Use the frozen shipped calibration; never fit it to a portfolio or recalculate
-in outputs. Old DR-squared indicators are prior-model diagnostics. Read
-docs/diversification-methodology.md for classification, availability and replay.
+Prefer validated `DIVERSIFICATION_DATA.allocation_score_v2` for new snapshots.
+Show its 0-100 points, Cash separately, and the scenario range and constraints.
+The shared saved view reads historical v1 percentages, DR-squared counts and
+policy checks with their original labels and units. A present invalid v2 result
+must not fall back to a prior result. See `docs/diversification-methodology.md`.
 
-
-If allocation_score is absent, the validated `DIVERSIFICATION_DATA.indicator`
-count is a labeled prior-model diagnostic.
-The legacy ten-check policy below applies to prior diagnostics only; never use
-its unresolved checks to hide a valid new indicator.
-
-The optional `DIVERSIFICATION_DATA` and legacy `HOLY_GRAIL_DATA` blocks are
-calculated once in `DataSource.get_combined_data()` before persistence. Render
-only saved data through `saved_diversification_view()`, validating date, versions
-and input fingerprint. Never fetch histories or calculate risk in the report.
-Preserve the four approved summary cards and all financial figures/privacy
-exclusions. Invalid new data must not fall back to a current-looking old result.
-Old snapshots show a labeled legacy count without a new quality score.
+`DataSource.get_combined_data()` calculates v2 only when the `allocation`
+configuration is present. Render saved data through `saved_diversification_view()`;
+never fetch histories or calculate risk in the report. Preserve the four approved
+summary cards, financial figures, and privacy exclusions.
 
 For historical replay, validate quarter-end holdings and use a new derived copy:
 
@@ -149,7 +139,7 @@ State the quarter, actual input dates, validation obtained, and material data-qu
 
 ### Prior risk-equivalent indicator
 
-Prefer allocation_score when present; the following describes prior DR-squared snapshots only.
+For historical snapshots, the following describes prior DR-squared results only.
 Owned Treasury positions are assets in the current configuration. Preserve
 maturity/duration distinctions: the confirmed <=1-year individual holding uses
 the disclosed, dated SHV proxy; direct long Treasury ETFs such as TLT keep their

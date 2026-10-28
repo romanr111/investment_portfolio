@@ -86,24 +86,11 @@ def allocation_fixture():
 
 class AllocationIntegrationTests(unittest.TestCase):
     def saved(self, data=None, settings=None, history=None):
-        from analytics.holy_grail_data import enrich_combined_data
+        from test_holy_grail_data import legacy_enrich as enrich_combined_data
         original,config,returns=allocation_fixture()
         return enrich_combined_data(data if data is not None else original,
             config={'allocation':settings if settings is not None else config},
             monthly_returns=history if history is not None else returns,allow_network=False)
-
-    def test_enrichment_saves_new_score_without_changing_financial_fields(self):
-        from analytics.holy_grail_data import enrich_combined_data
-        from copy import deepcopy
-        data,settings,history=allocation_fixture();before=deepcopy(data)
-        saved=enrich_combined_data(data,config={'allocation':settings},monthly_returns=history,allow_network=False)
-        self.assertIn('allocation_score',saved['DIVERSIFICATION_DATA'])
-        result=saved['DIVERSIFICATION_DATA']['allocation_score']
-        self.assertEqual(result['version'],'capital_diversification_v1')
-        self.assertLess(result['score'],50)
-        self.assertEqual(result['coverage']['cash_pct_nav'],10/110*100)
-        self.assertEqual(data,before)
-        self.assertEqual({k:saved[k] for k in before},before)
 
     def test_saved_result_replays_and_stale_or_corrupt_data_never_falls_back(self):
         from analytics.allocation_inputs import validate_saved_allocation
@@ -272,7 +259,7 @@ class AllocationIntegrationTests(unittest.TestCase):
             self.assertEqual(source.read_bytes(),raw)
             self.assertEqual(result['HOLY_GRAIL_DATA'],data['HOLY_GRAIL_DATA'])
             self.assertEqual(result['DIVERSIFICATION_DATA']['indicator'],data['DIVERSIFICATION_DATA']['indicator'])
-            self.assertIsNotNone(result['DIVERSIFICATION_DATA']['allocation_score']['score'])
+            self.assertIsNotNone(result['DIVERSIFICATION_DATA']['allocation_score_v2']['score'])
 
     def test_signed_quantities_and_nonlinear_risk_cannot_hide_behind_positive_values(self):
         data,settings,history=allocation_fixture()
@@ -306,10 +293,12 @@ class AllocationIntegrationTests(unittest.TestCase):
         from unittest.mock import patch
         from analytics.holy_grail_data import enrich_combined_data
         data,_,history=allocation_fixture()
+        from test_holy_grail_data import legacy_enrich
+        data = legacy_enrich(data, monthly_returns=history, config={})
         with patch('analytics.holy_grail_data.collect_return_history',return_value=(history,{},set())):
             saved=enrich_combined_data(data,config={'allocation':[]},allow_network=False)
         self.assertIsNotNone(saved['HOLY_GRAIL_DATA']['effective_streams'])
-        self.assertEqual(saved['DIVERSIFICATION_DATA']['allocation_score']['status'],'unavailable')
+        self.assertEqual(saved['DIVERSIFICATION_DATA']['allocation_score_v2']['status'],'unavailable')
 
     def test_sheet_cli_rejects_envelope_date_mismatch_before_authentication(self):
         import contextlib,io,json,tempfile

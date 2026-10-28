@@ -165,7 +165,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail_data import enrich_combined_data, enrich_snapshot_file
         data, settings, histories = allocation_fixture()
-        old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import legacy_enrich
+        old = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         payload = {'as_of_date': '2026-09-30', 'data': old, 'holy_grail_enrichment': {'prior': True}}
         before = deepcopy(payload)
         settings['method_version'] = 'capital_diversification_v2'
@@ -502,10 +503,10 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_legacy_v1_is_labeled_as_previous_method(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
         from analytics.diversification_view import saved_diversification_view
         data, settings, histories = allocation_fixture()
-        saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import legacy_enrich
+        saved = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         view = saved_diversification_view(saved)
         self.assertIn('Попередня методика capital_diversification_v1', str(view))
 
@@ -527,7 +528,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail_data import enrich_combined_data
         data, settings, histories = allocation_fixture()
-        old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
+        from tests.test_holy_grail_data import legacy_enrich
+        old = legacy_enrich(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         old['DIVERSIFICATION_DATA']['custom_history'] = {'nested': ['preserve']}
         before = deepcopy(old['DIVERSIFICATION_DATA'])
         settings['method_version'] = 'capital_diversification_v2'
@@ -627,7 +629,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         old['TOTAL_ASSETS'] = 100
         settings['method_version'] = 'capital_diversification_v2'
         new = enrich_combined_data(old, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
-        self.assertEqual(new['DIVERSIFICATION_DATA']['holdings_fingerprint'], quality_inputs_fingerprint(new))
+        self.assertEqual(new['DIVERSIFICATION_DATA']['allocation_score_v2']['holdings_fingerprint'], quality_inputs_fingerprint(new))
 
     def test_duplicate_split_and_small_perturbation_do_not_manufacture_breadth(self):
         from analytics.allocation_score_v2 import score_components_v2

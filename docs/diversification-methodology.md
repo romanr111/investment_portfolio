@@ -1,6 +1,9 @@
 # Portfolio diversification indicators
 
-## Capital-weighted score (current main indicator)
+## Historical capital-weighted score (v1)
+
+The following v1 description applies only to existing historical records. New
+production enrichment calculates v2, documented below.
 
 `DIVERSIFICATION_DATA.allocation_score`, version `capital_diversification_v1`,
 answers how invested capital is spread across economic groups and equity sectors.
@@ -320,9 +323,10 @@ Unavailable new results retain the indicator layout and replace stale counts.
 
 ## Capital diversification v2
 
-`capital_diversification_v2` is selected explicitly with
-`allocation.method_version`. With no method setting, v1 remains the default.
-An unknown method is unavailable; a present but invalid v2 result never falls
+`capital_diversification_v2` is the only method calculated for new snapshots.
+An `allocation` object enables it, and omitting `method_version` selects v2.
+Without the object, diversification enrichment is disabled. An explicit v1 or
+unknown method is unavailable; a present but invalid v2 result never falls
 back to v1. v2 displays integer points out of 100, not a percentage. Cash is
 excluded from invested weights and shown separately as a share of full NAV.
 

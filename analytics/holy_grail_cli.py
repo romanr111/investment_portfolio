@@ -22,15 +22,18 @@ def main():
                                        previous_combined_data=previous)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(2, f"Snapshot enrichment failed ({type(error).__name__}). Original data was not changed.\n")
-    metric = result.get("data", result)["HOLY_GRAIL_DATA"]
-    quality = result.get("data", result)["DIVERSIFICATION_DATA"]
-    print(json.dumps({"output": str(args.output.resolve()), "as_of_date": metric["as_of_date"],
-                      "status": metric["status"], "effective_streams": metric["effective_streams"],
-                      "estimated_progress_pct": metric["estimated_progress_pct"],
+    data = result.get("data", result)
+    metric = data.get("HOLY_GRAIL_DATA") or {}
+    quality = data.get("DIVERSIFICATION_DATA") or {}
+    v2 = quality.get("allocation_score_v2") or {}
+    print(json.dumps({"output": str(args.output.resolve()),
+                      "as_of_date": metric.get("as_of_date") or v2.get("as_of_date") or result.get("as_of_date"),
+                      "status": metric.get("status"), "effective_streams": metric.get("effective_streams"),
+                      "estimated_progress_pct": metric.get("estimated_progress_pct"),
                       "indicator": quality.get("indicator"),
                       "allocation_score": quality.get("allocation_score"),
                       "allocation_score_v2": quality.get("allocation_score_v2"),
-                      "target_achieved": metric["target_achieved"],
+                      "target_achieved": metric.get("target_achieved"),
                       "diversification": {key: quality.get(key) for key in (
                           "status", "count_version", "effective_streams", "score_min", "score_max", "confidence")}}, ensure_ascii=False))
     return 0

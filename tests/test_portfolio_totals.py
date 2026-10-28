@@ -86,8 +86,7 @@ class TestPortfolioTotals(unittest.TestCase):
             combined = data_source.get_combined_data()
 
             self.assertEqual(combined["DATA_CONTRACT_VERSION"], 2)
-            self.assertIn("HOLY_GRAIL_DATA", combined)
-            self.assertEqual(persisted[0]["HOLY_GRAIL_DATA"], combined["HOLY_GRAIL_DATA"])
+            self.assertEqual(persisted[0], combined)
             self.assertIn("POSITION_DATA", combined)
             self.assertIn("ACTIVITY_DATA", combined)
             self.assertIn("PERFORMANCE_DATA", combined)

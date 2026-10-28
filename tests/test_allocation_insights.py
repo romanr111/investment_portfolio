@@ -1,7 +1,7 @@
 """The current v2 Sheets pipeline reserves the agreed summary without collisions."""
 import unittest
 
-from analytics.holy_grail_data import enrich_combined_data
+from test_holy_grail_data import legacy_enrich as enrich_combined_data
 from src.google_sheets.insights_tables import build_portfolio_tab
 from src.google_sheets.insights_cells import render_blocks
 from test_allocation_score import allocation_fixture

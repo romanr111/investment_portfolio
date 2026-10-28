@@ -23,6 +23,51 @@ def snapshot_fixture():
     }
 
 
+def legacy_enrich(data, *, as_of_date=None, config=None, monthly_returns=None,
+                  allow_network=False, cache_dir=None, source_provenance=None, **_kwargs):
+    """Build historical records for reader and Sheets compatibility fixtures."""
+    from datetime import datetime, timezone
+    from analytics.holy_grail_data import extract_exposures, collect_return_history, CACHE_DIR, _date
+    from analytics.holy_grail import calculate_progress, fingerprint, holdings_fingerprint
+    from analytics.diversification_inputs import enrich_quality
+    from analytics.holy_grail_indicator import calculate_indicator
+    from analytics.allocation_inputs import calculate_allocation_score, PROFILE_PATH, MODEL_PATH
+    settings = config or {}
+    as_of_date = _date(as_of_date or data.get('POSITION_DATA', {}).get('as_of_date')
+                       or data.get('DATA_METADATA', {}).get('last_updated'))
+    positions, cash, flags = extract_exposures(data, as_of_date, settings)
+    provenance = source_provenance or {}
+    returns = monthly_returns
+    if returns is None:
+        returns, provenance, collected = collect_return_history(
+            positions, as_of_date=as_of_date, cache_dir=cache_dir or CACHE_DIR, allow_network=allow_network)
+        flags.update(collected)
+    summary = calculate_progress(positions, returns, as_of_date=as_of_date,
+        total_assets=float(data['TOTAL_ASSETS']), cash_value=cash, input_flags=flags,
+        config_hash=fingerprint(settings))
+    summary.update(retrospective=as_of_date < datetime.now(timezone.utc).date().isoformat(),
+        source_provenance=provenance, history_fingerprint=fingerprint(returns.to_json(date_format='iso')),
+        holdings_fingerprint=holdings_fingerprint(data))
+    result = dict(data, HOLY_GRAIL_DATA=summary)
+    quality = enrich_quality(data, positions, cash, returns, settings, as_of_date, flags, provenance)
+    quality['indicator'] = calculate_indicator(data, positions, cash, returns, settings, as_of_date, flags, provenance)
+    if isinstance(settings.get('allocation'), dict):
+        allocation = deepcopy(settings['allocation'])
+        allocation.setdefault('calibration', json.loads(MODEL_PATH.read_text()))
+        allocation['profiles'] = dict(json.loads(PROFILE_PATH.read_text()), **allocation.get('profiles', {}))
+        risky = [p['id'] for p in positions if p.get('unsupported_risk')]
+        from analytics.holy_grail_data import bound_exposure_record
+        for p in positions:
+            record = bound_exposure_record(settings.get('diversification', {}).get('exposures', {}),
+                p['id'], 'category:' + p['category'], p.get('source_identity'))
+            if record.get('leveraged') or record.get('nonlinear_risk'): risky.append(p['id'])
+        allocation['unsupported_ids'] = sorted(set(risky))
+        quality['allocation_score'] = calculate_allocation_score(
+            data, positions, cash, returns, allocation, as_of_date, flags, provenance)
+    result['DIVERSIFICATION_DATA'] = quality
+    return result
+
+
 class HolyGrailDataTests(unittest.TestCase):
     def module(self):
         self.assertIsNotNone(importlib.util.find_spec("analytics.holy_grail_data"),
@@ -34,7 +79,7 @@ class HolyGrailDataTests(unittest.TestCase):
         untouched = deepcopy(original)
         returns = independent_history().rename(columns=lambda s: "yf:" + s)
         config = {"qualifications": {"Stocks": exposures()[0]["qualification"]}}
-        result = self.module().enrich_combined_data(
+        result = legacy_enrich(
             original, as_of_date="2026-09-30", monthly_returns=returns, config=config,
             allow_network=False,
         )
@@ -57,7 +102,7 @@ class HolyGrailDataTests(unittest.TestCase):
         original = snapshot_fixture()
         del original["DATA_METADATA"]
         del original["POSITION_DATA"]
-        result = self.module().enrich_combined_data(
+        result = legacy_enrich(
             original, as_of_date="2026-09-30",
             monthly_returns=independent_history().rename(columns=lambda s: "yf:" + s),
             config={"qualifications": {"Stocks": exposures()[0]["qualification"]}},
@@ -70,7 +115,7 @@ class HolyGrailDataTests(unittest.TestCase):
         original = snapshot_fixture()
         original["CASH_DATA"] = {"Total": Decimal("10.00"), "Breakdown": {"USD": Decimal("10.00")}}
         original["TOTAL_ASSETS"] = 1510
-        result = self.module().enrich_combined_data(
+        result = legacy_enrich(
             original, monthly_returns=independent_history().rename(columns=lambda s: "yf:" + s), config={},
         )
         for serializer in (str, float):
@@ -115,7 +160,7 @@ class HolyGrailDataTests(unittest.TestCase):
             self.assertEqual(source.read_bytes(), source_bytes)
             self.assertEqual(latest.read_text(), "original latest pointer")
             self.assertEqual(result["as_of_date"], "2026-09-30")
-            self.assertIn("HOLY_GRAIL_DATA", result["data"])
+            self.assertNotIn("HOLY_GRAIL_DATA", result["data"])
             self.assertEqual({k:v for k,v in result["data"].items() if k not in {"HOLY_GRAIL_DATA", "DIVERSIFICATION_DATA"}}, payload["data"])
             with self.assertRaises(ValueError):
                 module.enrich_snapshot_file(source, source, allow_network=False)
@@ -148,11 +193,11 @@ class HolyGrailDataTests(unittest.TestCase):
         history = independent_history().rename(columns=lambda s: "yf:" + s + ("-USD" if s == "asset_14" else ""))
         reviewed = exposures()[0]["qualification"]
         config = {"qualifications": {"Stocks": reviewed, "Crypto Coins": reviewed}}
-        result = self.module().enrich_combined_data(original, monthly_returns=history, config=config)["HOLY_GRAIL_DATA"]
+        result = legacy_enrich(original, monthly_returns=history, config=config)["HOLY_GRAIL_DATA"]
         self.assertIn("stale_valuations", result["constraints"])
         self.assertFalse(result["target_achieved"])
         original["DATA_QUALITY"]["crypto"]["freshness"] = "live"
-        self.assertTrue(self.module().enrich_combined_data(original, monthly_returns=history, config=config)["HOLY_GRAIL_DATA"]["target_achieved"])
+        self.assertTrue(legacy_enrich(original, monthly_returns=history, config=config)["HOLY_GRAIL_DATA"]["target_achieved"])
 
 
 if __name__ == "__main__":

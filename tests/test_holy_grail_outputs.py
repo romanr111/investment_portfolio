@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from test_holy_grail_data import snapshot_fixture
 from test_holy_grail_progress import exposures, independent_history
-from analytics.holy_grail_data import enrich_combined_data
+from test_holy_grail_data import legacy_enrich as enrich_combined_data
 from src.google_sheets.insights_tables import build_portfolio_tab
 from src.google_sheets.insights_cells import render_blocks
 

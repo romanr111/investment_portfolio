@@ -1,7 +1,7 @@
 """Observable saved indicator, independent of the legacy policy checklist."""
 from copy import deepcopy
 import unittest
-from analytics.holy_grail_data import enrich_combined_data
+from test_holy_grail_data import legacy_enrich as enrich_combined_data
 from test_holy_grail_data import snapshot_fixture
 from test_holy_grail_progress import independent_history
 

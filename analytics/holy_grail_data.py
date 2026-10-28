@@ -9,7 +9,7 @@ import hashlib
 
 import pandas as pd
 
-from analytics.holy_grail import calculate_progress, completed_month_end, fingerprint, holdings_fingerprint
+from analytics.holy_grail import completed_month_end, fingerprint
 from src.portfolio_ledger.contract import CASH_EQUIVALENTS
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -338,97 +338,59 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     output = dict(data)
     as_of_date = _date(as_of_date or data.get("POSITION_DATA", {}).get("as_of_date")
                        or data.get("DATA_METADATA", {}).get("last_updated") or date.today().isoformat())
-    positions, cash, flags, provenance = [], 0., set(), {}
-    extracted = False
-    settings = {}
-    returns = monthly_returns if monthly_returns is not None else pd.DataFrame()
     try:
         settings = load_config() if config is None else config
-        positions, cash, flags = extract_exposures(data, as_of_date, settings)
-        extracted = True
-        provenance = source_provenance or {}
-        returns = monthly_returns
-        if returns is None:
-            allocation_requests = []
-            if 'allocation' in settings:
-                from analytics.allocation_inputs import allocation_history_requests, allocation_settings
-                try:
-                    allocation_requests = allocation_history_requests(positions, allocation_settings(settings), as_of_date)
-                except (ValueError,TypeError,KeyError,OSError,AttributeError):
-                    pass  # Bad optional configuration must not poison prior diagnostics.
-            returns, provenance, collection_flags = collect_return_history(
-                positions + allocation_requests, as_of_date=as_of_date, cache_dir=cache_dir, allow_network=allow_network)
-            flags.update(collection_flags)
-        summary = calculate_progress(
-            positions, returns, as_of_date=as_of_date, total_assets=float(data["TOTAL_ASSETS"]),
-            cash_value=cash, input_flags=flags, config_hash=fingerprint(settings),
-        )
-        summary["retrospective"] = as_of_date < datetime.now(timezone.utc).date().isoformat()
-        summary["source_provenance"] = provenance
-        summary["history_fingerprint"] = fingerprint(returns.to_json(date_format="iso"))
-        summary["holdings_fingerprint"] = holdings_fingerprint(data)
-        output["HOLY_GRAIL_DATA"] = summary
-    except Exception as error:
-        if not extracted:
-            flags.add('invalid_inputs')
-        # Do not serialize exception messages: upstream failures may contain URLs or identifiers.
-        output["HOLY_GRAIL_DATA"] = {
-            "method_version": "holy_grail_progress_v1", "as_of_date": as_of_date,
-            "status": "unavailable", "effective_streams": None,
-            "estimated_progress_pct": None, "target_achieved": False,
-            "constraints": ["analytics_failed", type(error).__name__],
-        }
-    from analytics.diversification_inputs import enrich_quality
-    output['DIVERSIFICATION_DATA'] = enrich_quality(data,positions,cash,returns,settings,as_of_date,flags,provenance)
-    from analytics.holy_grail_indicator import calculate_indicator
+    except (OSError, ValueError, TypeError):
+        settings = None
+    if isinstance(settings, dict) and 'allocation' not in settings:
+        return output
+
+    from copy import deepcopy
+    from analytics.allocation_inputs import allocation_history_requests, allocation_settings, _seal
+    from analytics.allocation_v2_inputs import calculate_allocation_score_v2, comparison_basis, _compare_basis
+
+    existing = data.get('DIVERSIFICATION_DATA')
+    output['DIVERSIFICATION_DATA'] = deepcopy(existing) if isinstance(existing, dict) else {}
+    requested = settings.get('allocation') if isinstance(settings, dict) else None
+    method = requested.get('method_version', 'capital_diversification_v2') if isinstance(requested, dict) else None
     try:
-        output['DIVERSIFICATION_DATA']['indicator'] = calculate_indicator(
-            data, positions, cash, returns, settings, as_of_date, flags, provenance)
-    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
-        output['DIVERSIFICATION_DATA']['indicator'] = dict(
-            version='holy_grail_indicator_v1', status='unavailable', as_of_date=as_of_date,
-            effective_streams=None, warnings=['invalid_inputs'])
-    if 'allocation' in settings:
-        from analytics.allocation_inputs import allocation_settings, calculate_allocation_score
-        allocation_config_valid = True
-        try:
-            allocation_config = allocation_settings(settings)
-        except (ValueError, TypeError, KeyError, OSError):
-            allocation_config = {}
-            allocation_config_valid = False
-        # The optional policy diagnostics cannot determine score availability.
+        allocation_config = allocation_settings(settings)
+    except (ValueError, TypeError, KeyError, OSError, AttributeError):
+        output['DIVERSIFICATION_DATA']['allocation_score_v2'] = {
+            'version': 'capital_diversification_v2', 'status': 'unavailable', 'score': None,
+            'warnings': ['invalid_method_version' if method not in (None, 'capital_diversification_v2')
+                         else 'invalid_allocation_config']}
+        return output
+
+    positions, cash, flags, provenance = [], 0., set(), source_provenance or {}
+    returns = monthly_returns if monthly_returns is not None else pd.DataFrame()
+    try:
+        positions, cash, flags = extract_exposures(data, as_of_date, settings)
+        if monthly_returns is None:
+            requests = allocation_history_requests(positions, allocation_config, as_of_date)
+            returns, provenance, collection_flags = collect_return_history(
+                requests, as_of_date=as_of_date, cache_dir=cache_dir, allow_network=allow_network)
+            flags.update(collection_flags)
         risky_ids = [p['id'] for p in positions if p.get('unsupported_risk')]
         for p in positions:
-            record = bound_exposure_record(settings.get('diversification',{}).get('exposures',{}),
-                p['id'], 'category:'+p['category'], p.get('source_identity'))
-            if record.get('leveraged') or record.get('nonlinear_risk'): risky_ids.append(p['id'])
+            record = bound_exposure_record(settings.get('diversification', {}).get('exposures', {}),
+                p['id'], 'category:' + p['category'], p.get('source_identity'))
+            if record.get('leveraged') or record.get('nonlinear_risk'):
+                risky_ids.append(p['id'])
         allocation_config['unsupported_ids'] = sorted(set(risky_ids))
-        requested = settings.get('allocation', {}).get('method_version', 'capital_diversification_v1') if isinstance(settings.get('allocation'), dict) else 'capital_diversification_v1'
-        if requested == 'capital_diversification_v1':
-            output['DIVERSIFICATION_DATA']['allocation_score'] = calculate_allocation_score(
-                data, positions, cash, returns, allocation_config, as_of_date, flags, provenance)
-        elif requested == 'capital_diversification_v2' and allocation_config_valid:
-            from analytics.allocation_v2_inputs import calculate_allocation_score_v2, comparison_basis, _compare_basis
-            from analytics.allocation_inputs import _seal
-            from copy import deepcopy
-            allocation_config['extraction_settings'] = deepcopy(settings)
-            output['DIVERSIFICATION_DATA']['allocation_score_v2'] = calculate_allocation_score_v2(
-                data, positions, cash, returns, allocation_config, as_of_date, flags, provenance)
-            if previous_combined_data is not None:
-                saved = output['DIVERSIFICATION_DATA']['allocation_score_v2']
-                basis = comparison_basis(previous_combined_data)
-                saved['comparison'] = _compare_basis(saved, basis) if basis else {
-                    'status': 'unavailable', 'reason': 'previous_v2_invalid_or_absent'}
-                _seal(saved)
-        else:
-            output['DIVERSIFICATION_DATA']['allocation_score_v2'] = {
-                'version': requested, 'status': 'unavailable', 'score': None,
-                'warnings': ['invalid_allocation_config' if not allocation_config_valid else 'invalid_method_version']}
-        if requested != 'capital_diversification_v1' and isinstance(data.get('DIVERSIFICATION_DATA'), dict):
-            from copy import deepcopy
-            for key, value in data['DIVERSIFICATION_DATA'].items():
-                if key not in output['DIVERSIFICATION_DATA']:
-                    output['DIVERSIFICATION_DATA'][key] = deepcopy(value)
+    except Exception:
+        # A failed extraction or collection must never become a successful all-cash result.
+        flags.add('invalid_inputs')
+        allocation_config['unsupported_ids'] = []
+    allocation_config['extraction_settings'] = deepcopy(settings)
+    saved = calculate_allocation_score_v2(
+        data, positions, cash, returns, allocation_config, as_of_date, flags, provenance)
+    if previous_combined_data is not None:
+        basis = comparison_basis(previous_combined_data)
+        saved['comparison'] = _compare_basis(saved, basis) if basis else {
+            'status': 'unavailable', 'reason': 'previous_v2_invalid_or_absent'}
+        _seal(saved)
+    output['DIVERSIFICATION_DATA']['allocation_score_v2'] = saved
     return output
 
 
@@ -451,7 +413,8 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
     enriched = enrich_combined_data(data, as_of_date=as_of, config=config, cache_dir=cache_dir,
                                     allow_network=allow_network, monthly_returns=monthly_returns,
                                     source_provenance=source_provenance, previous_combined_data=previous_combined_data)
-    if 'allocation_score_v2' in enriched.get('DIVERSIFICATION_DATA', {}):
+    if (enriched.get('DIVERSIFICATION_DATA') is not data.get('DIVERSIFICATION_DATA')
+            and 'allocation_score_v2' in enriched.get('DIVERSIFICATION_DATA', {})):
         from copy import deepcopy
         result = deepcopy(payload)
         target = result['data'] if 'data' in result else result
@@ -464,19 +427,8 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
         with destination.open('x', encoding='utf-8') as handle:
             json.dump(result, handle, ensure_ascii=False, indent=2, allow_nan=False)
         return result
-    if 'allocation_score' in enriched.get('DIVERSIFICATION_DATA',{}):
-        # A historical upgrade is additive. Keep all prior models and their
-        # fingerprints exactly as they were saved, including failed old models.
-        allocation = enriched['DIVERSIFICATION_DATA']['allocation_score']
-        if 'HOLY_GRAIL_DATA' in data:
-            enriched['HOLY_GRAIL_DATA'] = data['HOLY_GRAIL_DATA']
-        if isinstance(data.get('DIVERSIFICATION_DATA'),dict):
-            enriched['DIVERSIFICATION_DATA'] = dict(data['DIVERSIFICATION_DATA'], allocation_score=allocation)
-    result = dict(payload, data=enriched) if "data" in payload else enriched
-    result["holy_grail_enrichment"] = {
-        "source_snapshot_sha256": hashlib.sha256(raw).hexdigest(),
-        "calculated_at": datetime.now(timezone.utc).isoformat(), "retrospective": True,
-    }
+    # With no allocation settings, no analytics were calculated or replaced.
+    result = payload
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("x", encoding="utf-8") as handle:
         json.dump(result, handle, ensure_ascii=False, indent=2, allow_nan=False)
