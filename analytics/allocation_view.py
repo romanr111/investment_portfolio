@@ -104,3 +104,134 @@ def allocation_view(data, expected_date=None):
                            ('Найбільша група',view['largest_text']),('Модель бізнесу 0,75',view['sensitivity_text']),
                            ('Дата / Cash поза оцінкою',view['as_of']+' / '+view['coverage_summary'])]
     return view
+
+
+def sheet_detail_rows(rows):
+    """Keep pair observations together without consuming one sheet row per pair."""
+    packed = []
+    pairs = []
+    def flush():
+        if pairs:
+            packed.append(('Історія пар', '\n'.join(pairs)))
+            pairs.clear()
+    for label, value in rows:
+        if label == 'Історія пар':
+            pairs.append(value)
+            if len(pairs) == 6:
+                flush()
+        else:
+            flush()
+            packed.append((label, value))
+    flush()
+    return packed
+
+
+def allocation_view_v2(data, expected_date=None):
+    """Present only whitelisted fields from a fully replayed v2 record."""
+    from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+    from analytics.diversification_view import _empty
+    result = data['DIVERSIFICATION_DATA']['allocation_score_v2']
+    expected = expected_date or str(data.get('POSITION_DATA', {}).get('as_of_date')
+                                    or data.get('DATA_METADATA', {}).get('last_updated') or '')[:10]
+    view = _empty('Некоректна або неузгоджена збережена оцінка')
+    view.update(allocation=True, indicator=True, title='Диверсифікація інвестованого капіталу',
+                number_kind='allocation_points', number_format={'type': 'NUMBER', 'pattern': '0" зі 100"'},
+                sheet_number='Дані недоступні', drivers=[], coverage_summary='', largest_text='-',
+                sensitivity_text='-', rows=[], risk_facts=[])
+    if not validate_saved_allocation_v2(result, data, expected, replay=True):
+        view['rows'] = [('Статус', view['status'])]
+    else:
+        stamp = '.'.join(reversed(result['as_of_date'].split('-')))
+        cash = result['coverage'].get('cash_pct_nav')
+        coverage = 'Cash поза оцінкою: ' + (_pct(cash) if cash is not None else '-') + ' повного портфеля.'
+        warnings = [WARNINGS.get(w, 'Некоректні або неповні входи індикатора.') for w in result['warnings']]
+        view.update(as_of=stamp, warnings=warnings, principal_constraint=' '.join(warnings), coverage_summary=coverage)
+        if result['status'] in {'unavailable', 'not_applicable'}:
+            headline = 'Не застосовується' if result['status'] == 'not_applicable' else 'Дані недоступні'
+            view.update(headline=headline, sheet_number=headline, status=headline,
+                        rows=[('Статус', headline), ('Обмеження', ' '.join(warnings)), ('Дата позицій', stamp)])
+        else:
+            assessment = result['assessment']
+            if assessment['combined_dependent'] or (assessment['business_dependent'] and assessment['window_dependent']):
+                label = 'Оцінка залежить від припущень і періоду'
+            elif assessment['business_dependent']:
+                label = 'Оцінка залежить від припущень'
+            elif assessment['window_dependent']:
+                label = 'Оцінка залежить від періоду'
+            else:
+                label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
+                         'well_diversified': LABELS[2]}[result['category']]
+            if result['status'] == 'provisional': label += ' · Попередня оцінка'
+            groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
+            definitions = result['configuration']['group_definitions']
+            largest = group_label(groups[0]['id'], definitions) + ': ' + _pct(groups[0]['weight'] * 100)
+            scenario_range = f"{assessment['min_display']}-{assessment['max_display']} зі 100"
+            if assessment['available'] != assessment['expected']:
+                scenario_range += f" ({assessment['available']}/{assessment['expected']} доступні)"
+            rows = [('Метод', 'capital_diversification_v2'), ('Оцінка', str(result['display_score']) + ' зі 100'),
+                    ('Висновок', label), ('Сценарний розкид', scenario_range),
+                    ('Cash від повного портфеля', _pct(cash)),
+                    ('Непокрита інвестована частка', _pct(result['coverage']['unknown_pct_invested']))]
+            for key, scenario in result['scenarios'].items():
+                value = str(scenario['display_score']) + ' зі 100' if scenario['score'] is not None else 'Недоступно: ' + str(scenario['reason'])
+                rows.append(('Сценарій ' + key, value))
+            rows.extend((group_label(group['id'], definitions), _pct(group['weight'] * 100)) for group in groups)
+            for group in groups:
+                representative = definitions.get(group['id'], {}).get('representative')
+                if representative:
+                    rows.append(('Представник: ' + group_label(group['id'], definitions), representative))
+            rows.append(('Формула', '100 × T + 25 × min(E × b, 1 − T); T = clip((1/C − 1)/5, 0, 1).'))
+            for group, sectors in sorted(result['sectors'].items()):
+                rows.append(('Сектори: ' + group_label(group, definitions),
+                             '; '.join(name + ': ' + _pct(share * 100) for name, share in sorted(sectors.items())) or 'Не підтверджено'))
+            main = result['scenarios']['m60_r025' if 'm60_r025' in result['scenarios'] else 'm60']
+            for pair in main['pairs']:
+                names = group_label(pair['left'], definitions) + ' / ' + group_label(pair['right'], definitions)
+                if pair['kind'] == 'measured':
+                    detail = f"{pair['observations']} місяців; останній {pair['last_month']}; r={pair['correlation']:.2f}".replace('.', ',')
+                elif pair['kind'] == 'modeled':
+                    detail = 'Модельна кореляція ' + str(pair['correlation']).replace('.', ',')
+                else:
+                    detail = 'Немає придатної пари; консервативно r=1'
+                rows.append(('Історія пар', names + ': ' + detail))
+            rows.append(('Модель', '60 і 36 календарних місяців; бізнес: 0,25 / 0,75; невідомі пари: r=1.'))
+            comparison = result['comparison']
+            if comparison['status'] == 'available':
+                rows.append(('Порівняння', 'Ринки: {:+.2f}; позиції: {:+.2f}; разом: {:+.2f} пункту'.format(
+                    comparison['market_relationship_change'], comparison['positions_and_profiles_change'], comparison['total_change']).replace('.', ',')))
+                rows.append(('Порівняння', 'Внески відтворено зі збережених входів; відбитки джерела не підтверджені без оригіналу.'))
+            else:
+                rows.append(('Порівняння', 'Недоступно: ' + str(comparison.get('reason', 'невідомо'))))
+            risk_labels = {'treasury_short': 'Treasury до 1 року', 'treasury_medium': 'Treasury понад 1-10 років',
+                           'treasury_long': 'Treasury понад 10 років', 'credit_lending': 'Кредит та lending',
+                           'business': 'Приватний бізнес', 'business_ukraine': 'Бізнес в Україні', 'economic_fx': 'Валютна експозиція',
+                           'counterparty': 'Залежність від контрагентів', 'illiquidity': 'Обмежена ліквідність',
+                           'confirmed_ai_theme': 'Підтверджена AI-тема'}
+            facts = sorted((item for item in result.get('risk_facts', []) if item['id'] in risk_labels),
+                           key=lambda item: (-item['affected_pct_nav'], item['id']))
+            public_facts = [risk_labels[item['id']] + ': ' + _pct(item['affected_pct_nav']) + ' NAV' for item in facts]
+            rows.extend(('Фактичний ризик', fact) for fact in public_facts)
+            for detail in result.get('risk_details', []):
+                duration = f"{detail['rate_duration']:.1f}".replace('.', ',')
+                maturity = detail['maturity'] or 'не підтверджено'
+                rows.append(('Підтверджена duration', duration + ' року; погашення: ' + maturity + '; ' + _pct(detail['affected_pct_nav']) + ' NAV'))
+            for key, unknown_label in [('duration_pct_nav', 'Duration не підтверджено'),
+                               ('counterparty_pct_nav', 'Контрагенти не підтверджені'),
+                               ('liquidity_pct_nav', 'Ліквідність не підтверджена'),
+                               ('business_geography_pct_nav', 'Географія бізнесу не підтверджена'),
+                               ('economic_fx_pct_nav', 'Економічна валютна експозиція не підтверджена')]:
+                if result.get('risk_unknown', {}).get(key, 0) > 0:
+                    rows.append(('Невідомо', unknown_label + ': ' + _pct(result['risk_unknown'][key]) + ' NAV'))
+            rows.extend(('Обмеження', warning) for warning in warnings)
+            rows.append(('Метод', 'Історичні кореляції та модельні припущення не гарантують майбутньої стійкості або прибутку.'))
+            label += ' · Details'
+            view.update(headline=str(result['display_score']) + ' зі 100', score_cell=result['display_score'],
+                        sheet_number=result['display_score'], status=label, sheet_status=label,
+                        largest_text=largest, sensitivity_text=scenario_range, rows=rows,
+                        drivers=['Найбільша група: ' + largest], risk_facts=public_facts[:3],
+                        model_status='Попередня оцінка' if result['status'] == 'provisional' else 'Модельна оцінка')
+    view['sheet_summary'] = [('Диверсифікація інвестованого капіталу', view['sheet_number']),
+                             ('Висновок', view['status']), ('Найбільша група', view['largest_text']),
+                             ('Сценарний розкид', view['sensitivity_text']),
+                             ('Дата / Cash поза оцінкою', view['as_of'] + ' / ' + view['coverage_summary'])]
+    return view

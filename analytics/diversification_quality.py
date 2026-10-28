@@ -45,13 +45,13 @@ def _finite(value):
         return None
 
 
-def reviewed_record(exposure, as_of_date):
+def reviewed_record(exposure, as_of_date, *, review_cutoff=None):
     record = exposure.get("risk_record", {})
     try:
         valid = (isinstance(record, dict) and isinstance(record.get("source"), str) and bool(record["source"].strip())
                  and date.fromisoformat(record["effective_from"]) <= date.fromisoformat(as_of_date)
                  and (not record.get("effective_to") or date.fromisoformat(as_of_date) <= date.fromisoformat(record["effective_to"]))
-                 and datetime.fromisoformat(record["reviewed_at"]).date() <= datetime.now(timezone.utc).date())
+                 and datetime.fromisoformat(record["reviewed_at"]).date() <= (date.fromisoformat(review_cutoff) if review_cutoff else datetime.now(timezone.utc).date()))
     except (ValueError, TypeError, KeyError):
         valid = False
     return record if valid else {}

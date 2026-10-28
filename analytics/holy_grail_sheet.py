@@ -7,6 +7,7 @@ from pathlib import Path
 
 from analytics.holy_grail import fingerprint
 from analytics.diversification_view import saved_diversification_view
+from analytics.allocation_view import sheet_detail_rows
 from analytics.holy_grail_data import DATA_DIR
 
 END_MARKER = 'Holy Grail - End'
@@ -28,14 +29,37 @@ def _write(sheet_id, start, values):
 
 
 def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
-    label = grid[9][0].get('userEnteredValue', {}).get('stringValue', '')
-    if label and not any(token in label.lower() for token in ('holy grail', 'диверсифікац')):
-        raise ValueError('Summary cells belong to another section')
+    allowed_labels = [
+        {'Диверсифікація інвестованої частини', 'Диверсифікація інвестованого капіталу',
+         'Holy Grail: еквівалент джерел', 'Диверсифікація /100'},
+        {'Висновок', 'Орієнтир', 'Ефективні джерела / ціль'},
+        {'Найбільша група', 'Дата позицій', 'Дата оцінки'},
+        {'Модель бізнесу 0,75', 'Сценарний розкид', 'Прямі історії / моделі', 'Впевненість у даних'},
+        {'Дата / Cash поза оцінкою', 'Статус', 'Прямі / проксі / без історії'},
+    ]
+    if not grid[9][0].get('userEnteredValue', {}).get('stringValue', '') and any(
+            _occupied(cell) for row in grid[9:14] for cell in row[:2]):
+        raise ValueError('Summary cells are populated without an ownership label')
+    for index, labels in enumerate(allowed_labels, start=9):
+        left, right = grid[index][:2]
+        label = left.get('userEnteredValue', {}).get('stringValue', '')
+        if (label and label not in labels) or (not label and _occupied(right)):
+            raise ValueError('Summary cells belong to another section')
+        for cell in (left, right):
+            if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
+                    'formulaValue' in cell.get('userEnteredValue', {})):
+                raise ValueError('Summary cells contain foreign metadata or formulas')
     view=saved_diversification_view(data)
     if not view.get('indicator'): raise ValueError('A valid new indicator is required')
-    rows=[[a,b] for a,b in view['rows']]+[[END_MARKER,'']]
+    detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
+    rows=[[a,b] for a,b in detail_rows]+[[END_MARKER,'']]
     end=details_start+len(rows)
     if end>len(grid): raise ValueError('Insufficient rows; extend the test/target sheet explicitly')
+    for row in grid[details_start-1:old_end]:
+        for cell in row[:2]:
+            if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
+                    'formulaValue' in cell.get('userEnteredValue', {})):
+                raise ValueError('Details cells contain foreign metadata or formulas')
     for row in grid[old_end:end]:
         if any(_occupied(c) for c in row[:2]): raise ValueError('New details overlap existing cells')
     summary=[['Holy Grail: еквівалент джерел',view['sheet_number']],['Орієнтир','15–20'],
@@ -44,7 +68,10 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
     requests=[_write(sheet_id,9,summary),_write(sheet_id,details_start-1,[['Диверсифікація - Details','']]),
               _write(sheet_id,details_start,rows)]
     if old_end>end: requests.append(_write(sheet_id,end,[['',''] for _ in range(old_end-end)]))
-    owned=[g for g in groups if g['range']['startIndex']==details_start]
+    marker = grid[details_start-1][0].get('userEnteredValue', {}).get('stringValue', '')
+    if marker not in MARKERS and any(g['range']['startIndex'] == details_start for g in groups):
+        raise ValueError('Details insertion conflicts with an unowned row group')
+    owned=[g for g in groups if marker in MARKERS and g['range']['startIndex']==details_start]
     for g in sorted(owned,key=lambda x:-x.get('depth',1)):
         requests.append({'deleteDimensionGroup':{'range':{'sheetId':sheet_id,'dimension':'ROWS',
                         'startIndex':g['range']['startIndex'],'endIndex':g['range']['endIndex']}}})
@@ -67,7 +94,7 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
           {'updateDimensionProperties':{'range':bounds,'properties':{'hiddenByUser':True},'fields':'hiddenByUser'}}])
     requests.extend([
       {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':9,'endRowIndex':10,'startColumnIndex':1,'endColumnIndex':2},
-        'cell':{'userEnteredFormat':{'numberFormat':{'type':'PERCENT','pattern':'0%'} if view.get('allocation') else {'type':'NUMBER','pattern':'0.0'}}},'fields':'userEnteredFormat.numberFormat'}},
+        'cell':{'userEnteredFormat':{'numberFormat':view.get('number_format') or ({'type':'PERCENT','pattern':'0%'} if view.get('allocation') else {'type':'NUMBER','pattern':'0.0'})}},'fields':'userEnteredFormat.numberFormat'}},
       {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':9,'endRowIndex':14,'startColumnIndex':0,'endColumnIndex':2},
         'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}},
       {'repeatCell':{'range':{'sheetId':sheet_id,'startRowIndex':details_start-1,'endRowIndex':end,'startColumnIndex':0,'endColumnIndex':2},
@@ -160,7 +187,8 @@ def deliver(book, sheet_id, data, receipt_dir, *, apply=False, expected_title=No
     if outside_fingerprint(before,owned)!=outside_fingerprint(after,owned):
         raise RuntimeError('Outside-scope state changed; backup retained')
     fmt=after['grid'][9][1].get('userEnteredFormat',{}).get('numberFormat',{})
-    expected_format={'type':'PERCENT','pattern':'0%'} if saved_diversification_view(data).get('allocation') else {'type':'NUMBER','pattern':'0.0'}
+    view=saved_diversification_view(data)
+    expected_format=view.get('number_format') or ({'type':'PERCENT','pattern':'0%'} if view.get('allocation') else {'type':'NUMBER','pattern':'0.0'})
     if fmt!=expected_format: raise RuntimeError('Number format readback mismatch')
     visibility={}
     for request in requests:
@@ -190,7 +218,10 @@ def main():
     mode=parser.add_mutually_exclusive_group(required=True);mode.add_argument('--dry-run',action='store_true');mode.add_argument('--apply',action='store_true')
     args=parser.parse_args()
     payload=json.loads(args.snapshot.read_text());data=payload.get('data',payload)
-    saved=data['DIVERSIFICATION_DATA'].get('allocation_score',data['DIVERSIFICATION_DATA'].get('indicator',{}))
+    diversification=data['DIVERSIFICATION_DATA']
+    saved=(diversification['allocation_score_v2'] if 'allocation_score_v2' in diversification else
+           diversification.get('allocation_score',diversification.get('indicator',{})))
+    if not isinstance(saved,dict): parser.exit(2,'Invalid saved indicator\n')
     as_of=payload.get('as_of_date') or saved['as_of_date']
     if as_of != saved.get('as_of_date'):
         parser.exit(2,'Snapshot date does not match saved indicator date\n')

@@ -46,7 +46,10 @@ def allocation_settings(settings):
     config = deepcopy(settings['allocation'])
     if not isinstance(config, dict):
         raise ValueError('Invalid allocation settings')
-    if 'calibration' not in config:
+    method = config.get('method_version', VERSION)
+    if method not in {VERSION, 'capital_diversification_v2'}:
+        raise ValueError('Unknown allocation method')
+    if method == VERSION and 'calibration' not in config:
         config['calibration'] = json.loads(MODEL_PATH.read_text())
     public = json.loads(PROFILE_PATH.read_text()) if PROFILE_PATH.exists() else {}
     config['profiles'] = dict(public, **config.get('profiles', {}))
@@ -59,7 +62,7 @@ def profile_for(position, config, as_of_date):
     profile = config.get('profiles', {}).get(identifier)
     if profile is None and position['category'] in {'Crypto Lending','P2P Lending','Crypto Coins'}:
         group = 'crypto' if position['category'] == 'Crypto Coins' else 'credit_hy_usd'
-        return dict(as_of_date='2026-09-30', source='capital_diversification_v1: explicit category model',
+        return dict(as_of_date='2026-09-30', source=config.get('method_version', VERSION)+': explicit category model',
                     components=[dict(group=group, share=1)]) if as_of_date >= '2026-09-30' else None
     if profile is None:
         return None

@@ -36,6 +36,19 @@ COMBINED_DATA_JSON_PATH = Path("data/final_data.json")
 PORTFOLIO_LEDGER_PATH = Path("data/portfolio_ledger")
 
 
+def _read_previous_combined_data(path):
+    """Read the existing saved snapshot before it is replaced, if usable."""
+    try:
+        with path.open('rb') as handle:
+            raw = handle.read(20_000_001)
+        if len(raw) > 20_000_000:
+            return None
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+
+
 class DataSource:
     def __init__(self, *, refresh_holy_grail_history: bool = True):
         self._refresh_holy_grail_history = refresh_holy_grail_history
@@ -456,10 +469,12 @@ class DataSource:
             },
         }
         data.update(contract)
+        previous = _read_previous_combined_data(COMBINED_DATA_JSON_PATH)
         data = enrich_combined_data(
             data,
             as_of_date=datetime.fromtimestamp(self._data_timestamp).date().isoformat(),
             allow_network=getattr(self, "_refresh_holy_grail_history", False),
+            previous_combined_data=previous,
         )
         self._save_combined_data_to_json(data)
         return data

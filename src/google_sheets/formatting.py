@@ -229,11 +229,13 @@ class PortfolioFormatter(SpreadsheetFormatter):
                       if row and row[0] in {"Holy Grail - Details", "Диверсифікація - Details"}}
         self._previous_details_groups = [g for g in groups if g.get("range", {}).get("startIndex") in starts]
 
-    def format_holy_grail(self, details_range, *, quality=False, indicator=False, allocation=False) -> None:
+    def format_holy_grail(self, details_range, *, quality=False, indicator=False, allocation=False, number_kind=None) -> None:
+        if number_kind not in (None, 'allocation_points'):
+            raise ValueError('Unsupported Holy Grail number kind')
         requests = [{"repeatCell": {
             "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
                       "endRowIndex": 10, "startColumnIndex": 1, "endColumnIndex": 2},
-            "cell": {"userEnteredFormat": {"numberFormat": ({"type": "PERCENT", "pattern": "0%"} if allocation else {"type": "NUMBER", "pattern": "0.0"} if indicator else {"type": "NUMBER", "pattern": '0"/100"'} if quality else {"type": "PERCENT", "pattern": "0.0%"})}},
+            "cell": {"userEnteredFormat": {"numberFormat": ({"type": "NUMBER", "pattern": '0" зі 100"'} if number_kind == 'allocation_points' else {"type": "PERCENT", "pattern": "0%"} if allocation else {"type": "NUMBER", "pattern": "0.0"} if indicator else {"type": "NUMBER", "pattern": '0"/100"'} if quality else {"type": "PERCENT", "pattern": "0.0%"})}},
             "fields": "userEnteredFormat.numberFormat",
         }}, {"repeatCell": {
             "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,

@@ -4,6 +4,22 @@ import unittest
 import test_holy_grail_indicator as indicator_cases
 
 class SheetTests(unittest.TestCase):
+    def test_many_pair_details_fit_and_remain_present(self):
+        from analytics.holy_grail_sheet import plan_requests
+        from unittest.mock import patch
+        view = {'indicator': True, 'allocation': True, 'sheet_summary': [],
+                'sheet_number': 58, 'as_of': '2026-09-30', 'coverage_text': '', 'status': '',
+                'rows': [('Method', 'definition')] * 40 +
+                        [('Історія пар', 'pair-%02d' % n) for n in range(66)]}
+        grid = [[{} for _ in range(4)] for _ in range(200)]
+        grid[131][0] = {'userEnteredValue': {'stringValue': 'Диверсифікація - Details'}}
+        with patch('analytics.holy_grail_sheet.saved_diversification_view', return_value=view):
+            requests, owned = plan_requests({}, 7, grid, [], 132, 181)
+        self.assertLessEqual(owned['new_end'], 200)
+        output = str(requests)
+        for n in range(66):
+            self.assertIn('pair-%02d' % n, output)
+
     def test_details_end_marker_conflict_refuses_write_before_touching_manual_rows(self):
         from analytics.holy_grail_sheet import deliver
         from unittest.mock import Mock, patch
@@ -47,6 +63,7 @@ class SheetTests(unittest.TestCase):
     def test_safe_group_is_replaced_once_and_short_tail_cleared(self):
         from analytics.holy_grail_sheet import plan_requests
         grid=[[{} for _ in range(4)] for _ in range(100)]
+        grid[39][0]={'userEnteredValue':{'stringValue':'Диверсифікація - Details'}}
         group={'range':{'startIndex':40,'endIndex':90},'depth':1}
         req,owned=plan_requests(indicator_cases.IndicatorTests().enrich(),7,grid,[group],40,90)
         self.assertEqual(sum('deleteDimensionGroup' in r for r in req),1)

@@ -15,6 +15,7 @@ _NUMERIC_KINDS = {
     "amount",
     "weight",
     "allocation_score",
+    "allocation_points",
     "risk_equivalent",
 }
 _SUPPORTED_KINDS = _NUMERIC_KINDS | {"date", "status", "link", "formula"}

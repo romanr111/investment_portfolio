@@ -317,3 +317,41 @@ Ungrouped Details require an explicit `Holy Grail - End` boundary. Populated
 legacy sections without a group/end marker are refused rather than claimed as
 owned. Readback verifies final row visibility as well as group metadata.
 Unavailable new results retain the indicator layout and replace stale counts.
+
+## Capital diversification v2
+
+`capital_diversification_v2` is selected explicitly with
+`allocation.method_version`. With no method setting, v1 remains the default.
+An unknown method is unavailable; a present but invalid v2 result never falls
+back to v1. v2 displays integer points out of 100, not a percentage. Cash is
+excluded from invested weights and shown separately as a share of full NAV.
+
+The model aggregates dated holdings into canonical economic groups, retaining
+unknown invested amounts in the denominator. For weights `p` and correlations
+`rho`, the similarity matrix has diagonal 1 and off-diagonal
+`max(0, rho)**2`. Let `N = 1/(p.T @ Z @ p)` and `T = clip((N-1)/5,0,1)`.
+With total equity weight `E` and global eleven-sector breadth `b`, the score is
+`100*T + 25*min(E*b, 1-T)`. Six equally weighted uncorrelated groups anchor
+100. The score is not portfolio variance, a return forecast, a protection
+probability or an official Dalio rating. Unknown equity-sector capital is
+assigned to the largest known sector; no known sectors gives zero breadth.
+
+The main scenario uses 60 completed monthly USD return observations and a
+business correlation assumption of 0.25. The other tests use 0.75 and a
+complete 36-month window. Missing pairs are conservatively assigned correlation
+1; a separate recalculation using zero bounds their model effect. Unknown
+invested weight above 5%, or a missing-pair effect above five points, makes the
+scenario unavailable. Alternative scenarios do not replace an unavailable main
+result. Category changes across available scenarios are reported as dependence
+on assumptions or period, and the range is not a confidence interval.
+
+Saved inputs include dated profiles, source histories, method and group
+representatives, evidence-review cutoff and fingerprints. Replay rebuilds
+holdings, scenarios and reviewed risk facts from saved inputs, without fetching
+market data. Previous-v2 attribution separates market-relationship and
+position/profile changes using unrounded values; a missing or incompatible
+previous basis leaves the current result usable. Prior source fingerprints are
+references whose original files are not independently verified during replay.
+The main result remains provisional when balance or sector evidence is partial.
+Public output contains only whitelisted group and risk summaries, never private
+holdings, source confirmations or account identifiers.

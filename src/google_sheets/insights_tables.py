@@ -323,7 +323,7 @@ def build_portfolio_tab(
         view = saved_diversification_view(combined_data, expected_date=valuation_date)
         if view.get('allocation'):
             summary = view['sheet_summary']
-            kind = 'allocation_score'
+            kind = view.get('number_kind', 'allocation_score')
         elif view.get('indicator'):
             summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
                        ('Дата позицій',view['as_of']),('Прямі історії / моделі',view['coverage_text']),('Статус',view['status'])]
@@ -340,7 +340,9 @@ def build_portfolio_tab(
         blocks.append(CellBlock('diversification_summary',tuple(summary),start_row=9))
         _,_,bounds = render_blocks(blocks)
         first = max(b[1] for b in bounds.values()) + 2
-        details = [('Диверсифікація - Details',''),*view['rows'],('Holy Grail - End','')]
+        from analytics.allocation_view import sheet_detail_rows
+        detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
+        details = [('Диверсифікація - Details',''),*detail_rows,('Holy Grail - End','')]
         blocks.append(CellBlock('diversification_details',tuple(tuple(row) for row in details),start_row=first))
         headers['diversification_details'] = 0
         diversification_groups = (('diversification_details',1,len(details)),)
