@@ -34,7 +34,6 @@ GROUPS = {
 SECTORS = {'Information Technology','Financials','Communication Services','Health Care',
            'Consumer Discretionary','Industrials','Consumer Staples','Energy','Utilities',
            'Real Estate','Materials'}
-MODEL_PATH = Path(__file__).with_name('models') / (VERSION + '.json')
 PROFILE_PATH = Path(__file__).with_name('models') / 'economic_profiles_v1.json'
 FATAL_FLAGS = {'invalid_valuation','invalid_cash_valuation','unreconciled_positions',
                'unreconciled_valuations','unsupported_borrowing','invalid_inputs'}

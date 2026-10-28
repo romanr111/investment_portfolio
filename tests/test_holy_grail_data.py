@@ -31,7 +31,7 @@ def legacy_enrich(data, *, as_of_date=None, config=None, monthly_returns=None,
     from analytics.holy_grail import calculate_progress, fingerprint, holdings_fingerprint
     from analytics.diversification_inputs import enrich_quality
     from analytics.holy_grail_indicator import calculate_indicator
-    from analytics.allocation_inputs import calculate_allocation_score, PROFILE_PATH, MODEL_PATH
+    from analytics.allocation_inputs import calculate_allocation_score, PROFILE_PATH
     settings = config or {}
     as_of_date = _date(as_of_date or data.get('POSITION_DATA', {}).get('as_of_date')
                        or data.get('DATA_METADATA', {}).get('last_updated'))
@@ -53,7 +53,6 @@ def legacy_enrich(data, *, as_of_date=None, config=None, monthly_returns=None,
     quality['indicator'] = calculate_indicator(data, positions, cash, returns, settings, as_of_date, flags, provenance)
     if isinstance(settings.get('allocation'), dict):
         allocation = deepcopy(settings['allocation'])
-        allocation.setdefault('calibration', json.loads(MODEL_PATH.read_text()))
         allocation['profiles'] = dict(json.loads(PROFILE_PATH.read_text()), **allocation.get('profiles', {}))
         risky = [p['id'] for p in positions if p.get('unsupported_risk')]
         from analytics.holy_grail_data import bound_exposure_record

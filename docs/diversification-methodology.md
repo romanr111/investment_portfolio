@@ -18,8 +18,8 @@ Unknown sector mass goes to the largest known sector. Unknown pairs use r=1.
 Ticker/account splits and shared HYG lending proxies cannot create groups.
 Treasury groups are 0-1y (SHV), >1-10y (IEF), >10y (TLT).
 
-Frozen calibration in `analytics/models/capital_diversification_v1.json` uses
-October 2021 through September 2026 and the agreed six equal blocks: US equities;
+The calibration embedded in historical v1 records uses October 2021 through
+September 2026 and the agreed six equal blocks: US equities;
 other equities (EFA/MCHI); Treasuries (SHV/TLT); gold; commodities; Car Resale.
 The coefficient is frozen, including for subsequent quarters and sensitivity.
 Car Resale has assumed correlations .25/.75 to public groups; these are not
@@ -47,8 +47,8 @@ Reconciliation uses max($1, NAV*1e-6); invested weights normalize to the reconci
 position sum. No phantom unknown asset is created for tolerated rounding.
 
 Private `holy_grail_config.json` enables the feature with an `allocation` object.
-The default calibration and public profiles are shipped; `allocation.profiles`
-contains exact dated private confirmations (e.g. the individual Treasury and
+Historical records embed their calibration and profiles. `allocation.profiles`
+contained exact dated private confirmations (e.g. the individual Treasury and
 identity-bound Car Resale). Unknown instruments require explicit profiles;
 regional exposure is not inferred from currency, listing venue or broker bucket.
 Historical replay adds this block while preserving older saved analytics.

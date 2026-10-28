@@ -231,13 +231,9 @@ class AllocationIntegrationTests(unittest.TestCase):
         history.index=list(history.index[:-1])+[pd.Timestamp('2026-10-15')]
         self.assertIsNone(self.saved(history=history)['DIVERSIFICATION_DATA']['allocation_score']['score'])
 
-    def test_shipped_reference_and_maturity_groups_use_the_same_method(self):
+    def test_maturity_groups_use_distinct_representatives(self):
         import json
-        from analytics.allocation_inputs import MODEL_PATH,PROFILE_PATH,GROUPS
-        from analytics.allocation_score import validate_calibration
-        cal=json.loads(MODEL_PATH.read_text())
-        self.assertTrue(validate_calibration(cal))
-        self.assertEqual(cal['reference_score'],100)
+        from analytics.allocation_inputs import PROFILE_PATH,GROUPS
         profiles=json.loads(PROFILE_PATH.read_text())
         self.assertNotEqual(profiles['ib:SHV']['components'][0]['group'],profiles['ib:TLT']['components'][0]['group'])
         self.assertEqual(GROUPS['credit_hy_usd'][1],'HYG')
