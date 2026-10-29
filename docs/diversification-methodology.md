@@ -430,6 +430,14 @@ the fund falls back to a single ticker issuer and keeps the
 `unknown_issuer_lookthrough` warning. On a fresh list the unlisted tail warns
 only where `max_other_issuer_share` times the fund's equity share could still
 clear the issuer limit; incomplete coverage by itself is not a warning.
+A profile may also assert `core: true`, which counts the position into the
+broad-market core bucket (the >=50% line). A diversified holding company with
+a declared, fresh look-through (Berkshire via its SEC 13F quarterly filing)
+qualifies as core and its own ticker stops being an issuer for the per-issuer
+limits; the look-through window is the same 90 days, and stale or missing
+declared holdings degrade the position back to a plain ticker issuer with a
+warning while the core credit stays - so `core: true` is only switched on
+together with fresh declared holdings.
 
 A stock-category position without a profile is not dropped from the facts: in
 the equity buckets the extraction emits (`Stocks`, `China Stocks` - a second
