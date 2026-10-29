@@ -14,7 +14,8 @@ Contract (pinned):
   `{name: {'members': [position ids], 'limit_pct_equities': number}}`;
   decisions from `allocation.concentration_decisions` as
   `{id: {'limit': str, 'decided_at': str, 'decision': accept|reduce|exit,
-        'reason': str, 'review_by': str}}`.
+        'reason': str, 'review_by': str}}`; records missing `decision` or
+  `reason`, or decided after the block, never resolve a breach.
 - Issuer aggregation uses an optional `issuer` profile key (single stocks
   default to their ticker; 9988+BABA -> 'alibaba'). Fund look-through uses a
   dated profile `holdings` field (issuer -> share, plus `source`,
@@ -292,23 +293,31 @@ def _thesis_limit(config, name, limits):
 def match_decisions(block, decisions, as_of_date):
     """Fill `decision_id` on breaches from recorded decision records.
 
-    A breach counts as resolved only when a decision record for the same
-    limit exists and its `review_by` date is >= `as_of_date`; anything else
-    keeps `decision_id=None` and raises the `unresolved_breach` warning.
+    A breach counts as resolved only when a complete decision record for the
+    same limit exists - the recorded choice is `accept`, `reduce` or `exit`,
+    it carries a non-empty `reason`, and it was decided no later than
+    `as_of_date` - and its `review_by` date is >= `as_of_date`. Incomplete or
+    future-dated records, and anything else, keep `decision_id=None` and raise
+    the `unresolved_breach` warning.
     """
     if not isinstance(block, dict) or block.get('version') != VERSION:
         return block
     records = decisions if isinstance(decisions, dict) else {}
+    as_of = date.fromisoformat(as_of_date)
     candidates = []
     for record_id, record in records.items():
         if not isinstance(record, dict):
             continue
         limit, decided_at, review_by = record.get('limit'), record.get('decided_at'), record.get('review_by')
-        if not isinstance(limit, str) or not limit:
+        if (record.get('decision') not in ('accept', 'reduce', 'exit')
+                or not isinstance(record.get('reason'), str) or not record['reason'].strip()
+                or not isinstance(limit, str) or not limit):
             continue
         try:
             decided, reviewed = date.fromisoformat(decided_at), date.fromisoformat(review_by)
         except (ValueError, TypeError):
+            continue
+        if decided > as_of:
             continue
         candidates.append(dict(id=record_id, limit=limit, decided_at=decided_at, review_by=reviewed))
     for breach in block.get('breaches', []):
