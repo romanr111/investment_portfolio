@@ -20,7 +20,7 @@ class AllocationInsightsTests(unittest.TestCase):
         # Summary sits below Performance on the left side, one blank row apart.
         self.assertEqual(col_start,0)
         self.assertEqual(start,bounds['performance'][1]+2)
-        first_row=rows[start-1]
+        first_row=rows[start]
         self.assertEqual(first_row[1],data['DIVERSIFICATION_DATA']['allocation_score']['display_score']/100)
         self.assertEqual(typed[(start,1)].kind,'allocation_score')
         self.assertTrue(all(any('Benchmark '+str(i) in row for row in rows) for i in range(5)))
@@ -38,6 +38,6 @@ class AllocationInsightsTests(unittest.TestCase):
         tab=build_portfolio_tab(data)
         _,_,bounds=render_blocks(tab.blocks)
         start,end,col_start,col_end=bounds['diversification_summary']
-        self.assertEqual(main.values[(start,2)],data['DIVERSIFICATION_DATA']['allocation_score']['display_score']/100)
-        self.assertEqual(main.formats[(start,2)]['numberFormat'],{'type':'PERCENT','pattern':'0%'})
+        self.assertEqual(main.values[(start+1,2)],data['DIVERSIFICATION_DATA']['allocation_score']['display_score']/100)
+        self.assertEqual(main.formats[(start+1,2)]['numberFormat'],{'type':'PERCENT','pattern':'0%'})
         self.assertEqual(len(main.groups),0)
