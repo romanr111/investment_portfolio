@@ -238,6 +238,8 @@ def concentration_section(section, decisions=None, as_of_date=None):
                              if eq is not None and nav_item is not None else
                              _pct(eq['value']) + ' акцій' if eq is not None else
                              _pct(nav_item['value']) + ' NAV')
+            if against_text:
+                value_compact += ' (ліміт ' + against_text + ')'
         breach_rows.append(('Порушення: ' + label, text))
         breach_facts.append('Порушення ліміту: ' + label + ' ' + text)
         breach_summary_items.append(('Порушення: ' + label, value_compact, row_value,
