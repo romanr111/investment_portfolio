@@ -18,8 +18,8 @@ from analytics.allocation_inputs import allocation_settings, profile_for
 from analytics.allocation_score import history_frame
 from analytics.holy_grail_data import (CACHE_DIR, CONFIG_PATH, CASH_EQUIVALENTS, DATA_DIR,
                                        extract_exposures, enrich_snapshot_file, load_config)
-from analytics.concentration_v1 import (VERSION as CONCENTRATION_VERSION, build_block,
-                                        unavailable_block, validate_saved_concentration)
+from analytics.concentration_v1 import (THESIS_LIMIT_PREFIX, VERSION as CONCENTRATION_VERSION,
+                                        build_block, unavailable_block, validate_saved_concentration)
 
 
 class WhatIfError(ValueError):
@@ -207,9 +207,12 @@ def concentration_state(block, decisions, as_of_date):
         states = {}
         for key, limit in limits.items():
             if key == 'thesis_pct_equities':
+                # Breaches are recorded under the per-thesis key; look these up
+                # so what-if reports thesis verdicts and their decisions.
                 states[key] = {name: _limit_state(
-                    (facts.get('thesis_pct_equities') or {}).get(name), value, breached.get(key, {}),
-                    _decision_state(breached.get(key, {}), decisions, as_of_date))
+                    (facts.get('thesis_pct_equities') or {}).get(name), value,
+                    breached.get(THESIS_LIMIT_PREFIX + name, {}),
+                    _decision_state(breached.get(THESIS_LIMIT_PREFIX + name, {}), decisions, as_of_date))
                     for name, value in sorted((limit or {}).items())}
                 continue
             states[key] = _limit_state(limit_value(facts, key), limit, breached.get(key, {}),
