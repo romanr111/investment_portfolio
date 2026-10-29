@@ -24,6 +24,28 @@ WARNINGS = {
 }
 
 
+def _issuer_display(name):
+    """Issuer label for display: capitalize lowercase words, keep acronyms intact.
+
+    Aggregation keys stay lowercase; only the rendered label changes
+    ('alibaba' -> 'Alibaba', 'bank of america' -> 'Bank of America') while
+    tickers already holding uppercase ('GOOG', '9988') pass through verbatim.
+    """
+    small = {'of', 'and', 'the', 'a'}
+    out = []
+    for idx, word in enumerate(name.split(' ')):
+        if any(char.isupper() for char in word[1:]):
+            out.append(word)  # acronym or already-formatted name, keep verbatim
+        elif word[0:1].isalpha() and word[0:1].islower():
+            if idx == 0 or word not in small:
+                out.append(word[0].upper() + word[1:])
+            else:
+                out.append(word)
+        else:
+            out.append(word)
+    return ' '.join(out)
+
+
 def _pct(value):
     return '<0,1%' if 0 < value < .1 else f'{value:.1f}%'.replace('.',',')
 
@@ -146,7 +168,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
         for prefix, plain, suffix in ((ISSUER_EQ_PREFIX, 'issuer_pct_equities', ''),
                                       (ISSUER_NAV_PREFIX, 'issuer_pct_nav', ' / NAV')):
             if key.startswith(prefix):
-                return limits.get(plain), 'Емітент ' + key[len(prefix):] + suffix
+                return limits.get(plain), 'Емітент ' + _issuer_display(key[len(prefix):]) + suffix
         name = key.split(':', 1)[1] if ':' in key else key.split('.', 1)[1] if '.' in key else None
         theses = limits.get(THESIS_KEY) or {}
         if name and name in theses:
@@ -237,7 +259,8 @@ def concentration_section(section, decisions=None, as_of_date=None):
     if shares['top4_pct_equities'] is not None:
         rows.append(('Концентрація - топ-4',
                      _pct(shares['top4_pct_equities']) + ' акцій у чотирьох найбільших · ліміт ' +
-                     _pct(limits.get('top4_pct_equities', 20)) + ' (' + ', '.join(shares['top4_ids'][:4]) + ')'))
+                     _pct(limits.get('top4_pct_equities', 20)) + ' (' +
+                     _issuer_display(', '.join(shares['top4_ids'][:4])) + ')'))
     if shares['china_pct_equities'] is not None:
         rows.append(('Концентрація - Китай',
                      _pct(shares['china_pct_equities']) + ' акцій · ліміт ' + _pct(limits.get('country_pct_equities_china', 10))))
