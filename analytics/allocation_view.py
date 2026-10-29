@@ -113,10 +113,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
     block = _concentration(section)
     if block is None:
         return None
-    warn_labels = {WARNING_ISSUER: SAFEGUARD_LABELS[WARNING_ISSUER], WARNING_CORE: SAFEGUARD_LABELS[WARNING_CORE],
-                   WARNING_COUNTRY: SAFEGUARD_LABELS[WARNING_COUNTRY], WARNING_THESIS: SAFEGUARD_LABELS[WARNING_THESIS],
-                   WARNING_UNRESOLVED: SAFEGUARD_LABELS[WARNING_UNRESOLVED],
-                   WARNING_UNKNOWN_LOOKTHROUGH: SAFEGUARD_LABELS[WARNING_UNKNOWN_LOOKTHROUGH]}
+    warn_labels = dict(SAFEGUARD_LABELS)
     if block['unavailable']:
         note = 'Вимірювання концентрації недоступне'
         named = block['warnings'][:2]
