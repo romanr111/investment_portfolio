@@ -2,6 +2,7 @@
 import math
 
 from analytics.allocation_inputs import validate_saved_allocation
+from analytics.concentration_v1 import decision_display
 
 LABELS = ('Концентрований','Частково диверсифікований','Добре диверсифікований у межах моделі')
 WARNINGS = {
@@ -56,7 +57,6 @@ SAFEGUARD_LABELS = {
     'business_assumption_material': 'Бізнес-допущення суттєве для оцінки',
     'concentration_block_invalid': 'введені дані не пройшли перевірку цілісності',
 }
-DECISION_TEXT = {'accept': 'рішення: прийнято', 'reduce': 'рішення: скоротити', 'exit': 'рішення: вийти'}
 THESIS_KEY = 'thesis_pct_equities'
 
 
@@ -131,12 +131,10 @@ def concentration_section(section, decisions=None, as_of_date=None):
     decisions = decisions or {}
 
     def decision_text(item):
+        # Delegation: the display text is the shared one from concentration_v1
+        # (no catch-all text for an unreadable record any more).
         record = (decisions or {}).get(item.get('decision_id')) if item.get('decision_id') else None
-        if isinstance(record, dict) and str(record.get('review_by') or '') >= str(as_of_date or ''):
-            text = DECISION_TEXT.get(str(record.get('decision')), 'рішення записане')
-            stamp = str(record.get('review_by') or '')
-            return text + ('; розгляд ' + '.'.join(reversed(stamp.split('-'))) if stamp else '')
-        return 'нерозглянуто'
+        return decision_display(record, item, as_of_date) or 'нерозглянуто'
 
     def resolved(item):
         return decision_text(item) != 'нерозглянуто'

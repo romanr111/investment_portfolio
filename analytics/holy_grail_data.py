@@ -407,7 +407,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
             concentration = concentration_v1.build_block(
                 positions, allocation_config, float(data['TOTAL_ASSETS']), as_of_date, v2_result=saved)
             concentration_v1.match_decisions(
-                concentration, allocation_config.get('concentration_decisions'), as_of_date)
+                concentration, allocation_config.get('concentration_decisions'), as_of_date,
+                allocation_config)
     except Exception as error:
         reason = str(error) or error.__class__.__name__
         concentration = concentration_v1.unavailable_block(as_of_date, [reason])

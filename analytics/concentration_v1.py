@@ -13,9 +13,28 @@ Contract (pinned):
   defaults below; theses from `allocation.linked_theses` as
   `{name: {'members': [position ids], 'limit_pct_equities': number}}`;
   decisions from `allocation.concentration_decisions` as
-  `{id: {'limit': str, 'decided_at': str, 'decision': accept|reduce|exit,
-        'reason': str, 'review_by': str}}`; records missing `decision` or
-  `reason`, or decided after the block, never resolve a breach.
+  `{id: {'limit': str, 'subject': str (optional), 'decided_at': str,
+        'decision': accept|reduce|exit, 'reason': str, 'review_by': str,
+        'max_value': number (optional; the core_min breach uses 'min_value')}}`.
+  A record acts on a breach only while it binds the breach's subject: a record
+  with `subject` resolves exactly `limit + ':' + subject` (`issuer_pct_equities`
+  + `GOOG` == `issuer_pct_equities:GOOG`, `thesis_pct_equities` +
+  `china_stack` == `thesis_pct_equities:china_stack`), while a legacy record
+  without `subject` matches only the exact breach key (old fully-qualified
+  thesis records keep their verdict, a bare `issuer_pct_equities` key can
+  never match a prefixed issuer breach). Also `decided_at <= as_of <=
+  review_by`, and the review horizon `review_by - decided_at` stays within
+  `max_review_days` (constant MAX_REVIEW_DAYS; private override
+  `allocation.concentration_decision_settings` = `{'max_review_days': N}`,
+  finite > 0 or ValueError). The recorded value caps the record: an over-limit
+  breach stands at up to the recorded `max_value` (+EPS) and a core_min breach
+  holds to at least the recorded `min_value` (-EPS) - a breach at a worse
+  value than the decision covers stops being resolved by it. Records failing
+  the schema, with a future `decided_at` or an over-horizon review are
+  invalid: they resolve nothing and surface as `invalid_decision_record:<id>`
+  entries in block['warnings'] (deduped, sorted, first three) instead of
+  failing the whole block; a record that only misses one breach's subject or
+  value cap may still act on that subject's other breaches and is not invalid.
 - Issuer aggregation uses an optional `issuer` profile key (single stocks
   default to their ticker; 9988+BABA -> 'alibaba'). Fund look-through uses a
   dated profile `holdings` field: `issuers` (issuer -> share of fund NAV),
@@ -35,9 +54,10 @@ Contract (pinned):
   equities limit breaches under `issuer_pct_equities:<issuer>` and one over
   the NAV limit under `issuer_pct_nav:<issuer>`; the plain limits
   (`top4_pct_equities`, `core_min_pct_equities`, `country_pct_equities_china`,
-  `thesis_pct_equities:<name>`) keep their plain keys. Decision records
-  (still limit-name-matched until the subject-aware step) therefore resolve
-  these breaches only when a record carries the exact prefixed key.
+  `thesis_pct_equities:<name>`) keep their plain keys. Decision records bind
+  the same way: an issuer breach resolves only from a record carrying its
+  subject (`issuer_pct_equities` + `GOOG`), thesis breaches from
+  `thesis_pct_equities` + `<name>` or the legacy fully-qualified key.
 - Replay reads profiles/limits/theses/decisions ONLY from
   `v2_record['configuration']` (the merged settings stored and fingerprinted
   in the record) - never re-reads the profiles JSON path or private config.
@@ -92,6 +112,15 @@ THESIS_LIMIT_PREFIX = 'thesis_pct_equities:'
 # block's as_of_date: stale or undated holdings must not be silently spread
 # into issuer shares, they make the fund an (unverified) single ticker issuer.
 HOLDINGS_MAX_AGE_DAYS = 90
+# A recorded decision covers at most about one quarter plus change: whatever
+# the review_by date says, a breach always needs a fresh conscious look after
+# this many days from the decision itself.
+MAX_REVIEW_DAYS = 120
+
+# Display text for one recorded decision (moved here from the rendered view;
+# the single source of truth for both the view and what-if output).
+DECISION_TEXT = {'accept': 'рішення: прийнято', 'reduce': 'рішення: скоротити',
+                 'exit': 'рішення: вийти'}
 
 
 def unavailable_block(as_of_date, warnings):
@@ -374,48 +403,186 @@ def _thesis_limit(config, name, limits):
     return float(candidate)
 
 
-def match_decisions(block, decisions, as_of_date):
+def _review_horizon(settings):
+    """max_review_days from the private `concentration_decision_settings`.
+
+    `None` (direct harness calls) keeps the shipped MAX_REVIEW_DAYS constant.
+    A present block must be a dict with only the known `max_review_days` key
+    (a finite number above zero), otherwise the configuration itself is
+    broken and must fail loudly - same policy as the limits - instead of
+    silently stretching how long one accepted decision can cover a breach.
+    """
+    if settings is None:
+        return MAX_REVIEW_DAYS
+    override = settings.get('concentration_decision_settings') if isinstance(settings, dict) else None
+    if override is None:
+        return MAX_REVIEW_DAYS
+    if not isinstance(override, dict) or any(key != 'max_review_days' for key in override):
+        raise ValueError('Invalid concentration decision settings')
+    days = override.get('max_review_days')
+    if not _finite(days) or days <= 0:
+        raise ValueError('Invalid concentration decision settings')
+    return days
+
+
+def _clean_records(records, as_of, horizon_days):
+    """Split raw decision records into eligible candidates and invalid ids.
+
+    A candidate is a complete record: `decision` in accept/reduce/exit, a
+    non-empty `reason` and `limit`, an optional non-empty `subject` string,
+    optional finite `max_value`/`min_value` caps, parseable dates with
+    `decided_at <= as_of` (a `review_by` that has passed is not invalid - the
+    record simply does not act any more) and a horizon within `horizon_days`.
+    Anything else is invalid and only warns; it never blocks the block.
+    """
+    candidates, invalid_ids = [], []
+    for record_id, record in records.items():
+        if not isinstance(record, dict):
+            invalid_ids.append(record_id)
+            continue
+        limit, decided_at, review_by = record.get('limit'), record.get('decided_at'), record.get('review_by')
+        subject = record.get('subject')
+        if (record.get('decision') not in ('accept', 'reduce', 'exit')
+                or not isinstance(record.get('reason'), str) or not record['reason'].strip()
+                or not isinstance(limit, str) or not limit
+                or record.get('max_value') is not None and not _finite(record['max_value'])
+                or record.get('min_value') is not None and not _finite(record['min_value'])):
+            invalid_ids.append(record_id)
+            continue
+        if subject is not None and (not isinstance(subject, str) or not subject.strip()):
+            invalid_ids.append(record_id)
+            continue
+        try:
+            decided, reviewed = date.fromisoformat(decided_at), date.fromisoformat(review_by)
+        except (ValueError, TypeError):
+            invalid_ids.append(record_id)
+            continue
+        if decided > as_of or (reviewed - decided).days > horizon_days:
+            invalid_ids.append(record_id)
+            continue
+        candidates.append(dict(id=record_id, record=record, limit=limit,
+                               subject=subject.strip() if subject is not None else None,
+                               decided_at=decided_at, reviewed=reviewed))
+    return candidates, invalid_ids
+
+
+def _acts_on(candidate, breach):
+    """Subject binding plus the recorded value cap for one breach.
+
+    A subject-bound record acts only on the breach keyed `<limit>:<subject>`;
+    a legacy record without `subject` only on an exact limit-key match - a
+    bare `issuer_pct_equities` can never match a prefixed issuer breach. The
+    value cap is per breach too: `max_value` governs over-limit breaches (the
+    breach value stays at or below the recorded share) and the core_min
+    breach's floor convention uses `min_value` (the below-target value stays
+    at or above the recorded share). A cap miss means the record does not act
+    on THIS breach - it may still act on that subject's other breaches.
+    """
+    if candidate['subject'] is not None:
+        if candidate['limit'] + ':' + candidate['subject'] != breach.get('limit'):
+            return False
+    elif candidate['limit'] != breach.get('limit'):
+        return False
+    cap = (candidate['record'].get('min_value') if breach.get('limit') == 'core_min_pct_equities'
+           else candidate['record'].get('max_value'))
+    if cap is None:
+        return True
+    value = breach.get('value')
+    if not _finite(value):
+        return False
+    if breach['limit'] == 'core_min_pct_equities':
+        return value >= cap - EPS
+    return value <= cap + EPS
+
+
+def _pick(candidates, breach, as_of):
+    """The one record acting on this breach: `review_by` not passed, binding
+    and cap met; the latest decision wins and the greatest id breaks ties."""
+    eligible = [candidate for candidate in candidates
+                if candidate['reviewed'] >= as_of and _acts_on(candidate, breach)]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda candidate: (candidate['decided_at'], candidate['id']))
+
+
+def match_decisions(block, decisions, as_of_date, settings=None):
     """Fill `decision_id` on breaches from recorded decision records.
 
-    A breach counts as resolved only when a complete decision record for the
-    same limit exists - the recorded choice is `accept`, `reduce` or `exit`,
-    it carries a non-empty `reason`, and it was decided no later than
-    `as_of_date` - and its `review_by` date is >= `as_of_date`. Incomplete or
-    future-dated records, and anything else, keep `decision_id=None` and raise
-    the `unresolved_breach` warning.
+    A breach counts as resolved only when a complete decision record bound to
+    it exists: `decision` in accept/reduce/exit, a non-empty `reason`, dates
+    with `decided_at <= as_of_date <= review_by`, a review horizon
+    `review_by - decided_at` within `max_review_days` (MAX_REVIEW_DAYS
+    constant; the `settings` configuration - the same frozen
+    `v2_record['configuration']` used for replay - may override it through
+    `concentration_decision_settings` = `{'max_review_days': N}`, and an
+    invalid override raises ValueError), plus the subject binding and the
+    optional `max_value`/`min_value` caps described in `decision_for_breach`.
+    Records that fail the schema, carry a future `decided_at` or an
+    over-horizon review are invalid: skipped and surfaced as
+    `invalid_decision_record:<record_id>` entries in block['warnings']
+    (deduped, sorted, first three) - one bad record never blocks the whole
+    block. Every breach left uncovered still raises `unresolved_breach`.
+    The chosen record stays the latest `decided_at`, greatest id on ties.
     """
     if not isinstance(block, dict) or block.get('version') != VERSION:
         return block
     records = decisions if isinstance(decisions, dict) else {}
     as_of = date.fromisoformat(as_of_date)
-    candidates = []
-    for record_id, record in records.items():
-        if not isinstance(record, dict):
+    candidates, invalid_ids = _clean_records(records, as_of, _review_horizon(settings))
+    for breach in block.get('breaches') or []:
+        if not isinstance(breach, dict):
             continue
-        limit, decided_at, review_by = record.get('limit'), record.get('decided_at'), record.get('review_by')
-        if (record.get('decision') not in ('accept', 'reduce', 'exit')
-                or not isinstance(record.get('reason'), str) or not record['reason'].strip()
-                or not isinstance(limit, str) or not limit):
-            continue
-        try:
-            decided, reviewed = date.fromisoformat(decided_at), date.fromisoformat(review_by)
-        except (ValueError, TypeError):
-            continue
-        if decided > as_of:
-            continue
-        candidates.append(dict(id=record_id, limit=limit, decided_at=decided_at, review_by=reviewed))
-    for breach in block.get('breaches', []):
-        eligible = [record for record in candidates
-                    if record['limit'] == breach.get('limit') and record['review_by'] >= date.fromisoformat(as_of_date)]
-        if eligible:
-            # Latest decision date; lexicographically greatest id breaks ties.
-            chosen = max(eligible, key=lambda record: (record['decided_at'], record['id']))
+        chosen = _pick(candidates, breach, as_of)
+        if chosen is not None:
             breach['decision_id'] = chosen['id']
+    warnings = block.get('warnings')
+    if isinstance(warnings, list) and invalid_ids:
+        for entry in sorted('invalid_decision_record:' + str(record_id) for record_id in set(invalid_ids))[:3]:
+            if entry not in warnings:
+                warnings.append(entry)
     if block.get('breaches') and any(breach.get('decision_id') is None for breach in block['breaches']):
-        warnings = block.get('warnings')
         if isinstance(warnings, list) and WARNING_UNRESOLVED not in warnings:
             warnings.append(WARNING_UNRESOLVED)
     return block
+
+
+def decision_for_breach(breach, decisions, as_of_date, settings=None):
+    """The one record acting on this breach under the full contract, or None.
+
+    Same subject binding, horizon and value-cap eligibility and the same
+    latest-decision/greatest-id choice as `match_decisions`, without
+    mutating the block - the shared resolver behind the rendered view and the
+    what-if states, so the saved verdict and every readout can never drift
+    apart. Returns the chosen candidate (`id` plus the raw `record`); invalid
+    records resolve nothing here, they only warn inside `match_decisions`.
+    """
+    if not isinstance(breach, dict) or not isinstance(breach.get('limit'), str) or not breach['limit']:
+        return None
+    records = decisions if isinstance(decisions, dict) else {}
+    as_of = date.fromisoformat(as_of_date)
+    candidates, _invalid_ids = _clean_records(records, as_of, _review_horizon(settings))
+    return _pick(candidates, breach, as_of)
+
+
+def decision_display(record, breach, as_of_date):
+    """Final display text for one wired decision record, or None.
+
+    Single source of truth for the rendered view and what-if: `record` is the
+    decision record behind a breach's `decision_id` (assigned by
+    `match_decisions` under the same frozen configuration), `breach` the
+    breach the text is rendered for (kept in the signature so every caller
+    stays breach-first; eligibility lives in `decision_for_breach`). Returns
+    None when there is no complete record, its `review_by` has passed the
+    report date, or its choice is not a recorded decision - there is no
+    catch-all text for an unreadable record any more.
+    """
+    if not isinstance(record, dict) or str(record.get('decision')) not in DECISION_TEXT:
+        return None
+    if str(record.get('review_by') or '') < str(as_of_date or ''):
+        return None
+    stamp = str(record.get('review_by') or '')
+    return DECISION_TEXT[str(record.get('decision'))] + \
+        ('; розгляд ' + '.'.join(reversed(stamp.split('-'))) if stamp else '')
 
 
 def validate_saved_concentration(block, data, v2_record):
@@ -449,7 +616,9 @@ def validate_saved_concentration(block, data, v2_record):
             return False
         total = invested * 100 / float(coverage['invested_pct_nav'])
         fresh = build_block(positions, config, total, as_of, v2_result=v2_record)
-        fresh = match_decisions(fresh, config.get('concentration_decisions'), as_of)
+        # Replay reads the decision settings from the SAME frozen configuration
+        # the save hook used, so the horizon rule stays replay-deterministic.
+        fresh = match_decisions(fresh, config.get('concentration_decisions'), as_of, config)
         from analytics.allocation_score_v2 import _same
         return _same(fresh, block)
     except (ValueError, TypeError, KeyError, AttributeError, ArithmeticError):

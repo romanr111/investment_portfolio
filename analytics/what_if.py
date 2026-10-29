@@ -20,7 +20,8 @@ from analytics.holy_grail_data import (CACHE_DIR, CONFIG_PATH, CASH_EQUIVALENTS,
                                        extract_exposures, enrich_snapshot_file, load_config)
 from analytics.concentration_v1 import (ISSUER_EQ_PREFIX, ISSUER_NAV_PREFIX, THESIS_LIMIT_PREFIX,
                                         VERSION as CONCENTRATION_VERSION,
-                                        build_block, unavailable_block, validate_saved_concentration)
+                                        build_block, decision_for_breach, match_decisions,
+                                        unavailable_block, validate_saved_concentration)
 
 
 class WhatIfError(ValueError):
@@ -192,23 +193,29 @@ def limit_value(facts, limit):
     return None
 
 
-def _decision_state(breach, decisions, as_of_date):
-    record = decisions.get(breach.get('decision_id')) if breach.get('decision_id') else None
-    if record is None:
-        return {'decision_id': breach.get('decision_id'), 'state': 'unresolved'}
+def _decision_state(breach, decisions, as_of_date, settings=None):
+    # Single source of truth: the same eligibility (subject binding, review
+    # horizon, value caps) and choice as match_decisions, from concentration_v1.
+    chosen = decision_for_breach(breach, decisions, as_of_date, settings)
+    if chosen is None:
+        record_id = breach.get('decision_id') if isinstance(breach, dict) else None
+        return {'decision_id': record_id, 'state': 'unresolved'}
+    record = chosen['record']
     review_by = str(record.get('review_by') or '')
-    resolved = bool(review_by and review_by >= as_of_date)
-    return {'decision_id': breach.get('decision_id'), 'decision': record.get('decision'),
-            'decided_at': record.get('decided_at'), 'review_by': review_by, 'resolved': resolved}
+    return {'decision_id': chosen['id'], 'decision': record.get('decision'),
+            'decided_at': record.get('decided_at'), 'review_by': review_by,
+            'resolved': bool(review_by and review_by >= as_of_date)}
 
 
-def concentration_state(block, decisions, as_of_date):
+def concentration_state(block, decisions, as_of_date, settings=None):
     """Per-limit and per-issuer value/breach/decision readout with the block's own warnings.
 
     The plain limit states keep their largest-issuer readout (issuer breaches
     now live under per-issuer prefixed keys), and the per-issuer view lists
     every issuer over a limit with both denominators, breach flags and the
-    decision state of its own breaches.
+    decision state of its own breaches. `settings` is the frozen allocation
+    configuration the decisions came from (drives the review-horizon
+    eligibility through concentration_v1); None keeps the shipped horizon.
     """
     if not isinstance(block, dict) or block.get('version') != CONCENTRATION_VERSION:
         return {'status': 'absent'}
@@ -237,7 +244,7 @@ def concentration_state(block, decisions, as_of_date):
                 states[key] = {name: _limit_state(
                     (facts.get('thesis_pct_equities') or {}).get(name), value,
                     breached.get(THESIS_LIMIT_PREFIX + name, {}),
-                    _decision_state(breached.get(THESIS_LIMIT_PREFIX + name, {}), decisions, as_of_date))
+                    _decision_state(breached.get(THESIS_LIMIT_PREFIX + name, {}), decisions, as_of_date, settings))
                     for name, value in sorted((limit or {}).items())}
                 continue
             breach = breached.get(key, {})
@@ -246,7 +253,7 @@ def concentration_state(block, decisions, as_of_date):
                 # state; older blocks without prefixed keys keep their plain hit.
                 breach = breached.get(key + ':' + largest['id'], breach)
             states[key] = _limit_state(limit_value(facts, key), limit, breach,
-                                       _decision_state(breach, decisions, as_of_date))
+                                       _decision_state(breach, decisions, as_of_date, settings))
         over_ids = [entry['id'] for entry in facts.get('issuers_over_limit') or []
                     if isinstance(entry, dict) and isinstance(entry.get('id'), str)]
         issuer_states = []
@@ -256,10 +263,10 @@ def concentration_state(block, decisions, as_of_date):
             issuer_states.append(dict(id=issuer, limits={
                 'issuer_pct_equities': _limit_state(
                     limit_value(facts, ISSUER_EQ_PREFIX + issuer), limits.get('issuer_pct_equities'),
-                    eq_breach or {}, _decision_state(eq_breach or {}, decisions, as_of_date)),
+                    eq_breach or {}, _decision_state(eq_breach or {}, decisions, as_of_date, settings)),
                 'issuer_pct_nav': _limit_state(
                     limit_value(facts, ISSUER_NAV_PREFIX + issuer), limits.get('issuer_pct_nav'),
-                    nav_breach or {}, _decision_state(nav_breach or {}, decisions, as_of_date)),
+                    nav_breach or {}, _decision_state(nav_breach or {}, decisions, as_of_date, settings)),
             }))
     except (AttributeError, KeyError, TypeError):
         return {'status': 'unavailable', 'warnings': ['concentration_state_invalid']}
@@ -322,6 +329,8 @@ def run(deltas_text, *, snapshot=None, config_path=CONFIG_PATH, cache_dir=None, 
 
     decisions_before = ((saved_v2.get('configuration') or {}).get('concentration_decisions')
                         if isinstance(saved_v2, dict) else None) or {}
+    before_config = saved_v2.get('configuration') if isinstance(saved_v2, dict) and \
+        isinstance(saved_v2.get('configuration'), dict) else None
     before_block = (data.get('DIVERSIFICATION_DATA') or {}).get('concentration_v1') \
         if isinstance(data.get('DIVERSIFICATION_DATA'), dict) else None
     if (isinstance(before_block, dict) and before_block.get('version') == CONCENTRATION_VERSION
@@ -347,20 +356,26 @@ def run(deltas_text, *, snapshot=None, config_path=CONFIG_PATH, cache_dir=None, 
     after_data = result.get('data', result)
     after = deepcopy(after_data.get('DIVERSIFICATION_DATA') or {})
     after_v2 = after.get('allocation_score_v2') or {}
+    after_config = after_v2.get('configuration') if isinstance(after_v2.get('configuration'), dict) else None
+    decisions_after = ((after_v2.get('configuration') or {}).get('concentration_decisions') or {})
     after_block = after.get('concentration_v1')
     if not (isinstance(after_block, dict) and after_block.get('version') == CONCENTRATION_VERSION):
         try:
             after_block = build_block(after_v2.get('positions') or [], config, target.get('TOTAL_ASSETS'),
                                       as_of_date, v2_result=after_v2 if after_v2.get('version') == V2 else None)
+            # Directly built fallback: wire the decisions through the same
+            # subject-bound matcher the save hook used, so the states mirror.
+            match_decisions(after_block, decisions_after, as_of_date, after_config)
         except NotImplementedError:
             after_block = unavailable_block(as_of_date, ['concentration_block_unavailable'])
         except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
             after_block = unavailable_block(as_of_date, ['concentration_block_invalid'])
-    decisions_after = ((after_v2.get('configuration') or {}).get('concentration_decisions') or {})
     return {'snapshot': str(source), 'as_of_date': as_of_date,
             'deltas': [{'id': delta['id'], 'usd': delta['usd']} for delta in deltas],
             'cash_delta_usd': round(-sum(delta['usd'] for delta in deltas), 2) or 0.0,
             'before': {'allocation_score_v2': score_state(data),
-                       'concentration_v1': concentration_state(before_block, decisions_before, as_of_date)},
+                       'concentration_v1': concentration_state(before_block, decisions_before, as_of_date,
+                                                               before_config)},
             'after': {'allocation_score_v2': score_state({'DIVERSIFICATION_DATA': {'allocation_score_v2': after_v2}}),
-                      'concentration_v1': concentration_state(after_block, decisions_after, as_of_date)}}
+                      'concentration_v1': concentration_state(after_block, decisions_after, as_of_date,
+                                                              after_config)}}
