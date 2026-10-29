@@ -108,8 +108,6 @@ def concentration_section(section, decisions=None, as_of_date=None):
     Returns None when no block is saved (today's render exactly) or when the
     block is malformed; an unavailable block renders one explicit row.
     """
-    from analytics.concentration_v1 import (WARNING_CORE, WARNING_COUNTRY, WARNING_ISSUER,
-                                            WARNING_THESIS, WARNING_UNRESOLVED, WARNING_UNKNOWN_LOOKTHROUGH)
     block = _concentration(section)
     if block is None:
         return None
