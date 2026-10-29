@@ -257,17 +257,6 @@ def concentration_section(section, decisions=None, as_of_date=None):
         if label not in existing:
             rows.append(('Обмеження', label))
     unresolved = sum(1 for item in block['breaches'] if not resolved(item))
-    names = []
-    if unresolved:
-        # First 2-3 subject names from the breaches, unresolved-first order:
-        # one name per subject (an issuer's equity and NAV breaches share it).
-        for subject_key in groups:
-            if any(not resolved(item) for item in by_subject[subject_key]):
-                name = subject_key[1] if subject_key[0] is not None else limit_for(subject_key[1])[1]
-                if name not in names:
-                    names.append(name)
-                if len(names) == 3:
-                    break
     summary = [('Концентрація',
                 'Ліміти дотримані' if not block['breaches'] else
                 str(len(block['breaches'])) + ' порушень · ' + str(unresolved) + ' нерозглянутих'),
