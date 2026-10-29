@@ -12,11 +12,22 @@ from analytics.holy_grail_data import DATA_DIR
 
 END_MARKER = 'Holy Grail - End'
 MARKERS = {'Holy Grail - Details','Диверсифікація - Details'}
+_GHOST_MARGIN = 20  # rows scanned below a shrunk summary for stale breach labels
 CELL_FIELDS = ('userEnteredValue','userEnteredFormat','dataValidation','note','textFormatRuns')
 
 
 def _occupied(cell):
-    return bool(cell.get('userEnteredValue') or cell.get('note') or cell.get('dataValidation'))
+    # An empty `stringValue:''` cell is BLANK, not occupied: the writer's own
+    # blank rows (separator/ghost rows) must not block the next save
+    # (consecutive-writes idempotency, follow-up review 2026-10-30). Zone
+    # formats are the writer's own (cleared with the block), so they do not
+    # make a cell occupied either.
+    value = cell.get('userEnteredValue') or {}
+    if value.get('numberValue') is not None:
+        return True
+    if value.get('stringValue', '').strip():
+        return True
+    return bool(cell.get('note') or cell.get('dataValidation'))
 
 
 def _write(sheet_id, start, values):
@@ -43,16 +54,26 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         ['Holy Grail: еквівалент джерел',view['sheet_number']],['Орієнтир','15–20'],
         ['Дата позицій',view['as_of']],['Прямі історії / моделі',view['coverage_text']],
         ['Статус',view['status']]]
-    # A saved concentration measurement extends the owned summary beyond 5 rows.
-    extra = max(0, len(summary) - 5) if view.get('allocation') else 0
-    allowed_labels.extend([{'Концентрація'}, {'Емітент', 'Концентрація'},
-                           {'Топ-4 / Core', 'Концентрація'}, {'Китай', 'Концентрація'}][:extra])
     end_row = 9 + max(len(summary), 5)
     if end_row > len(grid): raise ValueError('Insufficient summary rows; extend the sheet explicitly')
     if not grid[9][0].get('userEnteredValue', {}).get('stringValue', '') and any(
             _occupied(cell) for row in grid[9:end_row] for cell in row[:2]):
         raise ValueError('Summary cells are populated without an ownership label')
-    for index, labels in enumerate(allowed_labels, start=9):
+    if view.get('allocation'):
+        # P1.2 review (2026-10-30): ownership follows the render, not a frozen
+        # allowlist - the owned label of a summary row is the label this render
+        # writes there, whatever the row count. Label churn (Топ-4 / Core ->
+        # Топ-4 / Core (stocks)) and breach-row growth can no longer silently
+        # overwrite: an unexpected label in an owned row and unexpected rows
+        # both raise, and nothing outside 9..end_row is ever written.
+        ownership = {index: {str(row[0])} for index, row in enumerate(summary, start=9)}
+        for index in range(9, end_row):
+            ownership.setdefault(index, {''})
+    else:
+        ownership = {index: set(labels) for index, labels in enumerate(allowed_labels, start=9)}
+        for index in range(9 + len(summary), end_row):
+            ownership[index] = {''}
+    for index, labels in ownership.items():
         left, right = grid[index][:2]
         label = left.get('userEnteredValue', {}).get('stringValue', '')
         if (label and label not in labels) or (not label and _occupied(right)):
@@ -61,6 +82,28 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
             if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
                     'formulaValue' in cell.get('userEnteredValue', {})):
                 raise ValueError('Summary cells contain foreign metadata or formulas')
+    # Summary-shrink retention (follow-up review 2026-10-30): when the render
+    # shrinks (fewer breach rows), rows below the new summary would keep stale
+    # labels forever, because only the details zone was cleared before. Walk
+    # down from the new end, never past the details marker: this render's own
+    # labels ('Порушення…', '#', Диверсифікація-markers) and blank separators
+    # are collected for clearing; anything else, or foreign metadata in a
+    # stale row, raises a safe refusal instead of overwriting.
+    tail_end = min(len(grid), details_start - 1, end_row + _GHOST_MARGIN)
+    stale = []
+    for index in range(end_row, max(tail_end, end_row)):
+        cells = grid[index][:2]
+        label = cells[0].get('userEnteredValue', {}).get('stringValue', '')
+        for cell in cells:
+            if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
+                    'formulaValue' in cell.get('userEnteredValue', {})):
+                raise ValueError('Rows below the summary carry foreign metadata; extend manually')
+        if label.startswith('Порушення') or label == '#' or label.startswith('Диверсифікація'):
+            stale.append(index)
+        elif label or _occupied(cells[1]):
+            raise ValueError('Rows below the summary belong to another section')
+        else:
+            stale.append(index)  # already blank in the ghost margin: clear anyway
     detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
     rows=[[a,b] for a,b in detail_rows]+[[END_MARKER,'']]
     end=details_start+len(rows)
@@ -74,6 +117,9 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         if any(_occupied(c) for c in row[:2]): raise ValueError('New details overlap existing cells')
     requests=[_write(sheet_id,9,summary),_write(sheet_id,details_start-1,[['Диверсифікація - Details','']]),
               _write(sheet_id,details_start,rows)]
+    # stale summary-tail rows collected above (shrunk render): clear them too
+    for index in stale:
+        requests.append(_write(sheet_id,index,[['',''],['','']]))
     if old_end>end: requests.append(_write(sheet_id,end,[['',''] for _ in range(old_end-end)]))
     marker = grid[details_start-1][0].get('userEnteredValue', {}).get('stringValue', '')
     if marker not in MARKERS and any(g['range']['startIndex'] == details_start for g in groups):

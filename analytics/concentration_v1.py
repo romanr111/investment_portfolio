@@ -201,7 +201,11 @@ def _holdings_fresh(holdings, as_of_date):
         anchor, seen = date.fromisoformat(as_of_date), holdings.get('as_of_date')
         if not isinstance(seen, str):
             return False
-        return (anchor - date.fromisoformat(seen)).days <= HOLDINGS_MAX_AGE_DAYS
+        age = (anchor - date.fromisoformat(seen)).days
+        # Future-dated holdings would let a later filing answer an earlier
+        # question (look-ahead bias, P1 review 2026-10-30): only ages in
+        # [0, 90] count as verified.
+        return 0 <= age <= HOLDINGS_MAX_AGE_DAYS
     except (ValueError, TypeError):
         return False
 

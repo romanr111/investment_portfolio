@@ -24,20 +24,40 @@ WARNINGS = {
 }
 
 
+_ISSUER_ALIASES = {
+    # canonical aggregation key -> display name (fund-constituent naming uses
+    # underscores; canonical keys stay lowercase, only the label is pretty)
+    'alphabet': 'Alphabet', 'amazon_com': 'Amazon', 'meta_platforms': 'Meta Platforms',
+    'berkshire_hathaway': 'Berkshire Hathaway', 'jpmorgan_chase': 'JPMorgan Chase',
+    'micron_technology': 'Micron Technology', 'eli_lilly': 'Eli Lilly',
+    'exxonmobil': 'ExxonMobil', 'johnson_and_johnson': 'Johnson & Johnson',
+    'nvidia': 'NVIDIA', 'amd': 'AMD', 'microsoft': 'Microsoft', 'apple': 'Apple',
+    'tesla': 'Tesla', 'broadcom': 'Broadcom', 'visa': 'Visa',
+    'bank_of_america': 'Bank of America', 'american_express': 'American Express',
+    'coca_cola': 'Coca-Cola', 'occidental_petroleum': 'Occidental Petroleum',
+    'chevron': 'Chevron', 'alibaba': 'Alibaba',
+}
+
+
 def _issuer_display(name):
-    """Issuer label for display: capitalize lowercase words, keep acronyms intact.
+    """Issuer label for display: canonical aliases first, then capitalize
+    lowercase words while keeping acronyms verbatim.
 
     Aggregation keys stay lowercase; only the rendered label changes
-    ('alibaba' -> 'Alibaba', 'bank of america' -> 'Bank of America') while
-    tickers already holding uppercase ('GOOG', '9988') pass through verbatim.
+    ('alibaba' -> 'Alibaba', 'amazon_com' -> 'Amazon', 'bank of america' ->
+    'Bank of America') while tickers already holding uppercase ('GOOG', '9988')
+    pass through verbatim.
     """
-    small = {'of', 'and', 'the', 'a'}
     out = []
     for idx, word in enumerate(name.split(' ')):
+        core = word.rstrip(',')
+        if core in _ISSUER_ALIASES:
+            out.append(_ISSUER_ALIASES[core] + word[len(core):])
+            continue
         if any(char.isupper() for char in word[1:]):
             out.append(word)  # acronym or already-formatted name, keep verbatim
         elif word[0:1].isalpha() and word[0:1].islower():
-            if idx == 0 or word not in small:
+            if idx == 0 or word not in {'of', 'and', 'the', 'a'}:
                 out.append(word[0].upper() + word[1:])
             else:
                 out.append(word)
@@ -246,7 +266,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
                                      item if subject_key[0] is None else primary))
 
     rows = list(breach_rows)
-    issuer = f"{shares['issuer_id']}: {_pct(shares['issuer_pct_equities'])} акцій"
+    issuer = f"{_issuer_display(shares['issuer_id'])}: {_pct(shares['issuer_pct_equities'])} акцій"
     if shares['issuer_pct_nav'] is not None:
         issuer += ' / ' + _pct(shares['issuer_pct_nav']) + ' NAV'
     limit_issuer = limits.get('issuer_pct_equities')
@@ -285,7 +305,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
     summary = [('Концентрація',
                 'Ліміти дотримані' if not block['breaches'] else
                 str(len(block['breaches'])) + ' порушень · ' + str(unresolved) + ' нерозглянутих'),
-               ('Емітент', (shares['issuer_id'] + ' ' + _pct(shares['issuer_pct_equities'])
+               ('Емітент', (_issuer_display(shares['issuer_id']) + ' ' + _pct(shares['issuer_pct_equities'])
                             + (' / ' + _pct(shares['issuer_pct_nav']) + ' NAV'
                                if shares['issuer_pct_nav'] is not None else ''))),
                ('Топ-4 / Core (stocks)', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities'])),

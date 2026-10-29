@@ -361,6 +361,7 @@
   },
   "ib:BRK B": {
     "as_of_date": "2026-09-30",
+    "issuer": "berkshire_hathaway",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -375,6 +376,7 @@
   },
   "ib:GOOG": {
     "as_of_date": "2026-09-30",
+    "issuer": "alphabet",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -389,6 +391,7 @@
   },
   "ib:AMZN": {
     "as_of_date": "2026-09-30",
+    "issuer": "amazon_com",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -403,6 +406,7 @@
   },
   "ib:META": {
     "as_of_date": "2026-09-30",
+    "issuer": "meta_platforms",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -573,6 +577,7 @@
   },
   "ib:BRK-B": {
     "as_of_date": "2026-09-30",
+    "issuer": "berkshire_hathaway",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [

@@ -20,6 +20,7 @@ from analytics.holy_grail_data import (CACHE_DIR, CONFIG_PATH, CASH_EQUIVALENTS,
                                        extract_exposures, enrich_snapshot_file, load_config)
 from analytics.concentration_v1 import (ISSUER_EQ_PREFIX, ISSUER_NAV_PREFIX, THESIS_LIMIT_PREFIX,
                                         VERSION as CONCENTRATION_VERSION,
+                                        _score_excluding_car as _score_excluding_car_v2,
                                         build_block, decision_for_breach, match_decisions,
                                         unavailable_block, validate_saved_concentration)
 
@@ -354,22 +355,53 @@ def run(deltas_text, *, snapshot=None, config_path=CONFIG_PATH, cache_dir=None, 
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise WhatIfError('Offline recomputation failed (' + type(error).__name__ + '); nothing was changed')
     after_data = result.get('data', result)
-    after = deepcopy(after_data.get('DIVERSIFICATION_DATA') or {})
-    after_v2 = after.get('allocation_score_v2') or {}
+    after_v2 = deepcopy(after_data.get('DIVERSIFICATION_DATA') or {}).get('allocation_score_v2') or {}
+    after_v2 = after_v2 if isinstance(after_v2, dict) else {}
     after_config = after_v2.get('configuration') if isinstance(after_v2.get('configuration'), dict) else None
     decisions_after = ((after_v2.get('configuration') or {}).get('concentration_decisions') or {})
-    after_block = after.get('concentration_v1')
-    if not (isinstance(after_block, dict) and after_block.get('version') == CONCENTRATION_VERSION):
+    after_block = None
+    # Deterministic before/after (P1.4 review 2026-10-30): the concentration
+    # comparison runs BOTH states on the same frozen configuration the save
+    # hook recorded, so a changed profile/limits file between save and probe
+    # cannot pose as a trade effect; the trades themselves move positions and
+    # totals only. The v2 score rows stay production-faithful (current config,
+    # recomputed on the mutated copy) and the readout labels the basis.
+    if isinstance(before_config, dict):
         try:
-            after_block = build_block(after_v2.get('positions') or [], config, target.get('TOTAL_ASSETS'),
-                                      as_of_date, v2_result=after_v2 if after_v2.get('version') == V2 else None)
-            # Directly built fallback: wire the decisions through the same
-            # subject-bound matcher the save hook used, so the states mirror.
-            match_decisions(after_block, decisions_after, as_of_date, after_config)
-        except NotImplementedError:
-            after_block = unavailable_block(as_of_date, ['concentration_block_unavailable'])
-        except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
-            after_block = unavailable_block(as_of_date, ['concentration_block_invalid'])
+            from analytics.holy_grail_data import extract_exposures as frozen_extract
+            frozen_positions, _, _ = frozen_extract(
+                target, as_of_date, before_config.get('extraction_settings', {}))
+            fresh = build_block(frozen_positions, before_config,
+                                target.get('TOTAL_ASSETS'), as_of_date)
+            after_block = match_decisions(
+                fresh, before_config.get('concentration_decisions'), as_of_date, before_config)
+            # The v2-sourced car-rider readout re-derives from the enriched
+            # (mutated) copy on the production configuration, so it tracks
+            # simulated positions instead of replaying the before value
+            # (follow-up review 2026-10-30). A zero-delta run recomputes to
+            # the same number, so no drift is introduced.
+            after_block['facts']['score_excluding_car'] = _score_excluding_car_v2(
+                after_v2 if after_v2.get('version') == V2 else None)
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            after_block = None
+    if not (isinstance(after_block, dict) and after_block.get('version') == CONCENTRATION_VERSION):
+        after_conc = (after_data.get('DIVERSIFICATION_DATA') or {}).get('concentration_v1')
+        if not (isinstance(after_block := after_conc, dict) and after_block.get('version') == CONCENTRATION_VERSION):
+            try:
+                after_block = build_block(after_v2.get('positions') or [], config, target.get('TOTAL_ASSETS'),
+                                          as_of_date, v2_result=after_v2 if after_v2.get('version') == V2 else None)
+                # Directly built fallback: wire the decisions through the same
+                # subject-bound matcher the save hook used, so the states mirror.
+                match_decisions(after_block, decisions_after, as_of_date, after_config)
+            except NotImplementedError:
+                after_block = unavailable_block(as_of_date, ['concentration_block_unavailable'])
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                after_block = unavailable_block(as_of_date, ['concentration_block_invalid'])
+        after_state = concentration_state(after_block, decisions_after, as_of_date, after_config)
+    else:
+        decisions_committed = (before_config or {}).get('concentration_decisions') or {}
+        after_state = concentration_state(after_block, decisions_committed, as_of_date, before_config)
+        after_state['basis'] = 'frozen_record_configuration'
     return {'snapshot': str(source), 'as_of_date': as_of_date,
             'deltas': [{'id': delta['id'], 'usd': delta['usd']} for delta in deltas],
             'cash_delta_usd': round(-sum(delta['usd'] for delta in deltas), 2) or 0.0,
@@ -377,5 +409,4 @@ def run(deltas_text, *, snapshot=None, config_path=CONFIG_PATH, cache_dir=None, 
                        'concentration_v1': concentration_state(before_block, decisions_before, as_of_date,
                                                                before_config)},
             'after': {'allocation_score_v2': score_state({'DIVERSIFICATION_DATA': {'allocation_score_v2': after_v2}}),
-                      'concentration_v1': concentration_state(after_block, decisions_after, as_of_date,
-                                                              after_config)}}
+                      'concentration_v1': after_state}}

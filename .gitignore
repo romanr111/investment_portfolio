@@ -8,3 +8,5 @@ portfolio_yic_reports/stocks_trades_quarterly_*.xml
 portfolio_yic_reports/stocks_count_trades*.xml
 portfolio_yic_reports/REPORT_*.md
 .grepai/
+
+pr24-evidence/
