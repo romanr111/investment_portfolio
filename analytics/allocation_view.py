@@ -54,6 +54,7 @@ SAFEGUARD_LABELS = {
     'thesis_limit_breached': 'Теза понад ліміт',
     'unresolved_breach': 'Нерозглянуте порушення ліміту',
     'unknown_issuer_lookthrough': 'Частка емітентів у фондах не підтверджена',
+    'unprofiled_positions': 'Позиції не розпізнані профілями',
     'business_assumption_material': 'Бізнес-допущення суттєве для оцінки',
     'concentration_block_invalid': 'введені дані не пройшли перевірку цілісності',
 }
@@ -270,6 +271,28 @@ LIMIT_LABELS = {'issuer_pct_equities': 'Емітент', 'issuer_pct_nav': 'Ем
                 'core_min_pct_equities': 'Core', 'country_pct_equities_china': 'Китай'}
 
 
+def _concentration_section_for(data, result, decisions):
+    """The saved safeguard block behind the integrity gate, rendered for `result`.
+
+    Single source of both v2 branches (scored and unavailable/not_applicable):
+    a stale or tampered sibling degrades to an explicit unavailable block
+    (`concentration_section` then renders its one row), an absent or malformed
+    block returns None - safeguards never show verdicts the record cannot prove.
+    """
+    from analytics.concentration_v1 import (unavailable_block, validate_saved_concentration,
+                                            VERSION as CONCENTRATION_VERSION)
+    section = data['DIVERSIFICATION_DATA']
+    block = section.get('concentration_v1')
+    if (isinstance(block, dict) and block.get('version') == CONCENTRATION_VERSION
+            and 'status' not in block
+            and not validate_saved_concentration(block, data, result)):
+        # A stale or tampered sibling must not render its verdicts with the
+        # valid v2 score; degrade the safeguards, keep the score.
+        section = dict(section, concentration_v1=unavailable_block(
+            result['as_of_date'], ['concentration_block_invalid']))
+    return concentration_section(section, decisions, result['as_of_date'])
+
+
 def allocation_view(data, expected_date=None):
     from analytics.diversification_view import _empty
     q=data['DIVERSIFICATION_DATA']['allocation_score']
@@ -389,8 +412,18 @@ def allocation_view_v2(data, expected_date=None):
         view.update(as_of=stamp, warnings=warnings, principal_constraint=' '.join(warnings), coverage_summary=coverage)
         if result['status'] in {'unavailable', 'not_applicable'}:
             headline = 'Не застосовується' if result['status'] == 'not_applicable' else 'Дані недоступні'
-            view.update(headline=headline, sheet_number=headline, status=headline,
-                        rows=[('Статус', headline), ('Обмеження', ' '.join(warnings)), ('Дата позицій', stamp)])
+            # The concentration block is measured beside the score and stays
+            # replayable without it: render the safeguards here too. An
+            # explicitly unavailable block shows its single row; the section is
+            # hidden only when no block is saved (None) or the whole v2 record
+            # fails the replay gate above.
+            safeguards = _concentration_section_for(
+                data, result, result['configuration'].get('concentration_decisions'))
+            rows = [('Статус', headline), ('Обмеження', ' '.join(warnings)), ('Дата позиций', stamp)]
+            if safeguards:
+                rows.extend(safeguards['rows'])
+            view.update(headline=headline, sheet_number=headline, status=headline, rows=rows,
+                        safeguard_summary=(safeguards or {}).get('summary') or [])
         else:
             assessment = result['assessment']
             if assessment['combined_dependent'] or (assessment['business_dependent'] and assessment['window_dependent']):
@@ -424,20 +457,8 @@ def allocation_view_v2(data, expected_date=None):
                     ('Висновок', label), ('Сценарний розкид', scenario_range),
                     ('Cash від повного портфеля', _pct(cash)),
                     ('Непокрита інвестована частка', _pct(result['coverage']['unknown_pct_invested']))]
-            section = data['DIVERSIFICATION_DATA']
-            block = section.get('concentration_v1')
-            from analytics.concentration_v1 import (unavailable_block, validate_saved_concentration,
-                                                    VERSION as CONCENTRATION_VERSION)
-            if (isinstance(block, dict) and block.get('version') == CONCENTRATION_VERSION
-                    and 'status' not in block
-                    and not validate_saved_concentration(block, data, result)):
-                # A stale or tampered sibling must not render its verdicts with the
-                # valid v2 score; degrade the safeguards, keep the score.
-                section = dict(section, concentration_v1=unavailable_block(
-                    result['as_of_date'], ['concentration_block_invalid']))
-            safeguards = concentration_section(section,
-                                               result['configuration'].get('concentration_decisions'),
-                                               result['as_of_date'])
+            safeguards = _concentration_section_for(
+                data, result, result['configuration'].get('concentration_decisions'))
             if safeguards:
                 rows.extend(safeguards['rows'])
             for key, scenario in result['scenarios'].items():

@@ -50,6 +50,25 @@ Contract (pinned):
   could clear the issuer limit on its own (each unlisted issuer is otherwise
   verified too small to breach the limit), while profiles without one keep
   the whole uncovered fraction unverified.
+- Positions without a profile stay loud instead of silently vanishing: a
+  `profile_for` miss (profiles are id-keyed by position id, so a bucket never
+  grants a profile) in one of the equity IB buckets extract_exposures emits -
+  `Stocks`, `China Stocks` or `REIT` (the China bucket exists beside `Stocks`
+  and holds stocks and ETFs like KWEB - no profile is required for a bucket
+  symbol; REIT is equity-like, included as a conservative owner call,
+  revertable) counts the position as a single issuer at its full value: the
+  value joins both the equities numerator and the denominator, and the issuer
+  is the ticker from the position id (the same split `_plain_issuer` applies
+  for plain positions - an unprofiled fund in these buckets becomes one fund
+  issuer too). It gets no thesis membership (theses reference profiled ids
+  only), no core credit, no country and no look-through - there is no profile
+  evidence for any of these. Unprofiled positions in the non-equity
+  categories (`Bonds`, `Precious Metals`, `Commodities`, `Short Selling`)
+  contribute no facts at all. Every unprofiled position raises
+  `unprofiled_positions` (sorted, deduped `unprofiled_positions:<position id>`
+  entries, first three, name the ids) and the counted unprofiled equity share
+  surfaces as the `unprofiled_pct_equities` fact - 0. when there is no
+  equities denominator.
 - One breach per issuer over a limit, subject in the key: an issuer over the
   equities limit breaches under `issuer_pct_equities:<issuer>` and one over
   the NAV limit under `issuer_pct_nav:<issuer>`; the plain limits
@@ -72,8 +91,8 @@ Block shape (scored):
          top4_issuers: {ids, pct_equities}, core_pct_equities,
          issuers_over_limit: [{id, pct_equities, pct_nav}],
          country_pct_equities: {}, thesis_pct_equities: {},
-         unknown_lookthrough_pct_equities, business_pct_invested,
-         score_excluding_car},
+         unknown_lookthrough_pct_equities, unprofiled_pct_equities,
+         business_pct_invested, score_excluding_car},
  breaches: [{limit, value, decision_id}], warnings: []}
 """
 from datetime import date
@@ -96,6 +115,7 @@ WARNING_COUNTRY = 'country_limit_breached'
 WARNING_THESIS = 'thesis_limit_breached'
 WARNING_UNRESOLVED = 'unresolved_breach'
 WARNING_UNKNOWN_LOOKTHROUGH = 'unknown_issuer_lookthrough'
+WARNING_UNPROFILED = 'unprofiled_positions'
 WARNING_BUSINESS = 'business_assumption_material'
 
 # Breach/warning comparison slack (values are percentages of a denominator).
@@ -108,6 +128,13 @@ BUSINESS_WARNING_PCT_INVESTED = 5.
 ISSUER_EQ_PREFIX = 'issuer_pct_equities:'
 ISSUER_NAV_PREFIX = 'issuer_pct_nav:'
 THESIS_LIMIT_PREFIX = 'thesis_pct_equities:'
+# IB buckets extract_exposures emits for equity positions (`ib:<symbol>` ids).
+# Profiles are id-keyed: a bucket never implies a profile, so an unprofiled
+# position in one of these buckets is still equity - counted conservatively as
+# ONE ticker (or fund) issuer at full value. REIT is equity-like: included by
+# owner call for conservatism (revertable). The non-equity buckets (Bonds,
+# Precious Metals, Commodities, Short Selling) stay warning-only.
+UNPROFILED_EQUITY_CATEGORIES = frozenset({'Stocks', 'China Stocks', 'REIT'})
 # Fund look-through is verified evidence only inside this window from the
 # block's as_of_date: stale or undated holdings must not be silently spread
 # into issuer shares, they make the fund an (unverified) single ticker issuer.
@@ -172,6 +199,15 @@ def _holdings_fresh(holdings, as_of_date):
         return False
 
 
+def _plain_issuer(identifier):
+    """Ticker issuer of a plain position id (`ib:XYZ` -> `XYZ`).
+
+    The single id-split used both by `_issuer_of`'s plain-position fallback
+    and by unprofiled positions (there is no profile to ask for an issuer).
+    """
+    return identifier.split(':', 1)[1] if ':' in identifier else identifier
+
+
 def _issuer_of(position, profile, as_of_date=None):
     """Explicit `issuer` wins; fresh declared `holdings` enable look-through;
     stale/undated holdings or none fall back to the ticker like plain positions."""
@@ -186,8 +222,7 @@ def _issuer_of(position, profile, as_of_date=None):
             raise ValueError('Invalid profile holdings')
         if _holdings_fresh(holdings, as_of_date):
             return None, holdings
-    identifier = position.get('id', '')
-    return (identifier.split(':', 1)[1] if ':' in identifier else identifier), None
+    return _plain_issuer(position.get('id', '')), None
 
 
 def _lookthrough(holdings):
@@ -265,6 +300,8 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
     issuers, thesis_equity, positions_equity = {}, {}, {}
     equities = invested = core = china = car = uncovered = 0.
     tails, stale = [], 0.
+    unprofiled_equity = 0.  # unprofiled equity-bucket value kept as conservative issuers
+    unprofiled_ids = []     # every unprofiled position (any category): warning only
     for position in positions:
         value = float(position['value_usd'])
         if not math.isfinite(value) or value < 0:
@@ -274,7 +311,18 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         invested += value
         profile = profile_for(position, config, as_of_date) if config is not None else None
         equity = car_now = china_now = 0.
-        if profile is not None:
+        if profile is None:
+            # The profiles do not know this position: never let it silently
+            # vanish. An unprofiled position in an equity bucket (Stocks,
+            # China Stocks, REIT) is a conservative single issuer at full
+            # value (below); the non-equity categories warn only.
+            unprofiled_ids.append(position.get('id', ''))
+            if position.get('category') in UNPROFILED_EQUITY_CATEGORIES:
+                # A newly bought stock without a profile is exactly the
+                # concentrated bet the safeguards must catch first: count it
+                # loud and safe instead of a quiet skip.
+                equity = value
+        else:
             for component in profile['components']:
                 amount = value * component['share']
                 group = component['group']
@@ -292,8 +340,16 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
             continue
         equities += equity
         identifier = position.get('id', '')
+        if profile is None:
+            # One ticker issuer at full value; no thesis membership (theses
+            # reference profiled ids only), no core credit, no look-through -
+            # there is no profile evidence for any of these.
+            ticker = _plain_issuer(identifier)
+            issuers[ticker] = issuers.get(ticker, 0.) + value
+            unprofiled_equity += value
+            continue
         positions_equity[identifier] = positions_equity.get(identifier, 0.) + equity
-        if profile is not None and profile.get('core') is True:
+        if profile.get('core') is True:
             core += equity
         issuer, holdings = _issuer_of(position, profile, as_of_date)
         if holdings is None:
@@ -345,6 +401,7 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         'thesis_pct_equities': ({name: amount / equities * 100 for name, amount in sorted(thesis_equity.items())}
                                 if equities > 0 else {}),
         'unknown_lookthrough_pct_equities': uncovered / equities * 100 if equities > 0 else 0.,
+        'unprofiled_pct_equities': unprofiled_equity / equities * 100 if equities > 0 else 0.,
         'business_pct_invested': car / invested * 100 if invested > 0 else 0.,
         'score_excluding_car': _score_excluding_car(v2_result),
     }
@@ -379,6 +436,13 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         warnings.append(WARNING_THESIS)
     if facts['unknown_lookthrough_pct_equities'] > EPS or stale > EPS:
         warnings.append(WARNING_UNKNOWN_LOOKTHROUGH)
+    if unprofiled_ids:
+        warnings.append(WARNING_UNPROFILED)
+        # Name the ids the way invalid decision records do: deduped, sorted,
+        # first three - bounded noise however many positions the profiles
+        # fail to recognize (stock or any other category).
+        warnings.extend(sorted('unprofiled_positions:' + str(identifier)
+                               for identifier in set(unprofiled_ids))[:3])
     if facts['business_pct_invested'] > BUSINESS_WARNING_PCT_INVESTED + EPS:
         warnings.append(WARNING_BUSINESS)
     if invested <= 0:
