@@ -1,12 +1,19 @@
-"""Concentration safeguards recorded beside the diversity score (v1).
+"""Concentration safeguards recorded beside the diversity score (v2).
 
 Measured limits live beside the asset-class score, not inside it: the score is a
 group-level breadth metric and stays the single headline read. This block only
 carries issuer/core/country/thesis facts recorded on the same frozen inputs.
 
-Saved as `DIVERSIFICATION_DATA['concentration_v1']`, a sibling of
-`allocation_score_v2`. Old saved records do not carry the key and remain valid:
-absence of the sibling must never fail `validate_saved_allocation_v2` or any view.
+Stored under the historical sibling key
+`DIVERSIFICATION_DATA['concentration_v1']` beside `allocation_score_v2` - the
+key is NOT renamed when the semantics change; the `version` field inside the
+block gates them. Old saved records without the key remain valid: absence of
+the sibling must never fail `validate_saved_allocation_v2` or any view.
+Degradation rule: a saved block whose `version` differs from VERSION renders
+as if absent (the view, the what-if and `match_decisions` check `version`
+before anything else), is never re-read under the new semantics and is never
+re-derived from current config - the next save simply writes a fresh block
+under the same key.
 
 Contract (pinned):
 - Limits come from private `allocation.concentration_limits` on the stricter
@@ -98,7 +105,7 @@ Block shape (scored):
 from datetime import date
 import math
 
-VERSION = 'concentration_v1'
+VERSION = 'concentration_v2'
 
 LIMIT_DEFAULTS = {
     'issuer_pct_equities': 5,
