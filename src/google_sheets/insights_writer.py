@@ -189,9 +189,16 @@ def _compact_format(cell: CellValue) -> dict[str, str] | None:
     }
 
 
-_SAFEGUARD_CONC_LABELS = frozenset({'Концентрація', 'Емітент', 'Топ-4 / Core', 'Китай'})
+_SAFEGUARD_CONC_LABELS = frozenset({'Концентрація', 'Емітент', 'Топ-4 / Core (stocks)', 'Китай'})
 _SAFEGUARD_BAND_LABEL = 'Порушення: за впливом, найбільші зверху'
 _SAFEGUARD_MARGIN = 20
+
+
+def _wrap_lines(text: str, width_px: int, char_w: float = 5.8) -> int:
+    """Wrapped line count for plain text at 10pt (conservative Cyrillic width)."""
+    if not text:
+        return 1
+    return max(1, math.ceil(len(text) * char_w / max(width_px, 1)))
 
 
 def _cell_text(value: Any) -> str:
@@ -228,6 +235,7 @@ def _safeguard_zone_requests(
     start_row: int,
     first_column: int,
     grid_rows: int,
+    column_widths: tuple = (190, 120),
 ) -> list[dict[str, Any]]:
     """Owner-approved zone design of the compact safeguard block (PR #24).
 
@@ -240,6 +248,7 @@ def _safeguard_zone_requests(
     cannot keep the previous layout's colored ghosts.
     """
     requests: list[dict[str, Any]] = []
+    label_width, value_width = column_widths
     for offset, row in enumerate(rows):
         label = _cell_text(row[0]) if row else ''
         value = _cell_text(row[1]) if len(row) > 1 else ''
@@ -258,17 +267,21 @@ def _safeguard_zone_requests(
             continue
         if label.startswith('Порушення: '):
             if label == _SAFEGUARD_BAND_LABEL:
-                fill, height, resolved = 'band_zone', 30, False
+                fill, resolved = 'band_zone', False
             else:
                 resolved = '✓' in value or 'прийнято' in value
-                fill, height = 'resolved_zone' if resolved else 'breach_zone', 32
+                fill = 'resolved_zone' if resolved else 'breach_zone'
             value_runs = _breach_value_runs(value) if label != _SAFEGUARD_BAND_LABEL else None
         elif label in _SAFEGUARD_CONC_LABELS:
-            fill, height, resolved = 'conc_zone', 26, False
+            fill, resolved = 'conc_zone', False
             value_runs = None  # plain values, styled with the label below
         else:
-            fill, height, resolved = 'score_zone', 27, False
+            fill, resolved = 'score_zone', False
             value_runs = None
+        # Height fits the wrapped text (labels and values share the row):
+        # 10pt lines ≈ 13px + padding; floors 26 keep single-line rows airy.
+        lines = max(_wrap_lines(label, label_width), _wrap_lines(value, value_width))
+        height = max(26, lines * 13 + 9, 30 if label == _SAFEGUARD_BAND_LABEL else 0)
         _append_format_request(
             requests, sheet_id, row_index, row_index + 1,
             first_column, first_column + 2,
@@ -809,8 +822,11 @@ def _tab_requests(
         start, _, first_column, _ = block_ranges["diversification_summary"]
         block = next((b for b in tab.blocks if b.name == "diversification_summary"), None)
         if block is not None and block.rows:
+            block_columns = (tab.column_widths[first_column],
+                             tab.column_widths[first_column + 1])
             requests.extend(_safeguard_zone_requests(
-                sheet_id, block.rows, start, first_column, row_count))
+                sheet_id, block.rows, start, first_column, row_count,
+                block_columns))
 
     _append_format_request(
         requests,

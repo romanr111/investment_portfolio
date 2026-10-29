@@ -288,7 +288,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
                ('Емітент', (shares['issuer_id'] + ' ' + _pct(shares['issuer_pct_equities'])
                             + (' / ' + _pct(shares['issuer_pct_nav']) + ' NAV'
                                if shares['issuer_pct_nav'] is not None else ''))),
-               ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities'])),
+               ('Топ-4 / Core (stocks)', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities'])),
                ('Китай', _pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-')]
     def _decision_suffix(item):
         text = decision_text(item)
