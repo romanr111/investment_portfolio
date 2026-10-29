@@ -184,6 +184,9 @@ def concentration_section(section, decisions=None, as_of_date=None):
                           else _pct(item['value']) + suffix + ' понад ліміт ' + against + suffix)
             text = value_text + ' · ' + decision_text(item)
             row_value = item.get('value')
+            value_compact = (_pct(item['value']) + suffix
+                             + (' (ціль ≥' + against + ')' if against and minimal
+                                else (' (ліміт ' + against + ')' if against else '')))
         else:
             # One row per issuer: both denominators (equities and NAV) share it,
             # subject in the row label, unresolved-first ordering preserved.
@@ -209,9 +212,14 @@ def concentration_section(section, decisions=None, as_of_date=None):
                     against_text = nav_against
             text = value_text + ' понад ліміт ' + against_text + ' · ' + decision_text(primary)
             row_value = (eq or nav_item).get('value')
+            value_compact = (_pct(eq['value']) + ' / ' + _pct(nav_item['value']) + ' NAV'
+                             if eq is not None and nav_item is not None else
+                             _pct(eq['value']) + ' акцій' if eq is not None else
+                             _pct(nav_item['value']) + ' NAV')
         breach_rows.append(('Порушення: ' + label, text))
         breach_facts.append('Порушення ліміту: ' + label + ' ' + text)
-        breach_summary_items.append(('Порушення: ' + label, text, row_value))
+        breach_summary_items.append(('Порушення: ' + label, value_compact, row_value,
+                                     item if subject_key[0] is None else primary))
 
     rows = list(breach_rows)
     issuer = f"{shares['issuer_id']}: {_pct(shares['issuer_pct_equities'])} акцій"
@@ -262,15 +270,22 @@ def concentration_section(section, decisions=None, as_of_date=None):
                     break
     summary = [('Концентрація',
                 'Ліміти дотримані' if not block['breaches'] else
-                'Порушень: ' + str(len(block['breaches'])) + '; нерозглянутих: ' + str(unresolved)
-                + (' (' + ', '.join(names) + ')' if names else '')),
-               ('Емітент', issuer.split(' · ліміт')[0]),
-               ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities']) + ' акцій'),
-               ('Китай', (_pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-') + ' акцій')]
-    # The counter above needs its evidence in place: breach explanations ride in
-    # the sheet summary, largest impact first (owner 2026-10-29: sorted by the
-    # primary denominator's value, alphabetical label breaking ties).
-    summary += [(label, text) for label, text, value in sorted(
+                str(len(block['breaches'])) + ' порушень · ' + str(unresolved) + ' нерозглянутих'),
+               ('Емітент', (shares['issuer_id'] + ' ' + _pct(shares['issuer_pct_equities'])
+                            + (' / ' + _pct(shares['issuer_pct_nav']) + ' NAV'
+                               if shares['issuer_pct_nav'] is not None else ''))),
+               ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities'])),
+               ('Китай', _pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-')]
+    def _decision_suffix(item):
+        text = decision_text(item)
+        if text == 'нерозглянуто':
+            return ' · нерозглянуто'
+        verb = text.split(';')[0].replace('рішення: ', '')
+        return ' · ' + verb + ((' до ' + text.split('розгляд ')[-1]) if 'розгляд ' in text else '')
+    # The counter needs its evidence in place: compact breach explanations ride
+    # in the sheet summary, largest impact first (owner 2026-10-29: sorted by
+    # the primary denominator's value, alphabetical label breaking ties).
+    summary += [(row[0], row[1] + _decision_suffix(row[3])) for row in sorted(
         breach_summary_items, key=lambda row: (-(row[2] if _num(row[2]) else 0.), row[0]))]
     return dict(unavailable=None, rows=rows, summary=summary, breach_facts=breach_facts)
 
@@ -417,7 +432,8 @@ def allocation_view_v2(data, expected_date=None):
         cash = result['coverage'].get('cash_pct_nav')
         coverage = 'Cash поза оцінкою: ' + (_pct(cash) if cash is not None else '-') + ' повного портфеля.'
         warnings = [WARNINGS.get(w, 'Некоректні або неповні входи індикатора.') for w in result['warnings']]
-        view.update(as_of=stamp, warnings=warnings, principal_constraint=' '.join(warnings), coverage_summary=coverage)
+        view.update(as_of=stamp, warnings=warnings, principal_constraint=' '.join(warnings), coverage_summary=coverage,
+                    cash_cell=_pct(cash) if cash is not None else '-')
         if result['status'] in {'unavailable', 'not_applicable'}:
             headline = 'Не застосовується' if result['status'] == 'not_applicable' else 'Дані недоступні'
             # The concentration block is measured beside the score and stays
@@ -521,7 +537,7 @@ def allocation_view_v2(data, expected_date=None):
                     rows.append(('Невідомо', unknown_label + ': ' + _pct(result['risk_unknown'][key]) + ' NAV'))
             rows.extend(('Обмеження', warning) for warning in warnings)
             rows.append(('Метод', 'Історичні кореляції та модельні припущення не гарантують майбутньої стійкості або прибутку.'))
-            label += ' · Details'
+            # The Details group no longer renders in the tab (owner 2026-10-29)
             view.update(headline=str(result['display_score']) + ' зі 100', score_cell=result['display_score'],
                         sheet_number=result['display_score'], status=label, sheet_status=label,
                         largest_text=largest, sensitivity_text=scenario_range, rows=rows,
@@ -532,6 +548,6 @@ def allocation_view_v2(data, expected_date=None):
     view['sheet_summary'] = [('Диверсифікація інвестованого капіталу', view['sheet_number']),
                              ('Висновок', view['status']), ('Найбільша група', view['largest_text']),
                              ('Сценарний розкид', view['sensitivity_text']),
-                             ('Дата / Cash поза оцінкою', view['as_of'] + ' / ' + view['coverage_summary'])] + \
+                             ('Cash поза оцінкою', view.get('cash_cell') or '-')] + \
                             list(view.get('safeguard_summary') or [])
     return view

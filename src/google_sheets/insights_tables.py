@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 
-from src.google_sheets.insights_cells import CellBlock, CellValue
+from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
 from analytics.diversification_view import saved_diversification_view
 from src.google_sheets.insights_finance import (
     category_rows,
@@ -317,10 +317,6 @@ def build_portfolio_tab(
         summary = []
         kind = 'number'
     performance_start = len(summary_rows) + 1
-    if has_diversification:
-        summary_end = 9 + len(summary)  # the saved view owns sheet rows 10..summary_end
-        if performance_start + len(performance_rows) > 9:
-            performance_start = summary_end + 1  # Reserve summary rows without losing benchmark rows.
     blocks = [
         CellBlock("holdings", tuple(holding_rows), start_row=0, start_column=3),
         CellBlock("summary", tuple(summary_rows), start_row=0),
@@ -340,9 +336,11 @@ def build_portfolio_tab(
         label,value = summary[0]
         if isinstance(value,(int,float)):
             summary[0] = (label,CellValue(value,kind))
-        blocks.append(CellBlock('diversification_summary',tuple(summary),start_row=9))
-        # Summary only: the tab keeps the core block; the full divergence render
-        # stays in the saved record (owner 2026-10-29 - no Details group in the sheet).
+        # Summary only, below Performance on the left side (owner 2026-10-29):
+        # render once to find where Performance ends, then place the block there.
+        _,_,bounds = render_blocks(blocks)
+        blocks.append(CellBlock('diversification_summary',tuple(summary),
+                                start_row=bounds['performance'][1] + 2))
     return InsightTab(
         title=date.fromisoformat(valuation_date).strftime("%d %b %Y"),
         blocks=tuple(blocks),
