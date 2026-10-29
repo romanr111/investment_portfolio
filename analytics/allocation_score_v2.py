@@ -14,6 +14,27 @@ def _number(value):
     return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _same(a, b, tol=TOLERANCE):
+    """Bounded equality for recomputed values replayed across environments.
+
+    Numbers (absolute-tolerance close), dicts (same key set), lists and tuples
+    (same length, element-wise) compare recursively; bool, None and everything
+    else - strings such as fingerprints, categories, status, dates, and
+    configuration values - compare exactly.
+    """
+    if isinstance(a, Real) and isinstance(b, Real) and not isinstance(a, bool) and not isinstance(b, bool):
+        return math.isclose(a, b, rel_tol=0, abs_tol=tol)
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    if a is None or b is None:
+        return a is b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k], tol) for k in a)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(_same(x, y, tol) for x, y in zip(a, b))
+    return a == b
+
+
 def display_score(score):
     if not _number(score) or score < -TOLERANCE or score > 100 + TOLERANCE:
         raise ValueError('Invalid score')

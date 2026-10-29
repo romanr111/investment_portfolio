@@ -229,9 +229,10 @@ class PortfolioFormatter(SpreadsheetFormatter):
                       if row and row[0] in {"Holy Grail - Details", "Диверсифікація - Details"}}
         self._previous_details_groups = [g for g in groups if g.get("range", {}).get("startIndex") in starts]
 
-    def format_holy_grail(self, details_range, *, quality=False, indicator=False, allocation=False, number_kind=None) -> None:
+    def format_holy_grail(self, details_range, *, quality=False, indicator=False, allocation=False, number_kind=None, summary_rows=5) -> None:
         if number_kind not in (None, 'allocation_points'):
             raise ValueError('Unsupported Holy Grail number kind')
+        end_row = 9 + max(int(summary_rows), 5)
         requests = [{"repeatCell": {
             "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
                       "endRowIndex": 10, "startColumnIndex": 1, "endColumnIndex": 2},
@@ -239,7 +240,7 @@ class PortfolioFormatter(SpreadsheetFormatter):
             "fields": "userEnteredFormat.numberFormat",
         }}, {"repeatCell": {
             "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
-                      "endRowIndex": 14, "startColumnIndex": 0, "endColumnIndex": 2},
+                      "endRowIndex": end_row, "startColumnIndex": 0, "endColumnIndex": 2},
             "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
             "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
         }}]

@@ -35,7 +35,7 @@ class AllocationScoreTests(unittest.TestCase):
     def test_pairs_keep_their_own_calendar_window(self):
         from analytics.allocation_score import pair_correlations
         rng=np.random.default_rng(42)
-        frame=pd.DataFrame(rng.normal(size=(60,3)),index=pd.date_range('2021-10-31',periods=60,freq='ME'),columns=['a','b','tiny'])
+        frame=pd.DataFrame(rng.normal(size=(60,3)),index=pd.date_range('2021-10-31',periods=60,freq=pd.offsets.MonthEnd()),columns=['a','b','tiny'])
         frame.loc[frame.index[:24],'tiny']=np.nan
         pairs=pair_correlations(frame, ['a','b','tiny'], '2026-09-30')
         old=next(p for p in pairs if (p['left'],p['right'])==('a','b'))
@@ -54,7 +54,7 @@ class AllocationScoreTests(unittest.TestCase):
         rng=np.random.default_rng(72)
         samples=rng.normal(size=(60,3));samples-=samples.mean(axis=0)
         orthogonal=np.linalg.qr(samples)[0]
-        frame=pd.DataFrame(orthogonal,index=pd.date_range('2021-10-31',periods=60,freq='ME'),columns=['a','b','c'])
+        frame=pd.DataFrame(orthogonal,index=pd.date_range('2021-10-31',periods=60,freq=pd.offsets.MonthEnd()),columns=['a','b','c'])
         ref=dict(a=1/3,b=1/3,c=1/3)
         cal=freeze_calibration(frame,ref,{},profiles={})
         self.assertTrue(validate_calibration(cal))
@@ -66,7 +66,7 @@ class AllocationScoreTests(unittest.TestCase):
 def allocation_fixture():
     from analytics.allocation_score import freeze_calibration
     rng=np.random.default_rng(125)
-    dates=pd.date_range('2021-10-31',periods=60,freq='ME')
+    dates=pd.date_range('2021-10-31',periods=60,freq=pd.offsets.MonthEnd())
     samples=rng.normal(size=(60,4));samples-=samples.mean(axis=0)
     groups=['equity_us','treasury_short','gold','car_business']
     frame=pd.DataFrame(np.linalg.qr(samples)[0][:,:3],index=dates,columns=groups[:3])
@@ -217,7 +217,7 @@ class AllocationIntegrationTests(unittest.TestCase):
         calls=[]
         def fetch(symbol,start,end):
             calls.append(symbol)
-            return dict(prices=pd.Series(np.arange(63)+100.,index=pd.date_range('2021-07-31',periods=63,freq='ME')),
+            return dict(prices=pd.Series(np.arange(63)+100.,index=pd.date_range('2021-07-31',periods=63,freq=pd.offsets.MonthEnd())),
                         currency='USD',frequency='daily')
         positions=[dict(series='yf:OLD',symbol='OLD',value_usd=100),
                    dict(series='yf:SPY',symbol='SPY',value_usd=0,collection_priority=0),

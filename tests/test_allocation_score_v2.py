@@ -72,7 +72,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         from analytics.allocation_score_v2 import evaluate_scenarios
-        dates = pd.date_range('2021-10-31', periods=60, freq='ME')
+        dates = pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd())
         rng = np.random.default_rng(77)
         history = pd.DataFrame({'a': rng.normal(size=60), 'b': rng.normal(size=60)}, index=dates)
         history.loc[dates[-1], 'b'] = np.nan
@@ -88,7 +88,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_zero_weight_does_not_require_a_return_history(self):
         import pandas as pd
         from analytics.allocation_score_v2 import evaluate_scenarios
-        empty = pd.DataFrame(index=pd.date_range('2021-10-31', periods=60, freq='ME'))
+        empty = pd.DataFrame(index=pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd()))
         scenarios = evaluate_scenarios({'treasury_short': 1.0, 'unknown': 0.0}, {}, empty, '2026-09-30')
         self.assertEqual(scenarios['m36']['status'], 'modeled')
         self.assertEqual(scenarios['m36']['score'], 0)
@@ -104,7 +104,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         from analytics.allocation_score_v2 import evaluate_scenarios
-        dates = pd.date_range('2021-10-31', periods=60, freq='ME')
+        dates = pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd())
         rng = np.random.default_rng(3)
         for count in (35, 36, 59, 60):
             frame = pd.DataFrame({'a': rng.normal(size=60), 'b': rng.normal(size=60)}, index=dates)
@@ -182,7 +182,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(result['data']['HOLY_GRAIL_DATA'], before['data']['HOLY_GRAIL_DATA'])
         q = result['data']['DIVERSIFICATION_DATA']
         self.assertIn('allocation_score_v2', q)
-        self.assertEqual({k: v for k, v in q.items() if k != 'allocation_score_v2'}, before['data']['DIVERSIFICATION_DATA'])
+        self.assertEqual({k: v for k, v in q.items() if k not in ('allocation_score_v2', 'concentration_v1')}, before['data']['DIVERSIFICATION_DATA'])
         self.assertIn('allocation_score_v2_enrichment', result)
 
     def test_replay_rejects_cleared_leverage_guard_in_frozen_evidence(self):
@@ -390,7 +390,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         from analytics.holy_grail_data import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
-        earlier = pd.DataFrame(0.01, index=pd.date_range('2016-10-31', periods=60, freq='ME'), columns=histories.columns)
+        earlier = pd.DataFrame(0.01, index=pd.date_range('2016-10-31', periods=60, freq=pd.offsets.MonthEnd()), columns=histories.columns)
         histories = pd.concat([earlier, histories])
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         q = saved['DIVERSIFICATION_DATA']['allocation_score_v2']

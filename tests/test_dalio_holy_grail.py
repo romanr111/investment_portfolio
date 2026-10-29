@@ -11,7 +11,7 @@ from analytics.dalio_holy_grail import DalioHolyGrailAnalyzer, format_holy_grail
 
 
 def build_synthetic_history() -> pd.DataFrame:
-    dates = pd.date_range("2021-01-31", periods=60, freq="ME")
+    dates = pd.date_range("2021-01-31", periods=60, freq=pd.offsets.MonthEnd())
     initial_values = {
         "Stocks": 67921.0,
         "Bonds": 35546.0,
@@ -60,7 +60,7 @@ def build_synthetic_history() -> pd.DataFrame:
 def build_canonical_factor_returns(
     start: str = "2021-01-31", periods: int = 60
 ) -> pd.DataFrame:
-    dates = pd.date_range(start, periods=periods, freq="ME")
+    dates = pd.date_range(start, periods=periods, freq=pd.offsets.MonthEnd())
     rows = []
     for idx, date in enumerate(dates):
         rows.append(
@@ -496,7 +496,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         )
 
     def test_holy_grail_corr_collapse_flag_triggers_for_stress_windows(self) -> None:
-        dates = pd.date_range("2018-01-31", periods=72, freq="ME")
+        dates = pd.date_range("2018-01-31", periods=72, freq=pd.offsets.MonthEnd())
         assets = ["A", "B", "C", "D"]
         values = {asset: 100.0 for asset in assets}
         rows = []
@@ -607,7 +607,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertEqual(int(result.management_rules["covariance_window_effective"]), 5)
 
     def test_low_coverage_assets_are_excluded_from_covariance(self) -> None:
-        dates = pd.date_range("2024-01-31", periods=10, freq="ME")
+        dates = pd.date_range("2024-01-31", periods=10, freq=pd.offsets.MonthEnd())
         rows = []
         value_a = 100.0
         value_b = 100.0
@@ -702,7 +702,7 @@ class DalioHolyGrailAnalyzerTest(unittest.TestCase):
         self.assertAlmostEqual(float(tail["var_95_pct"]), 50.0, places=8)
 
     def test_risk_contribution_incomplete_data_is_flagged(self) -> None:
-        dates = pd.date_range("2021-01-31", periods=36, freq="ME")
+        dates = pd.date_range("2021-01-31", periods=36, freq=pd.offsets.MonthEnd())
         rows = []
         old_value = 100.0
         cash_value = 200.0

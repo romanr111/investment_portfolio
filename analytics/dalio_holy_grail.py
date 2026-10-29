@@ -1505,7 +1505,7 @@ class DalioHolyGrailAnalyzer:
             return returns_wide.copy()
 
         if self.return_type == "log":
-            monthly = returns_wide.resample("ME").sum(min_count=1)
+            monthly = returns_wide.resample(pd.offsets.MonthEnd()).sum(min_count=1)
         else:
             def _compound(values: pd.Series) -> float:
                 clean = values.dropna().astype(float)
@@ -1513,7 +1513,7 @@ class DalioHolyGrailAnalyzer:
                     return math.nan
                 return float(np.prod(1.0 + clean.values) - 1.0)
 
-            monthly = returns_wide.resample("ME").apply(_compound)
+            monthly = returns_wide.resample(pd.offsets.MonthEnd()).apply(_compound)
         return monthly.sort_index()
 
     def _resample_weights_to_monthly(self, weights_by_date: pd.DataFrame) -> pd.DataFrame:
@@ -1522,7 +1522,7 @@ class DalioHolyGrailAnalyzer:
         weights_wide = (
             weights_by_date.pivot(index="date", columns="asset_bucket", values="weight")
             .sort_index()
-            .resample("ME")
+            .resample(pd.offsets.MonthEnd())
             .last()
         )
         stacked_weights = weights_wide.stack()

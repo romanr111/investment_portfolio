@@ -1,0 +1,700 @@
+"""Concentration safeguards recorded beside the diversity score (v2).
+
+Measured limits live beside the asset-class score, not inside it: the score is a
+group-level breadth metric and stays the single headline read. This block only
+carries issuer/core/country/thesis facts recorded on the same frozen inputs.
+
+Stored under the historical sibling key
+`DIVERSIFICATION_DATA['concentration_v1']` beside `allocation_score_v2` - the
+key is NOT renamed when the semantics change; the `version` field inside the
+block gates them. Old saved records without the key remain valid: absence of
+the sibling must never fail `validate_saved_allocation_v2` or any view.
+Degradation rule: a saved block whose `version` differs from VERSION renders
+as if absent (the view, the what-if and `match_decisions` check `version`
+before anything else), is never re-read under the new semantics and is never
+re-derived from current config - the next save simply writes a fresh block
+under the same key.
+
+Contract (pinned):
+- Limits come from private `allocation.concentration_limits` on the stricter
+  defaults below; theses from `allocation.linked_theses` as
+  `{name: {'members': [position ids], 'limit_pct_equities': number}}`;
+  decisions from `allocation.concentration_decisions` as
+  `{id: {'limit': str, 'subject': str (optional), 'decided_at': str,
+        'decision': accept|reduce|exit, 'reason': str, 'review_by': str,
+        'max_value': number (optional; the core_min breach uses 'min_value')}}`.
+  A record acts on a breach only while it binds the breach's subject: a record
+  with `subject` resolves exactly `limit + ':' + subject` (`issuer_pct_equities`
+  + `GOOG` == `issuer_pct_equities:GOOG`, `thesis_pct_equities` +
+  `china_stack` == `thesis_pct_equities:china_stack`), while a legacy record
+  without `subject` matches only the exact breach key (old fully-qualified
+  thesis records keep their verdict, a bare `issuer_pct_equities` key can
+  never match a prefixed issuer breach). Also `decided_at <= as_of <=
+  review_by`, and the review horizon `review_by - decided_at` stays within
+  `max_review_days` (constant MAX_REVIEW_DAYS; private override
+  `allocation.concentration_decision_settings` = `{'max_review_days': N}`,
+  finite > 0 or ValueError). The recorded value caps the record: an over-limit
+  breach stands at up to the recorded `max_value` (+EPS) and a core_min breach
+  holds to at least the recorded `min_value` (-EPS) - a breach at a worse
+  value than the decision covers stops being resolved by it. Records failing
+  the schema, with a future `decided_at` or an over-horizon review are
+  invalid: they resolve nothing and surface as `invalid_decision_record:<id>`
+  entries in block['warnings'] (deduped, sorted, first three) instead of
+  failing the whole block; a record that only misses one breach's subject or
+  value cap may still act on that subject's other breaches and is not invalid.
+- Issuer aggregation uses an optional `issuer` profile key (single stocks
+  default to their ticker; 9988+BABA -> 'alibaba'). Fund look-through uses a
+  dated profile `holdings` field: `issuers` (issuer -> share of fund NAV),
+  `coverage`, `as_of_date`, `source` plus an optional `max_other_issuer_share`
+  (0..1, no larger than the smallest listed share: the upper bound for any
+  issuer outside the declared list). Holdings missing `as_of_date`, or older
+  than HOLDINGS_MAX_AGE_DAYS (90) days before the block's `as_of_date`, are
+  not verified evidence: the fund falls back to a single ticker issuer (the
+  plain-position fallback) and raises `unknown_issuer_lookthrough`. The
+  uncovered fraction goes to `unknown_lookthrough_pct_equities`, never spread
+  over members; with a declared `max_other_issuer_share` the unlisted tail
+  joins it only when the fund's equity share times `max_other_issuer_share`
+  could clear the issuer limit on its own (each unlisted issuer is otherwise
+  verified too small to breach the limit), while profiles without one keep
+  the whole uncovered fraction unverified.
+- Positions without a profile stay loud instead of silently vanishing: a
+  `profile_for` miss (profiles are id-keyed by position id, so a bucket never
+  grants a profile) in one of the equity IB buckets extract_exposures emits -
+  `Stocks`, `China Stocks` or `REIT` (the China bucket exists beside `Stocks`
+  and holds stocks and ETFs like KWEB - no profile is required for a bucket
+  symbol; REIT is equity-like, included as a conservative owner call,
+  revertable) counts the position as a single issuer at its full value: the
+  value joins both the equities numerator and the denominator, and the issuer
+  is the ticker from the position id (the same split `_plain_issuer` applies
+  for plain positions - an unprofiled fund in these buckets becomes one fund
+  issuer too). It gets no thesis membership (theses reference profiled ids
+  only), no core credit, no country and no look-through - there is no profile
+  evidence for any of these. Unprofiled positions in the non-equity
+  categories (`Bonds`, `Precious Metals`, `Commodities`, `Short Selling`)
+  contribute no facts at all. Every unprofiled position raises
+  `unprofiled_positions` (sorted, deduped `unprofiled_positions:<position id>`
+  entries, first three, name the ids) and the counted unprofiled equity share
+  surfaces as the `unprofiled_pct_equities` fact - 0. when there is no
+  equities denominator.
+- One breach per issuer over a limit, subject in the key: an issuer over the
+  equities limit breaches under `issuer_pct_equities:<issuer>` and one over
+  the NAV limit under `issuer_pct_nav:<issuer>`; the plain limits
+  (`top4_pct_equities`, `core_min_pct_equities`, `country_pct_equities_china`,
+  `thesis_pct_equities:<name>`) keep their plain keys. Decision records bind
+  the same way: an issuer breach resolves only from a record carrying its
+  subject (`issuer_pct_equities` + `GOOG`), thesis breaches from
+  `thesis_pct_equities` + `<name>` or the legacy fully-qualified key.
+- Replay reads profiles/limits/theses/decisions ONLY from
+  `v2_record['configuration']` (the merged settings stored and fingerprinted
+  in the record) - never re-reads the profiles JSON path or private config.
+  The block carries no own fingerprint; integrity is replay-recompute plus
+  `_same` on recomputed values.
+
+Block shape (scored):
+{version, as_of_date, limits: {issuer_pct_equities, issuer_pct_nav,
+ top4_pct_equities, core_min_pct_equities, country_pct_equities_china,
+ thesis_pct_equities: {..}},
+ facts: {largest_issuer: {id, pct_equities, pct_nav},
+         top4_issuers: {ids, pct_equities}, core_pct_equities,
+         issuers_over_limit: [{id, pct_equities, pct_nav}],
+         country_pct_equities: {}, thesis_pct_equities: {},
+         unknown_lookthrough_pct_equities, unprofiled_pct_equities,
+         business_pct_invested, score_excluding_car},
+ breaches: [{limit, value, decision_id}], warnings: []}
+"""
+from datetime import date
+import math
+
+VERSION = 'concentration_v2'
+
+LIMIT_DEFAULTS = {
+    'issuer_pct_equities': 5,
+    'issuer_pct_nav': 2,
+    'top4_pct_equities': 20,
+    'core_min_pct_equities': 50,
+    'country_pct_equities_china': 10,
+    'thesis_pct_equities': {'china_stack': 10, 'consumer_recovery': 10},
+}
+
+WARNING_ISSUER = 'issuer_limit_breached'
+WARNING_CORE = 'core_below_target'
+WARNING_COUNTRY = 'country_limit_breached'
+WARNING_THESIS = 'thesis_limit_breached'
+WARNING_UNRESOLVED = 'unresolved_breach'
+WARNING_UNKNOWN_LOOKTHROUGH = 'unknown_issuer_lookthrough'
+WARNING_UNPROFILED = 'unprofiled_positions'
+WARNING_BUSINESS = 'business_assumption_material'
+
+# Breach/warning comparison slack (values are percentages of a denominator).
+EPS = 1e-9
+# F5: an unmeasured business correlation drives the headline; above this share
+# of invested capital the score must be read as provisional.
+BUSINESS_WARNING_PCT_INVESTED = 5.
+# Breach keys carry their subject after the ':': every issuer over a limit
+# gets its own breach (limit=ISSUER_*_PREFIX + issuer), not just the largest.
+ISSUER_EQ_PREFIX = 'issuer_pct_equities:'
+ISSUER_NAV_PREFIX = 'issuer_pct_nav:'
+THESIS_LIMIT_PREFIX = 'thesis_pct_equities:'
+# IB buckets extract_exposures emits for equity positions (`ib:<symbol>` ids).
+# Profiles are id-keyed: a bucket never implies a profile, so an unprofiled
+# position in one of these buckets is still equity - counted conservatively as
+# ONE ticker (or fund) issuer at full value. REIT is equity-like: included by
+# owner call for conservatism (revertable). The non-equity buckets (Bonds,
+# Precious Metals, Commodities, Short Selling) stay warning-only.
+UNPROFILED_EQUITY_CATEGORIES = frozenset({'Stocks', 'China Stocks', 'REIT'})
+# Fund look-through is verified evidence only inside this window from the
+# block's as_of_date: stale or undated holdings must not be silently spread
+# into issuer shares, they make the fund an (unverified) single ticker issuer.
+HOLDINGS_MAX_AGE_DAYS = 90
+# A recorded decision covers at most about one quarter plus change: whatever
+# the review_by date says, a breach always needs a fresh conscious look after
+# this many days from the decision itself.
+MAX_REVIEW_DAYS = 120
+
+# Display text for one recorded decision (moved here from the rendered view;
+# the single source of truth for both the view and what-if output).
+DECISION_TEXT = {'accept': 'рішення: прийнято', 'reduce': 'рішення: скоротити',
+                 'exit': 'рішення: вийти'}
+
+
+def unavailable_block(as_of_date, warnings):
+    """Explicit unavailable state for a failed or insufficient build."""
+    return {'version': VERSION, 'status': 'unavailable', 'as_of_date': as_of_date,
+            'warnings': list(warnings)}
+
+
+def _finite(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _merged_limits(config):
+    """Private limits override the stricter shipped defaults; unknown keys fail."""
+    limits = {'thesis_pct_equities': dict(LIMIT_DEFAULTS['thesis_pct_equities'])}
+    limits.update({k: v for k, v in LIMIT_DEFAULTS.items() if k != 'thesis_pct_equities'})
+    overrides = config.get('concentration_limits')
+    if isinstance(overrides, dict):
+        for key, value in overrides.items():
+            if key == 'thesis_pct_equities':
+                if not isinstance(value, dict) or any(not _finite(v) or v <= 0 for v in value.values()):
+                    raise ValueError('Invalid thesis limit')
+                limits['thesis_pct_equities'].update(value)
+                continue
+            if key not in LIMIT_DEFAULTS or not _finite(value) or value <= 0:
+                raise ValueError('Invalid concentration limit: ' + str(key))
+            limits[key] = value
+    return limits
+
+
+def _holdings_fresh(holdings, as_of_date):
+    """Holdings count as verified only when dated within HOLDINGS_MAX_AGE_DAYS.
+
+    Missing or unparseable dates on either side count as stale (the caller
+    then treats the fund as holdings-less), so look-through is never silently
+    applied from unverified data. A `None` anchor only occurs on direct
+    harness-style calls with no block date; production callers (save hook,
+    replay, what-if) always pass the block date, so the None branch defaults
+    to fresh rather than silently degrading every direct probe.
+    """
+    if as_of_date is None:
+        return True  # None anchor: direct harness calls only; production paths always pass a date
+    try:
+        anchor, seen = date.fromisoformat(as_of_date), holdings.get('as_of_date')
+        if not isinstance(seen, str):
+            return False
+        age = (anchor - date.fromisoformat(seen)).days
+        # Future-dated holdings would let a later filing answer an earlier
+        # question (look-ahead bias, P1 review 2026-10-30): only ages in
+        # [0, 90] count as verified.
+        return 0 <= age <= HOLDINGS_MAX_AGE_DAYS
+    except (ValueError, TypeError):
+        return False
+
+
+def _plain_issuer(identifier):
+    """Ticker issuer of a plain position id (`ib:XYZ` -> `XYZ`).
+
+    The single id-split used both by `_issuer_of`'s plain-position fallback
+    and by unprofiled positions (there is no profile to ask for an issuer).
+    """
+    return identifier.split(':', 1)[1] if ':' in identifier else identifier
+
+
+def _issuer_of(position, profile, as_of_date=None):
+    """Explicit `issuer` wins; fresh declared `holdings` enable look-through;
+    stale/undated holdings or none fall back to the ticker like plain positions."""
+    issuer = profile.get('issuer')
+    if issuer is not None:
+        if not isinstance(issuer, str) or not issuer.strip():
+            raise ValueError('Invalid profile issuer')
+        return issuer.strip(), None
+    holdings = profile.get('holdings')
+    if holdings is not None:
+        if not isinstance(holdings, dict):
+            raise ValueError('Invalid profile holdings')
+        if _holdings_fresh(holdings, as_of_date):
+            return None, holdings
+    return _plain_issuer(position.get('id', '')), None
+
+
+def _lookthrough(holdings):
+    """Validate declared fund holdings.
+
+    Returns (resolved issuer shares, uncovered fraction, max_other_issuer_share
+    as declared or None). The optional `max_other_issuer_share` upper-bounds
+    any issuer outside the listed set: it must stay in 0..1 and not exceed the
+    smallest listed share.
+    """
+    declared = holdings.get('issuers')
+    shares = {}
+    if isinstance(declared, dict):
+        for name, weight in declared.items():
+            if not isinstance(name, str) or not name.strip() or not _finite(weight) or weight < 0:
+                raise ValueError('Invalid profile holdings')
+            if weight > 0:
+                shares[name.strip()] = shares.get(name.strip(), 0.) + weight
+    coverage = holdings.get('coverage')
+    if coverage is None:
+        coverage = sum(shares.values())
+    if not _finite(coverage) or coverage < 0 or coverage > 1 + 1e-8 or sum(shares.values()) > coverage + 1e-8:
+        raise ValueError('Invalid holdings coverage')
+    max_other = holdings.get('max_other_issuer_share')
+    if max_other is not None:
+        if not _finite(max_other) or max_other < 0 or max_other > 1 + 1e-8:
+            raise ValueError('Invalid profile holdings')
+        if shares and max_other > min(shares.values()) + EPS:
+            raise ValueError('Invalid profile holdings')
+    resolved = sorted(shares.items(), key=lambda item: item[0])
+    return resolved, max(0., 1. - float(coverage)), (None if max_other is None else float(max_other))
+
+
+def _score_excluding_car(v2_result):
+    """v2 main score recomputed without the car group and renormalized; null otherwise."""
+    from analytics.allocation_score import correlation_map
+    from analytics.allocation_score_v2 import score_components_v2
+    try:
+        if not isinstance(v2_result, dict) or v2_result.get('status') == 'unavailable':
+            return None
+        weights = {g['id']: float(g['weight']) for g in v2_result.get('groups', [])}
+        car = weights.get('car_business', 0.)
+        if not math.isfinite(car) or car <= 0:
+            return None
+        remaining = {g: w for g, w in weights.items() if g != 'car_business' and w > 0}
+        scale = sum(remaining.values())
+        if scale <= 0:
+            return None
+        weights = {g: w / scale for g, w in remaining.items()}
+        scenario = (v2_result.get('scenarios') or {}).get('m60_r025')
+        if not isinstance(scenario, dict) or scenario.get('score') is None:
+            return None
+        pairs = [p for p in scenario.get('pairs', [])
+                 if isinstance(p, dict) and 'car_business' not in (p.get('left'), p.get('right'))]
+        correlations = correlation_map(pairs)
+        sectors = {g: s for g, s in (v2_result.get('sectors') or {}).items() if g in weights}
+        return score_components_v2(weights, correlations, sectors)['score']
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return None
+
+
+def build_block(positions, config, total, as_of_date, v2_result=None):
+    """Build the limits/facts/breaches concentration block from frozen inputs.
+
+    `v2_result` is the fresh saved v2 record; the `score_excluding_car` fact
+    needs its frozen group weights, correlation pairs and sector map, so it is
+    computed only when the car group has a positive weight and the main
+    scenario was scored.
+    """
+    from analytics.allocation_inputs import profile_for
+    total = float(total)
+    if not math.isfinite(total) or total <= 0:
+        raise ValueError('invalid_total')
+    limits = _merged_limits(config)
+    issuers, thesis_equity, positions_equity = {}, {}, {}
+    equities = invested = core = china = car = uncovered = 0.
+    tails, stale = [], 0.
+    unprofiled_equity = 0.  # unprofiled equity-bucket value kept as conservative issuers
+    unprofiled_ids = []     # every unprofiled position (any category): warning only
+    for position in positions:
+        value = float(position['value_usd'])
+        if not math.isfinite(value) or value < 0:
+            raise ValueError('invalid_valuation')
+        if value == 0:
+            continue
+        invested += value
+        profile = profile_for(position, config, as_of_date) if config is not None else None
+        equity = car_now = china_now = 0.
+        if profile is None:
+            # The profiles do not know this position: never let it silently
+            # vanish. An unprofiled position in an equity bucket (Stocks,
+            # China Stocks, REIT) is a conservative single issuer at full
+            # value (below); the non-equity categories warn only.
+            unprofiled_ids.append(position.get('id', ''))
+            if position.get('category') in UNPROFILED_EQUITY_CATEGORIES:
+                # A newly bought stock without a profile is exactly the
+                # concentrated bet the safeguards must catch first: count it
+                # loud and safe instead of a quiet skip.
+                equity = value
+        else:
+            for component in profile['components']:
+                amount = value * component['share']
+                group = component['group']
+                if group == 'car_business':
+                    car_now += amount
+                if group == 'equity_china':
+                    china_now += amount
+                if group.startswith('equity_'):
+                    equity += amount
+        if car_now:
+            car += car_now
+        if china_now:
+            china += china_now
+        if equity <= 0:
+            continue
+        equities += equity
+        identifier = position.get('id', '')
+        if profile is None:
+            # One ticker issuer at full value; no thesis membership (theses
+            # reference profiled ids only), no core credit, no look-through -
+            # there is no profile evidence for any of these.
+            ticker = _plain_issuer(identifier)
+            issuers[ticker] = issuers.get(ticker, 0.) + value
+            unprofiled_equity += value
+            continue
+        positions_equity[identifier] = positions_equity.get(identifier, 0.) + equity
+        if profile.get('core') is True:
+            core += equity
+        issuer, holdings = _issuer_of(position, profile, as_of_date)
+        if holdings is None:
+            issuers[issuer] = issuers.get(issuer, 0.) + equity
+            if (profile is not None and profile.get('issuer') is None
+                    and profile.get('holdings') is not None):
+                stale += equity  # undated/stale look-through: unverified fallback
+            continue
+        resolved, share_unknown, max_other = _lookthrough(holdings)
+        for name, share in resolved:
+            issuers[name] = issuers.get(name, 0.) + equity * share
+        if share_unknown > 0:
+            if max_other is None:
+                uncovered += equity * share_unknown
+            else:
+                tails.append((equity, share_unknown, max_other))
+    for tail_equity, tail_unknown, max_other in tails:
+        # The unlisted tail of a fund with a declared max_other_issuer_share is
+        # only an unverified risk when one unlisted issuer times the fund's
+        # equity share could clear the issuer limit on its own - otherwise it
+        # is verified too small to breach anything.
+        if tail_equity * max_other / equities * 100 > limits['issuer_pct_equities'] + EPS:
+            uncovered += tail_equity * tail_unknown
+    linked = config.get('linked_theses') if isinstance(config.get('linked_theses'), dict) else {}
+    for name, thesis in sorted(linked.items()):
+        members = set(thesis.get('members') or []) if isinstance(thesis, dict) else set()
+        amount = sum(equity for position_id, equity in positions_equity.items() if position_id in members)
+        if amount > EPS:
+            thesis_equity[name] = amount
+    ordered = sorted(issuers.items(), key=lambda item: (-item[1], item[0]))
+    # Per-issuer percentages of both denominators in `ordered` order (pct
+    # equities descending): one breach per issuer over a limit, subject in key.
+    issuer_pcts = [(issuer, amount / equities * 100, amount / total * 100)
+                   for issuer, amount in ordered]
+    facts = {
+        'largest_issuer': (dict(id=ordered[0][0],
+                                pct_equities=ordered[0][1] / equities * 100,
+                                pct_nav=ordered[0][1] / total * 100) if ordered
+                           else dict(id=None, pct_equities=0., pct_nav=0.)),
+        'top4_issuers': dict(ids=[issuer for issuer, _ in ordered[:4]],
+                             pct_equities=sum(amount for _, amount in ordered[:4]) / equities * 100
+                             if equities > 0 else 0.),
+        'issuers_over_limit': [dict(id=issuer, pct_equities=pct_eq, pct_nav=pct_nav)
+                               for issuer, pct_eq, pct_nav in issuer_pcts
+                               if pct_eq > limits['issuer_pct_equities'] + EPS
+                               or pct_nav > limits['issuer_pct_nav'] + EPS],
+        'core_pct_equities': core / equities * 100 if equities > 0 else 0.,
+        'country_pct_equities': ({'china': china / equities * 100} if china > EPS and equities > 0 else {}),
+        'thesis_pct_equities': ({name: amount / equities * 100 for name, amount in sorted(thesis_equity.items())}
+                                if equities > 0 else {}),
+        'unknown_lookthrough_pct_equities': uncovered / equities * 100 if equities > 0 else 0.,
+        'unprofiled_pct_equities': unprofiled_equity / equities * 100 if equities > 0 else 0.,
+        'business_pct_invested': car / invested * 100 if invested > 0 else 0.,
+        'score_excluding_car': _score_excluding_car(v2_result),
+    }
+    breaches = []
+    if equities > EPS:
+        for issuer, pct_eq, pct_nav in issuer_pcts:
+            if pct_eq > limits['issuer_pct_equities'] + EPS:
+                breaches.append(dict(limit=ISSUER_EQ_PREFIX + issuer, value=pct_eq, decision_id=None))
+            if pct_nav > limits['issuer_pct_nav'] + EPS:
+                breaches.append(dict(limit=ISSUER_NAV_PREFIX + issuer, value=pct_nav, decision_id=None))
+        if facts['top4_issuers']['pct_equities'] > limits['top4_pct_equities'] + EPS:
+            breaches.append(dict(limit='top4_pct_equities', value=facts['top4_issuers']['pct_equities'],
+                                 decision_id=None))
+        if facts['core_pct_equities'] < limits['core_min_pct_equities'] - EPS:
+            breaches.append(dict(limit='core_min_pct_equities', value=facts['core_pct_equities'], decision_id=None))
+        china_value = facts['country_pct_equities'].get('china', 0.)
+        if china_value > limits['country_pct_equities_china'] + EPS:
+            breaches.append(dict(limit='country_pct_equities_china', value=china_value, decision_id=None))
+        for name, value in facts['thesis_pct_equities'].items():
+            thesis_limit = _thesis_limit(config, name, limits)
+            if thesis_limit is not None and value > thesis_limit + EPS:
+                breaches.append(dict(limit=THESIS_LIMIT_PREFIX + name, value=value, decision_id=None))
+    warnings = []
+    if any(breach['limit'].startswith(ISSUER_EQ_PREFIX) or breach['limit'].startswith(ISSUER_NAV_PREFIX)
+           or breach['limit'] == 'top4_pct_equities' for breach in breaches):
+        warnings.append(WARNING_ISSUER)
+    if any(breach['limit'] == 'core_min_pct_equities' for breach in breaches):
+        warnings.append(WARNING_CORE)
+    if any(breach['limit'] == 'country_pct_equities_china' for breach in breaches):
+        warnings.append(WARNING_COUNTRY)
+    if any(breach['limit'].startswith(THESIS_LIMIT_PREFIX) for breach in breaches):
+        warnings.append(WARNING_THESIS)
+    if facts['unknown_lookthrough_pct_equities'] > EPS or stale > EPS:
+        warnings.append(WARNING_UNKNOWN_LOOKTHROUGH)
+    if unprofiled_ids:
+        warnings.append(WARNING_UNPROFILED)
+        # Name the ids the way invalid decision records do: deduped, sorted,
+        # first three - bounded noise however many positions the profiles
+        # fail to recognize (stock or any other category).
+        warnings.extend(sorted('unprofiled_positions:' + str(identifier)
+                               for identifier in set(unprofiled_ids))[:3])
+    if facts['business_pct_invested'] > BUSINESS_WARNING_PCT_INVESTED + EPS:
+        warnings.append(WARNING_BUSINESS)
+    if invested <= 0:
+        # No invested capital: the equity-denominated facts are meaningless.
+        raise ValueError('no_invested_capital')  # surfaced by the save hook as unavailable
+    return dict(version=VERSION, as_of_date=as_of_date, limits=limits, facts=facts,
+                breaches=breaches, warnings=warnings)
+
+
+def _thesis_limit(config, name, limits):
+    """Thesis limit precedence: private limits block, then the thesis record."""
+    candidate = limits['thesis_pct_equities'].get(name)
+    if candidate is None:
+        linked = config.get('linked_theses') if isinstance(config.get('linked_theses'), dict) else {}
+        thesis = linked.get(name)
+        if isinstance(thesis, dict):
+            candidate = thesis.get('limit_pct_equities')
+            if candidate is not None and (not _finite(candidate) or candidate <= 0):
+                raise ValueError('Invalid thesis limit')
+    if candidate is None or isinstance(candidate, bool) or not _finite(candidate):
+        return None
+    return float(candidate)
+
+
+def _review_horizon(settings):
+    """max_review_days from the private `concentration_decision_settings`.
+
+    `None` (direct harness calls) keeps the shipped MAX_REVIEW_DAYS constant.
+    A present block must be a dict with only the known `max_review_days` key
+    (a finite number above zero), otherwise the configuration itself is
+    broken and must fail loudly - same policy as the limits - instead of
+    silently stretching how long one accepted decision can cover a breach.
+    """
+    if settings is None:
+        return MAX_REVIEW_DAYS
+    override = settings.get('concentration_decision_settings') if isinstance(settings, dict) else None
+    if override is None:
+        return MAX_REVIEW_DAYS
+    if not isinstance(override, dict) or any(key != 'max_review_days' for key in override):
+        raise ValueError('Invalid concentration decision settings')
+    days = override.get('max_review_days')
+    if not _finite(days) or days <= 0:
+        raise ValueError('Invalid concentration decision settings')
+    return days
+
+
+def _clean_records(records, as_of, horizon_days):
+    """Split raw decision records into eligible candidates and invalid ids.
+
+    A candidate is a complete record: `decision` in accept/reduce/exit, a
+    non-empty `reason` and `limit`, an optional non-empty `subject` string,
+    optional finite `max_value`/`min_value` caps, parseable dates with
+    `decided_at <= as_of` (a `review_by` that has passed is not invalid - the
+    record simply does not act any more) and a horizon within `horizon_days`.
+    Anything else is invalid and only warns; it never blocks the block.
+    """
+    candidates, invalid_ids = [], []
+    for record_id, record in records.items():
+        if not isinstance(record, dict):
+            invalid_ids.append(record_id)
+            continue
+        limit, decided_at, review_by = record.get('limit'), record.get('decided_at'), record.get('review_by')
+        subject = record.get('subject')
+        if (record.get('decision') not in ('accept', 'reduce', 'exit')
+                or not isinstance(record.get('reason'), str) or not record['reason'].strip()
+                or not isinstance(limit, str) or not limit
+                or record.get('max_value') is not None and not _finite(record['max_value'])
+                or record.get('min_value') is not None and not _finite(record['min_value'])):
+            invalid_ids.append(record_id)
+            continue
+        if subject is not None and (not isinstance(subject, str) or not subject.strip()):
+            invalid_ids.append(record_id)
+            continue
+        try:
+            decided, reviewed = date.fromisoformat(decided_at), date.fromisoformat(review_by)
+        except (ValueError, TypeError):
+            invalid_ids.append(record_id)
+            continue
+        if decided > as_of or (reviewed - decided).days > horizon_days:
+            invalid_ids.append(record_id)
+            continue
+        candidates.append(dict(id=record_id, record=record, limit=limit,
+                               subject=subject.strip() if subject is not None else None,
+                               decided_at=decided_at, reviewed=reviewed))
+    return candidates, invalid_ids
+
+
+def _acts_on(candidate, breach):
+    """Subject binding plus the recorded value cap for one breach.
+
+    A subject-bound record acts only on the breach keyed `<limit>:<subject>`;
+    a legacy record without `subject` only on an exact limit-key match - a
+    bare `issuer_pct_equities` can never match a prefixed issuer breach. The
+    value cap is per breach too: `max_value` governs over-limit breaches (the
+    breach value stays at or below the recorded share) and the core_min
+    breach's floor convention uses `min_value` (the below-target value stays
+    at or above the recorded share). A cap miss means the record does not act
+    on THIS breach - it may still act on that subject's other breaches.
+    """
+    if candidate['subject'] is not None:
+        if candidate['limit'] + ':' + candidate['subject'] != breach.get('limit'):
+            return False
+    elif candidate['limit'] != breach.get('limit'):
+        return False
+    cap = (candidate['record'].get('min_value') if breach.get('limit') == 'core_min_pct_equities'
+           else candidate['record'].get('max_value'))
+    if cap is None:
+        return True
+    value = breach.get('value')
+    if not _finite(value):
+        return False
+    if breach['limit'] == 'core_min_pct_equities':
+        return value >= cap - EPS
+    return value <= cap + EPS
+
+
+def _pick(candidates, breach, as_of):
+    """The one record acting on this breach: `review_by` not passed, binding
+    and cap met; the latest decision wins and the greatest id breaks ties."""
+    eligible = [candidate for candidate in candidates
+                if candidate['reviewed'] >= as_of and _acts_on(candidate, breach)]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda candidate: (candidate['decided_at'], candidate['id']))
+
+
+def match_decisions(block, decisions, as_of_date, settings=None):
+    """Fill `decision_id` on breaches from recorded decision records.
+
+    A breach counts as resolved only when a complete decision record bound to
+    it exists: `decision` in accept/reduce/exit, a non-empty `reason`, dates
+    with `decided_at <= as_of_date <= review_by`, a review horizon
+    `review_by - decided_at` within `max_review_days` (MAX_REVIEW_DAYS
+    constant; the `settings` configuration - the same frozen
+    `v2_record['configuration']` used for replay - may override it through
+    `concentration_decision_settings` = `{'max_review_days': N}`, and an
+    invalid override raises ValueError), plus the subject binding and the
+    optional `max_value`/`min_value` caps described in `decision_for_breach`.
+    Records that fail the schema, carry a future `decided_at` or an
+    over-horizon review are invalid: skipped and surfaced as
+    `invalid_decision_record:<record_id>` entries in block['warnings']
+    (deduped, sorted, first three) - one bad record never blocks the whole
+    block. Every breach left uncovered still raises `unresolved_breach`.
+    The chosen record stays the latest `decided_at`, greatest id on ties.
+    """
+    if not isinstance(block, dict) or block.get('version') != VERSION:
+        return block
+    records = decisions if isinstance(decisions, dict) else {}
+    as_of = date.fromisoformat(as_of_date)
+    candidates, invalid_ids = _clean_records(records, as_of, _review_horizon(settings))
+    for breach in block.get('breaches') or []:
+        if not isinstance(breach, dict):
+            continue
+        chosen = _pick(candidates, breach, as_of)
+        if chosen is not None:
+            breach['decision_id'] = chosen['id']
+    warnings = block.get('warnings')
+    if isinstance(warnings, list) and invalid_ids:
+        for entry in sorted('invalid_decision_record:' + str(record_id) for record_id in set(invalid_ids))[:3]:
+            if entry not in warnings:
+                warnings.append(entry)
+    if block.get('breaches') and any(breach.get('decision_id') is None for breach in block['breaches']):
+        if isinstance(warnings, list) and WARNING_UNRESOLVED not in warnings:
+            warnings.append(WARNING_UNRESOLVED)
+    return block
+
+
+def decision_for_breach(breach, decisions, as_of_date, settings=None):
+    """The one record acting on this breach under the full contract, or None.
+
+    Same subject binding, horizon and value-cap eligibility and the same
+    latest-decision/greatest-id choice as `match_decisions`, without
+    mutating the block - the shared resolver behind the rendered view and the
+    what-if states, so the saved verdict and every readout can never drift
+    apart. Returns the chosen candidate (`id` plus the raw `record`); invalid
+    records resolve nothing here, they only warn inside `match_decisions`.
+    """
+    if not isinstance(breach, dict) or not isinstance(breach.get('limit'), str) or not breach['limit']:
+        return None
+    records = decisions if isinstance(decisions, dict) else {}
+    as_of = date.fromisoformat(as_of_date)
+    candidates, _invalid_ids = _clean_records(records, as_of, _review_horizon(settings))
+    return _pick(candidates, breach, as_of)
+
+
+def decision_display(record, breach, as_of_date):
+    """Final display text for one wired decision record, or None.
+
+    Single source of truth for the rendered view and what-if: `record` is the
+    decision record behind a breach's `decision_id` (assigned by
+    `match_decisions` under the same frozen configuration), `breach` the
+    breach the text is rendered for (kept in the signature so every caller
+    stays breach-first; eligibility lives in `decision_for_breach`). Returns
+    None when there is no complete record, its `review_by` has passed the
+    report date, or its choice is not a recorded decision - there is no
+    catch-all text for an unreadable record any more.
+    """
+    if not isinstance(record, dict) or str(record.get('decision')) not in DECISION_TEXT:
+        return None
+    if str(record.get('review_by') or '') < str(as_of_date or ''):
+        return None
+    stamp = str(record.get('review_by') or '')
+    return DECISION_TEXT[str(record.get('decision'))] + \
+        ('; розгляд ' + '.'.join(reversed(stamp.split('-'))) if stamp else '')
+
+
+def validate_saved_concentration(block, data, v2_record):
+    """Replay the saved block from the v2 record's frozen configuration."""
+    try:
+        if block is None:
+            return True
+        if not isinstance(block, dict) or block.get('version') != VERSION:
+            return False
+        if block.get('status') == 'unavailable':
+            if not isinstance(block.get('as_of_date'), str):
+                return False
+            date.fromisoformat(block['as_of_date'])
+            return isinstance(block.get('warnings'), list)
+        if not isinstance(v2_record, dict) or v2_record.get('version') != 'capital_diversification_v2':
+            return False
+        as_of = v2_record.get('as_of_date')
+        if block.get('as_of_date') != as_of or not isinstance(as_of, str):
+            return False
+        date.fromisoformat(as_of)
+        config = v2_record.get('configuration')
+        if not isinstance(config, dict):
+            return False
+        from analytics.holy_grail_data import extract_exposures  # avoid import cycles
+        positions, _, _ = extract_exposures(data, as_of, config.get('extraction_settings', {}))
+        if positions != v2_record.get('positions'):
+            return False
+        invested = sum(float(p['value_usd']) for p in positions)
+        coverage = v2_record.get('coverage') or {}
+        if invested <= 0:
+            return False
+        total = invested * 100 / float(coverage['invested_pct_nav'])
+        fresh = build_block(positions, config, total, as_of, v2_result=v2_record)
+        # Replay reads the decision settings from the SAME frozen configuration
+        # the save hook used, so the horizon rule stays replay-deterministic.
+        fresh = match_decisions(fresh, config.get('concentration_decisions'), as_of, config)
+        from analytics.allocation_score_v2 import _same
+        return _same(fresh, block)
+    except (ValueError, TypeError, KeyError, AttributeError, ArithmeticError):
+        return False

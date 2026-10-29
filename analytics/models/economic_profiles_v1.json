@@ -1,7 +1,7 @@
 {
   "ib:SPY": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ssga.com/library-content/products/factsheets/etfs/us/factsheet-us-en-spy.pdf",
     "components": [
       {
@@ -23,11 +23,36 @@
       }
     ],
     "complete_sector_profile": true,
-    "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa"
+    "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa",
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.079247,
+        "apple": 0.076114,
+        "microsoft": 0.059278,
+        "alphabet": 0.050892,
+        "amazon_com": 0.037326,
+        "broadcom": 0.024471,
+        "meta_platforms": 0.020548,
+        "tesla": 0.017255,
+        "micron_technology": 0.015761,
+        "eli_lilly": 0.015413,
+        "berkshire_hathaway": 0.015196,
+        "amd": 0.013743,
+        "jpmorgan_chase": 0.013412,
+        "exxonmobil": 0.011117,
+        "visa": 0.010291
+      },
+      "coverage": 0.460064,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx (official SPDR S&P 500 ETF Trust daily holdings file, linked from https://www.ssga.com/us/en/intermediary/etfs/spdr-sp-500-etf-trust-spy)",
+      "source_sha256": "2f2f553ac5c186db3ad1b731fa34587c318c8a6189a6c9e8e7761e022edb6c4a",
+      "max_other_issuer_share": 0.005145
+    }
   },
   "ib:EFA": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ishares.com/us/literature/fact-sheet/efa-ishares-msci-eafe-etf-fund-fact-sheet-en-us.pdf",
     "components": [
       {
@@ -47,7 +72,32 @@
         }
       }
     ],
-    "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043"
+    "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043",
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "asml": 0.0298,
+        "roche": 0.0165,
+        "shell": 0.0142,
+        "hsbc": 0.0138,
+        "novartis": 0.0133,
+        "nestle": 0.0121,
+        "astrazeneca": 0.0121,
+        "sap": 0.0113,
+        "mitsubishi_ufj_financial": 0.0107,
+        "siemens": 0.01,
+        "bhp_group": 0.0097,
+        "commonwealth_bank_of_australia": 0.0089,
+        "toyota": 0.0087,
+        "allianz": 0.0086,
+        "totalenergies": 0.0084
+      },
+      "coverage": 0.1881,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ishares.com/us/products/239623/ishares-msci-eafe-etf/latest-holdings.csv (iShares MSCI EAFE ETF product page: https://www.ishares.com/us/products/239623/ishares-msci-eafe-etf)",
+      "source_sha256": "48d43d49e9f3e72f127b1248a2e92baa6b352c216637b5e6c5e2b8f8c2b8c8cf",
+      "max_other_issuer_share": 0.0042
+    }
   },
   "ib:MCHI": {
     "as_of_date": "2026-09-30",
@@ -99,31 +149,72 @@
   },
   "ib:EMXC": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf",
     "components": [
       {
         "group": "equity_emerging",
         "share": 1,
-        "sectors": {}
+        "sectors": {
+          "Information Technology": 0.49714113752633166,
+          "Financials": 0.19831477580499549,
+          "Industrials": 0.06209248670879728,
+          "Materials": 0.06108937706891363,
+          "Consumer Discretionary": 0.038118166315578295,
+          "Energy": 0.036814123783729565,
+          "Communication Services": 0.031999197512288094,
+          "Consumer Staples": 0.027083960276858263,
+          "Health Care": 0.01966094894171933,
+          "Utilities": 0.018958772193800783,
+          "Real Estate": 0.008727053866987662
+        }
       }
-    ]
+    ],
+    "sector_source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf; iShares fund page \"Sector Breakdown\", % of market value as of 2026-10-27; the 0.31% cash and/or derivatives row is excluded and the 11 GICS sectors are renormalized (raw sum 99.69%)",
+    "complete_sector_profile": true
   },
   "ib:KWEB": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
-    "source": "https://kraneshares.com/etf/kweb/",
+    "reviewed_at": "2026-10-28",
+    "source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf (fund details, sector breakdown and Top 10 Holdings as of 09/30/2026)",
     "components": [
       {
         "group": "equity_china",
         "share": 1,
-        "sectors": {}
+        "sectors": {
+          "Consumer Discretionary": 0.35769423558897245,
+          "Communication Services": 0.3449624060150376,
+          "Information Technology": 0.1432581453634085,
+          "Industrials": 0.05443609022556391,
+          "Consumer Staples": 0.04601503759398496,
+          "Real Estate": 0.04421052631578948,
+          "Financials": 0.009423558897243106
+        }
       }
     ],
     "themes": [
       "ai"
     ],
-    "theme_source": "https://kraneshares.com/etf/kweb/"
+    "theme_source": "https://kraneshares.com/etf/kweb/",
+    "sector_source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf; KWEB factsheet \"Sector Breakdown\", data from Bloomberg as of 09/30/2026; fractions renormalized from the raw 99.75% table sum (0.25% unclassified remainder)",
+    "complete_sector_profile": true,
+    "holdings": {
+      "issuers": {
+        "tencent": 0.1033,
+        "alibaba": 0.0855,
+        "pdd": 0.0814,
+        "meituan": 0.0697,
+        "netease": 0.0663,
+        "lenovo": 0.0616,
+        "ke_holdings": 0.044,
+        "jd_com": 0.0387,
+        "trip_com": 0.0347,
+        "baidu": 0.0319
+      },
+      "coverage": 0.6171,
+      "as_of_date": "2026-09-30",
+      "source": "https://kraneshares.com/resources/factsheet/kweb_factsheet.pdf (Top 10 Holdings as of 09/30/2026, excluding cash; issuer shares of fund NAV; coverage = top-10 sum)"
+    }
   },
   "ib:SHV": {
     "as_of_date": "2026-09-30",
@@ -270,6 +361,7 @@
   },
   "ib:BRK B": {
     "as_of_date": "2026-09-30",
+    "issuer": "berkshire_hathaway",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -284,6 +376,7 @@
   },
   "ib:GOOG": {
     "as_of_date": "2026-09-30",
+    "issuer": "alphabet",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -298,6 +391,7 @@
   },
   "ib:AMZN": {
     "as_of_date": "2026-09-30",
+    "issuer": "amazon_com",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -312,6 +406,7 @@
   },
   "ib:META": {
     "as_of_date": "2026-09-30",
+    "issuer": "meta_platforms",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -452,7 +547,7 @@
   },
   "ib:9988": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
       {
@@ -462,11 +557,12 @@
           "Consumer Discretionary": 1
         }
       }
-    ]
+    ],
+    "issuer": "alibaba"
   },
   "ib:BABA": {
     "as_of_date": "2026-09-30",
-    "reviewed_at": "2026-10-26",
+    "reviewed_at": "2026-10-28",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
       {
@@ -476,10 +572,12 @@
           "Consumer Discretionary": 1
         }
       }
-    ]
+    ],
+    "issuer": "alibaba"
   },
   "ib:BRK-B": {
     "as_of_date": "2026-09-30",
+    "issuer": "berkshire_hathaway",
     "reviewed_at": "2026-10-26",
     "source": "capital_diversification_v1: reviewed economic classification",
     "components": [
@@ -491,5 +589,205 @@
         }
       }
     ]
+  },
+  "ib:VOO": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://investor.vanguard.com/investment-products/etfs/profile/voo; sector shares reflect the S&P 500 index profile recorded for ib:SPY (same underlying index as of 2026-09-30; Vanguard fund factsheet not fetched)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3970205958808238,
+          "Financials": 0.11397720455908818,
+          "Communication Services": 0.09948010397920415,
+          "Health Care": 0.09258148370325933,
+          "Consumer Discretionary": 0.08598280343931212,
+          "Industrials": 0.08048390321935613,
+          "Consumer Staples": 0.043691261747650464,
+          "Energy": 0.03399320135972805,
+          "Utilities": 0.018796240751849626,
+          "Real Estate": 0.016996600679864023,
+          "Materials": 0.016996600679864023
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0838,
+        "apple": 0.0737,
+        "microsoft": 0.0578,
+        "alphabet": 0.0552,
+        "amazon_com": 0.0371,
+        "broadcom": 0.0253,
+        "meta_platforms": 0.0243,
+        "micron_technology": 0.0182,
+        "tesla": 0.0152,
+        "amd": 0.0151,
+        "berkshire_hathaway": 0.0141,
+        "eli_lilly": 0.014,
+        "jpmorgan_chase": 0.0133,
+        "exxonmobil": 0.0101,
+        "johnson_and_johnson": 0.0097
+      },
+      "coverage": 0.4669,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/0968/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 0968 'VOO'; data as presented on https://investor.vanguard.com/investment-products/etfs/profile/voo)",
+      "source_sha256": "865a48cc113427712ee0cd82a38036f5b67bb650ee2fd55a3a2c2be2e6126274",
+      "max_other_issuer_share": 0.00485
+    }
+  },
+  "ib:VTI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.schwab.com/research/etfs/etfrc/vti; Schwab ETF report \"Sector Weightings\", % of assets as of 2026-04-28; fractions renormalized from the raw 100.1% table sum (0.1% rounding), reviewed against the Vanguard fund page",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.37462537462537465,
+          "Financials": 0.1178821178821179,
+          "Health Care": 0.0999000999000999,
+          "Communication Services": 0.0919080919080919,
+          "Industrials": 0.0919080919080919,
+          "Consumer Discretionary": 0.08591408591408592,
+          "Consumer Staples": 0.04195804195804196,
+          "Energy": 0.03596403596403597,
+          "Real Estate": 0.02097902097902098,
+          "Materials": 0.01998001998001998,
+          "Utilities": 0.01898101898101898
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0713,
+        "apple": 0.0663,
+        "microsoft": 0.0519,
+        "alphabet": 0.0494,
+        "amazon_com": 0.033,
+        "broadcom": 0.0228,
+        "meta_platforms": 0.0218,
+        "micron_technology": 0.0164,
+        "tesla": 0.0136,
+        "amd": 0.0136,
+        "eli_lilly": 0.0134,
+        "berkshire_hathaway": 0.0121,
+        "jpmorgan_chase": 0.012,
+        "exxonmobil": 0.0092,
+        "johnson_and_johnson": 0.0087
+      },
+      "coverage": 0.4155,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/0970/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 0970 'VTI'; profile page https://investor.vanguard.com/investment-products/etfs/profile/vti)",
+      "source_sha256": "fa3d53d64546f0a0a71feedaa8f3dd52353f702177d9d33d6509694701ac3079",
+      "max_other_issuer_share": 0.00435
+    }
+  },
+  "ib:VT": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.schwab.com/research/etfs/etfrc/vt; Schwab ETF report \"Sector Weightings\", % of assets as of 2026-02-27; fractions renormalized from the raw 100.1% table sum (0.1% rounding); VT maps wholly to the equity_us group (recorded simplification: one group carries the global fund)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3146853146853147,
+          "Financials": 0.16083916083916086,
+          "Industrials": 0.11188811188811189,
+          "Health Care": 0.08591408591408592,
+          "Consumer Discretionary": 0.08491508491508493,
+          "Communication Services": 0.07292707292707293,
+          "Consumer Staples": 0.04395604395604396,
+          "Materials": 0.04095904095904096,
+          "Energy": 0.03996003996003996,
+          "Utilities": 0.022977022977022976,
+          "Real Estate": 0.02097902097902098
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0452,
+        "apple": 0.0409,
+        "microsoft": 0.0323,
+        "alphabet": 0.0307,
+        "amazon_com": 0.0205,
+        "taiwan_semiconductor": 0.0162,
+        "broadcom": 0.0139,
+        "meta_platforms": 0.0135,
+        "micron_technology": 0.0102,
+        "tesla": 0.0088,
+        "samsung_electronics": 0.0087,
+        "amd": 0.0084,
+        "eli_lilly": 0.0078,
+        "jpmorgan_chase": 0.0075,
+        "berkshire_hathaway": 0.0069
+      },
+      "coverage": 0.2715,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/3141/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 3141 'VT'; profile page https://investor.vanguard.com/investment-products/etfs/profile/vt)",
+      "source_sha256": "f2166f812b636411d8e07dbdd5cb387b052416d3336abb9027f934b83ad19a70",
+      "max_other_issuer_share": 0.00345
+    }
+  },
+  "ib:ACWI": {
+    "as_of_date": "2026-09-30",
+    "reviewed_at": "2026-10-28",
+    "source": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf; iShares fund page \"Sector Breakdown\", % of market value as of 2026-10-27; the 0.37% cash and/or derivatives row is excluded and the 11 GICS sectors are renormalized (raw sum 99.62%); ACWI maps wholly to the equity_us group (recorded simplification: one group carries the global fund)",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Information Technology": 0.3206183497289701,
+          "Financials": 0.16332061834972897,
+          "Industrials": 0.10158602690222845,
+          "Health Care": 0.08964063441076088,
+          "Consumer Discretionary": 0.08552499498092751,
+          "Communication Services": 0.07357960248945994,
+          "Consumer Staples": 0.04928729170849227,
+          "Energy": 0.043264404738004414,
+          "Materials": 0.03453121863079703,
+          "Utilities": 0.023790403533427023,
+          "Real Estate": 0.014856454527203373
+        }
+      }
+    ],
+    "complete_sector_profile": true,
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "apple": 0.0497,
+        "nvidia": 0.0489,
+        "microsoft": 0.0366,
+        "alphabet": 0.0327,
+        "amazon_com": 0.0239,
+        "taiwan_semiconductor": 0.0177,
+        "broadcom": 0.0151,
+        "meta_platforms": 0.0133,
+        "tesla": 0.0114,
+        "micron_technology": 0.0102,
+        "eli_lilly": 0.01,
+        "amd": 0.0089,
+        "jpmorgan_chase": 0.0087,
+        "samsung_electronics": 0.0087,
+        "berkshire_hathaway": 0.0075
+      },
+      "coverage": 0.3033,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf/latest-holdings.csv (iShares MSCI ACWI ETF product page: https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf)",
+      "source_sha256": "a296035d64bc62f1136750c37c0047d4a87c31b2d0aeede80036712a521603c7",
+      "max_other_issuer_share": 0.00375
+    }
   }
 }

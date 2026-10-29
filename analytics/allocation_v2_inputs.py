@@ -8,7 +8,7 @@ import pandas as pd
 
 from analytics.allocation_inputs import GROUPS, FATAL_FLAGS, BALANCE_FLAGS, profile_for, _seal
 from analytics.allocation_score import history_payload, history_frame, monthly_window
-from analytics.allocation_score_v2 import VERSION, SECTORS, evaluate_scenarios
+from analytics.allocation_score_v2 import VERSION, SECTORS, evaluate_scenarios, _same
 from analytics.diversification_inputs import quality_inputs_fingerprint
 from analytics.holy_grail import completed_month_end, fingerprint
 
@@ -123,6 +123,7 @@ def _group_history(histories, weights, definitions):
 
 
 def _compare_basis(result, basis):
+    """Rebuild the saved previous basis; structural tamper raises, drift downgrades."""
     try:
         if basis['method_fingerprint'] != result['method_fingerprint']:
             raise ValueError('different_method')
@@ -135,16 +136,22 @@ def _compare_basis(result, basis):
         if quality_inputs_fingerprint(source) != basis['source_inputs_fingerprint']:
             raise ValueError('invalid_previous_inputs')
         positions, cash, flags = extract_exposures(source, basis['as_of_date'], basis['configuration']['extraction_settings'])
-        if positions != basis['positions'] or cash != basis['cash_value'] or not flags.issubset(set(basis['input_flags']) | {'unsupported_borrowing'}):
+        if not _same(positions, basis['positions']) or not _same(cash, basis['cash_value']) or not flags.issubset(set(basis['input_flags']) | {'unsupported_borrowing'}):
             raise ValueError('invalid_previous_inputs')
         rebuilt = calculate_allocation_score_v2(source, positions, cash, history_frame(basis['histories']),
                                                  basis['configuration'], basis['as_of_date'], basis['input_flags'])
-        if ({g['id']: g['weight'] for g in rebuilt.get('groups', [])} != basis['weights'] or
-                rebuilt.get('sectors') != basis['sectors'] or rebuilt.get('score') != basis['score'] or
-                basis['method_definition'] != basis['configuration']['method_definition']):
+        # Bounded compare catches tampered saved values; exact compare below detects
+        # cross-version recomputation noise and downgrades the comparison instead.
+        weights = {g['id']: g['weight'] for g in rebuilt.get('groups', [])}
+        if basis['method_definition'] != basis['configuration']['method_definition'] or not (
+                _same(weights, basis['weights']) and _same(rebuilt.get('sectors'), basis['sectors'])
+                and _same(rebuilt.get('score'), basis['score'])):
             raise ValueError('invalid_previous_inputs')
         if basis['as_of_date'] > result['as_of_date'] or datetime.fromisoformat(basis['calculated_at']) >= datetime.fromisoformat(result['calculated_at']):
             raise ValueError('invalid_previous_date')
+        if not (_same(weights, basis['weights'], tol=0.) and _same(rebuilt.get('sectors'), basis['sectors'], tol=0.)
+                and _same(rebuilt.get('score'), basis['score'], tol=0.)):
+            return dict(status='unavailable', previous_basis=basis, reason='previous_rebuild_unstable')
         weights = basis['weights']
         key = 'm60_r025' if weights.get('car_business', 0) > 0 else 'm60'
         definitions = basis['method_definition']['group_definitions']
@@ -338,7 +345,7 @@ def validate_saved_allocation_v2(result, data, expected_date=None, *, replay=Tru
         from analytics.holy_grail_data import bound_exposure_record, extract_exposures
         positions, cash, extracted_flags = extract_exposures(
             data, result['as_of_date'], result['configuration']['extraction_settings'])
-        if positions != result['positions'] or cash != result['cash_value']:
+        if not _same(positions, result['positions']) or not _same(cash, result['cash_value']):
             return False
         records = result['configuration']['extraction_settings'].get('diversification', {}).get('exposures', {})
         risky_ids = []
@@ -358,12 +365,21 @@ def validate_saved_allocation_v2(result, data, expected_date=None, *, replay=Tru
         if 'previous_basis' in comparison:
             if comparison.get('reason') == 'invalid_previous_inputs':
                 return False
-            if comparison != _compare_basis(result, comparison['previous_basis']):
+            recomputed = _compare_basis(result, comparison['previous_basis'])
+            # Instability of the previous-basis rebuild is environment-specific
+            # float noise: it must not invalidate the record.
+            if comparison.get('reason') == 'previous_rebuild_unstable':
+                if recomputed.get('status') != 'available' and recomputed.get('reason') != 'previous_rebuild_unstable':
+                    return False
+            elif recomputed.get('reason') == 'previous_rebuild_unstable':
+                if comparison.get('status') != 'available':
+                    return False
+            elif not _same(comparison, recomputed):
                 return False
         elif comparison != fresh['comparison'] and comparison != {'status': 'unavailable', 'reason': 'previous_v2_invalid_or_absent'}:
             return False
         ignored = {'calculated_at', 'result_fingerprint', 'comparison'}
-        return {k: v for k, v in fresh.items() if k not in ignored} == {
-            k: v for k, v in result.items() if k not in ignored}
+        return _same({k: v for k, v in fresh.items() if k not in ignored},
+                     {k: v for k, v in result.items() if k not in ignored})
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return False

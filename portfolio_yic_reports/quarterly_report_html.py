@@ -569,7 +569,7 @@ def _render_holy_grail(view: Optional[dict]) -> str:
         risks = "".join(f"<li>{_esc(text)}</li>" for text in view.get('risk_facts', []))
         return f"""
 <section id="holy-grail">
-  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">Диверсифікація інвестованої частини</h2><span class="sec-rule"></span></div>
+  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">{_esc(view.get('title') or 'Диверсифікація інвестованої частини')}</h2><span class="sec-rule"></span></div>
   <p class="hg-value">{_esc(view['headline'])}</p>
   <p><strong>{_esc(view['status'])}</strong></p>
   <p>{_esc(view.get('model_status', 'Модельна оцінка'))} станом на {_esc(view['as_of'])}. {_esc(view['coverage_summary'])}</p>

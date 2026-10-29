@@ -68,7 +68,8 @@ read back after timeout and never blindly repeat a write. Generated reports and
 private data are excluded from the PR. Live readiness requires actual rendering
 and production readback; synthetic tests are not production proof.
 
-The current v2 Sheets builder reserves A10:B14 for the shared summary. When
+The current v2 Sheets builder reserves A10 for the shared summary - fourteen
+rows today, more when concentration safeguards extend it. When
 benchmark rows would overlap, it places the intact performance panel below the
 summary. Details start below every populated panel, so their row group cannot
 hide unrelated holdings or income. Typed allocation_score cells use 0% formatting.
@@ -333,6 +334,15 @@ unknown method is unavailable; a present but invalid v2 result never falls
 back to v1. v2 displays integer points out of 100, not a percentage. Cash is
 excluded from invested weights and shown separately as a share of full NAV.
 
+v2 is a group-level asset-class breadth metric: it rewards spreading invested
+capital across uncorrelated economic groups and across the eleven equity
+sectors. It does not see issuer-level or thesis-level concentration by
+construction - two issuers in the same group score exactly as their combined
+weight. That verdict therefore needs safeguards beside the score, not inside
+it; see the concentration block below. The historical 15-20 independent
+economic streams target stays an aspiration, not a reached state, and is not
+mixed into v2 trends.
+
 The model aggregates dated holdings into canonical economic groups, retaining
 unknown invested amounts in the denominator. For weights `p` and correlations
 `rho`, the similarity matrix has diagonal 1 and off-diagonal
@@ -352,6 +362,12 @@ scenario unavailable. Alternative scenarios do not replace an unavailable main
 result. Category changes across available scenarios are reported as dependence
 on assumptions or period, and the range is not a confidence interval.
 
+Because breadth is grouped, the score can rise while a named holding weight
+grows: measured on the frozen Q3 inputs, 52.35 -> 59.60 -> 63.48 as the China
+equity share goes 0 -> 19.5% -> 50% at a measured near-average China
+correlation of about 0.185. This is by design, and the concentration limits
+below, not the headline number, govern that verdict.
+
 Saved inputs include dated profiles, source histories, method and group
 representatives, evidence-review cutoff and fingerprints. Replay rebuilds
 holdings, scenarios and reviewed risk facts from saved inputs, without fetching
@@ -362,3 +378,110 @@ references whose original files are not independently verified during replay.
 The main result remains provisional when balance or sector evidence is partial.
 Public output contains only whitelisted group and risk summaries, never private
 holdings, source confirmations or account identifiers.
+
+### Concentration safeguards beside the score
+
+`DIVERSIFICATION_DATA.concentration_v1` adds the issuer and thesis verdict the
+score cannot see; the block keeps its historical save key and the recorded
+`version` field (concentration_v2) gates the contract. Limits come from private
+`allocation.concentration_limits` on stricter defaults (largest issuer <=5% of
+equities and <=2% of NAV, top-4 <=20% of equities, broad-market core >=50%,
+China <=10%, named thesis clusters <=10%); cluster membership from
+`allocation.linked_theses`. Every issuer above a limit records its own breach
+with the subject in the key - `issuer_pct_equities:<issuer>` and
+`issuer_pct_nav:<issuer>` (theses keep `thesis_pct_equities:<name>`) - so the
+block names every concentrated holding, not only the largest one.
+`largest_issuer` and `top4_issuers` remain plain facts beside an
+`issuers_over_limit` list carrying id and both shares for each over-limit
+issuer, any issuer-keyed breach raises `issuer_limit_breached`, and rendered
+rows carry an issuer's two denominators under one row. The limits, theses,
+decisions and decision-settings keys stay frozen into the saved configuration
+fingerprint, so replay uses the same input on every read.
+
+Recorded `allocation.concentration_decisions` entries shaped
+`{id: {limit, subject (optional), decision: accept|reduce|exit, reason,
+decided_at, review_by, max_value (optional), min_value (core floor)}}` resolve
+a breach only through subject binding: a record with `subject` acts on the
+exact `limit:subject` breach key, a legacy record without one only on the
+exact full breach key - old fully-qualified thesis records keep their verdict,
+a bare `issuer_pct_equities` key can never match a prefixed issuer breach. The
+record acts while `decided_at` is on or before the block's as-of date, that
+date is on or before `review_by`, `review_by - decided_at` stays within
+`max_review_days` (constant 120; private
+`allocation.concentration_decision_settings` = `{'max_review_days': N}` may
+override it, and anything but a finite positive override fails the
+configuration), and the current value still fits the recorded bound: at most
+`max_value`, at least `min_value` for the core floor. A position that grows
+past its accepted bound expires its own resolution and needs a fresh record.
+An incomplete or out-of-horizon record is invalid: it resolves nothing, its id
+appears as an `invalid_decision_record:<id>` warning (deduped, sorted, first
+three), one bad record never takes the block down - the breach stays
+unresolved, the summary counts it, and unresolved ones lead the rendered rows.
+
+Broad index funds declare dated `holdings` in their profile - the declared
+issuers and each one's share of the fund, `coverage`, and
+`max_other_issuer_share` (no larger than the smallest listed share) as the
+upper bound on any unlisted issuer's share - so the underlying companies are
+measured instead of charging a whole index fund to one issuer, and an exposure
+held directly and through a fund lands on one issuer instead of two. The
+uncovered fraction goes to the `unknown_lookthrough_pct_equities` fact, never
+spread over members. Holdings undated or older than 90 days are unverified:
+the fund falls back to a single ticker issuer and keeps the
+`unknown_issuer_lookthrough` warning. On a fresh list the unlisted tail warns
+only where `max_other_issuer_share` times the fund's equity share could still
+clear the issuer limit; incomplete coverage by itself is not a warning.
+A profile may also assert `core: true`, which counts the position into the
+broad-market core bucket (the >=50% line). A diversified holding company with
+a declared, fresh look-through (Berkshire via its SEC 13F quarterly filing)
+qualifies as core and its own ticker stops being an issuer for the per-issuer
+limits; the look-through window is the same 90 days, and stale or missing
+declared holdings degrade the position back to a plain ticker issuer with a
+warning while the core credit stays - so `core: true` is only switched on
+together with fresh declared holdings.
+
+A stock-category position without a profile is not dropped from the facts: in
+the equity buckets the extraction emits (`Stocks`, `China Stocks` - a second
+stock bucket beside `Stocks`, also holding ETFs - and `REIT`, included as a
+conservative, revertable owner call) it counts as one issuer at its ticker on
+its full equity value, in both the equities numerator and the denominator; a
+new profileless stock is exactly the concentrated bet the safeguards must
+catch first. It gets no thesis membership, core credit, country or
+look-through, the counted share surfaces as the `unprofiled_pct_equities`
+fact, and an `unprofiled_positions` warning names the ids (first three).
+Unprofiled positions in the non-equity categories (`Bonds`, `Precious
+Metals`, `Commodities`, `Short Selling`) only raise the same warning and never
+gain invented issuer facts.
+
+The safeguards render beside the headline score as rows or bullets, never as
+a second big number - including when the v2 score is unavailable or not
+applicable - and the summary counts all breaches and names the unresolved
+ones. The section hides only when the record carries no readable block (no
+block saved, a malformed one, or a saved block under an earlier contract
+version): the contract version is bumped to `concentration_v2`, saved
+`concentration_v1`-versioned blocks from before the bump degrade silently -
+they render exactly like records without the block, are never re-read under
+the new semantics and are never re-derived from current config, while the key
+itself stays `concentration_v1`. A same-version block that fails independent
+replay degrades to a single unavailable row instead of showing its verdicts,
+and the offline what-if runs its before/after states through the same
+subject-bound eligibility - its per-issuer view lists every issuer over a
+limit with both denominators, breach flags and decision state, and a missing
+or old-version block reads as absent there too.
+
+### Offline what-if scenarios
+
+The enrichment CLI accepts repeatable `--what-if ID=+USD` deltas and prints a
+before/after comparison without changing anything:
+
+```bash
+just holy-grail --what-if ib:VOO=+20000 --offline
+just holy-grail --what-if ib:9988=-5000 --what-if ib:GOOG=+5000 --offline
+```
+
+Each delta moves one position and is funded from Cash (the net total returns
+to it); the run works on a temporary copy of the newest saved snapshot, or of
+the explicitly passed `--snapshot`, re-runs the same offline enrichment on
+that copy, and prints per-limit value, breach and decision state plus the v2
+score for both states. It writes no files, fetches no data and places no
+orders. Unknown or unprofiled ids exit with status 2 before any mutation, and
+missing offline history degrades the after state to unavailable.

@@ -300,9 +300,23 @@ def build_portfolio_tab(
         )
     )
     has_diversification = 'DIVERSIFICATION_DATA' in combined_data or 'HOLY_GRAIL_DATA' in combined_data
+    view = saved_diversification_view(combined_data, expected_date=valuation_date) if has_diversification else None
+    if view is not None and view.get('allocation'):
+        summary = [tuple(row) for row in view['sheet_summary']]
+        kind = view.get('number_kind', 'allocation_score')
+    elif view is not None and view.get('indicator'):
+        summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
+                   ('Дата позицій',view['as_of']),('Прямі історії / моделі',view['coverage_text']),('Статус',view['status'])]
+        kind = 'risk_equivalent'
+    elif view is not None:
+        summary = [('Диверсифікація /100',view['score_cell']),('Ефективні джерела / ціль',view['effective']+' / 15-20'),
+                   ('Дата оцінки',view['as_of']),('Впевненість у даних',view['sheet_status']),
+                   ('Прямі / проксі / без історії',view['coverage_text'])]
+        kind = 'number'
+    else:
+        summary = []
+        kind = 'number'
     performance_start = len(summary_rows) + 1
-    if has_diversification and performance_start + len(performance_rows) > 9:
-        performance_start = 15  # Reserve A10:B14 without losing benchmark rows.
     blocks = [
         CellBlock("holdings", tuple(holding_rows), start_row=0, start_column=3),
         CellBlock("summary", tuple(summary_rows), start_row=0),
@@ -317,40 +331,21 @@ def build_portfolio_tab(
         ),
         CellBlock("compact_income", tuple(income_rows), start_row=0, start_column=10),
     ]
-    diversification_groups = ()
     headers = {'holdings':1, 'compact_allocation':1, 'compact_income':1}
     if has_diversification:
-        view = saved_diversification_view(combined_data, expected_date=valuation_date)
-        if view.get('allocation'):
-            summary = view['sheet_summary']
-            kind = view.get('number_kind', 'allocation_score')
-        elif view.get('indicator'):
-            summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
-                       ('Дата позицій',view['as_of']),('Прямі історії / моделі',view['coverage_text']),('Статус',view['status'])]
-            kind = 'risk_equivalent'
-        else:
-            summary = [('Диверсифікація /100',view['score_cell']),('Ефективні джерела / ціль',view['effective']+' / 15-20'),
-                       ('Дата оцінки',view['as_of']),('Впевненість у даних',view['sheet_status']),
-                       ('Прямі / проксі / без історії',view['coverage_text'])]
-            kind = 'number'
-        summary = [tuple(row) for row in summary]
         label,value = summary[0]
         if isinstance(value,(int,float)):
             summary[0] = (label,CellValue(value,kind))
-        blocks.append(CellBlock('diversification_summary',tuple(summary),start_row=9))
+        # Summary only, below Performance on the left side (owner 2026-10-29):
+        # render once to find where Performance ends, then place the block there.
         _,_,bounds = render_blocks(blocks)
-        first = max(b[1] for b in bounds.values()) + 2
-        from analytics.allocation_view import sheet_detail_rows
-        detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
-        details = [('Диверсифікація - Details',''),*detail_rows,('Holy Grail - End','')]
-        blocks.append(CellBlock('diversification_details',tuple(tuple(row) for row in details),start_row=first))
-        headers['diversification_details'] = 0
-        diversification_groups = (('diversification_details',1,len(details)),)
+        blocks.append(CellBlock('diversification_summary',tuple(summary),
+                                start_row=bounds['performance'][1] + 2))
     return InsightTab(
         title=date.fromisoformat(valuation_date).strftime("%d %b %Y"),
         blocks=tuple(blocks),
         header_offsets=headers,
-        row_groups=diversification_groups,
+        row_groups=(),
         freeze_rows=2,
         freeze_columns=4,
         column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 115),
