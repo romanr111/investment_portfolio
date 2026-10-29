@@ -24,7 +24,31 @@
     ],
     "complete_sector_profile": true,
     "source_sha256": "b4daa578ceb976dc6debab7e7b202ccf282f17d291fe31d9fe2240d4becbdcfa",
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.079247,
+        "apple": 0.076114,
+        "microsoft": 0.059278,
+        "alphabet": 0.050892,
+        "amazon_com": 0.037326,
+        "broadcom": 0.024471,
+        "meta_platforms": 0.020548,
+        "tesla": 0.017255,
+        "micron_technology": 0.015761,
+        "eli_lilly": 0.015413,
+        "berkshire_hathaway": 0.015196,
+        "amd": 0.013743,
+        "jpmorgan_chase": 0.013412,
+        "exxonmobil": 0.011117,
+        "visa": 0.010291
+      },
+      "coverage": 0.460064,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx (official SPDR S&P 500 ETF Trust daily holdings file, linked from https://www.ssga.com/us/en/intermediary/etfs/spdr-sp-500-etf-trust-spy)",
+      "source_sha256": "2f2f553ac5c186db3ad1b731fa34587c318c8a6189a6c9e8e7761e022edb6c4a",
+      "max_other_issuer_share": 0.005145
+    }
   },
   "ib:EFA": {
     "as_of_date": "2026-09-30",
@@ -49,7 +73,31 @@
       }
     ],
     "source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043",
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "asml": 0.0298,
+        "roche": 0.0165,
+        "shell": 0.0142,
+        "hsbc": 0.0138,
+        "novartis": 0.0133,
+        "nestle": 0.0121,
+        "astrazeneca": 0.0121,
+        "sap": 0.0113,
+        "mitsubishi_ufj_financial": 0.0107,
+        "siemens": 0.01,
+        "bhp_group": 0.0097,
+        "commonwealth_bank_of_australia": 0.0089,
+        "toyota": 0.0087,
+        "allianz": 0.0086,
+        "totalenergies": 0.0084
+      },
+      "coverage": 0.1881,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ishares.com/us/products/239623/ishares-msci-eafe-etf/latest-holdings.csv (iShares MSCI EAFE ETF product page: https://www.ishares.com/us/products/239623/ishares-msci-eafe-etf)",
+      "source_sha256": "48d43d49e9f3e72f127b1248a2e92baa6b352c216637b5e6c5e2b8f8c2b8c8cf",
+      "max_other_issuer_share": 0.0042
+    }
   },
   "ib:MCHI": {
     "as_of_date": "2026-09-30",
@@ -561,7 +609,31 @@
       }
     ],
     "complete_sector_profile": true,
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0838,
+        "apple": 0.0737,
+        "microsoft": 0.0578,
+        "alphabet": 0.0552,
+        "amazon_com": 0.0371,
+        "broadcom": 0.0253,
+        "meta_platforms": 0.0243,
+        "micron_technology": 0.0182,
+        "tesla": 0.0152,
+        "amd": 0.0151,
+        "berkshire_hathaway": 0.0141,
+        "eli_lilly": 0.014,
+        "jpmorgan_chase": 0.0133,
+        "exxonmobil": 0.0101,
+        "johnson_and_johnson": 0.0097
+      },
+      "coverage": 0.4669,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/0968/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 0968 'VOO'; data as presented on https://investor.vanguard.com/investment-products/etfs/profile/voo)",
+      "source_sha256": "865a48cc113427712ee0cd82a38036f5b67bb650ee2fd55a3a2c2be2e6126274",
+      "max_other_issuer_share": 0.00485
+    }
   },
   "ib:VTI": {
     "as_of_date": "2026-09-30",
@@ -587,7 +659,31 @@
       }
     ],
     "complete_sector_profile": true,
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0713,
+        "apple": 0.0663,
+        "microsoft": 0.0519,
+        "alphabet": 0.0494,
+        "amazon_com": 0.033,
+        "broadcom": 0.0228,
+        "meta_platforms": 0.0218,
+        "micron_technology": 0.0164,
+        "tesla": 0.0136,
+        "amd": 0.0136,
+        "eli_lilly": 0.0134,
+        "berkshire_hathaway": 0.0121,
+        "jpmorgan_chase": 0.012,
+        "exxonmobil": 0.0092,
+        "johnson_and_johnson": 0.0087
+      },
+      "coverage": 0.4155,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/0970/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 0970 'VTI'; profile page https://investor.vanguard.com/investment-products/etfs/profile/vti)",
+      "source_sha256": "fa3d53d64546f0a0a71feedaa8f3dd52353f702177d9d33d6509694701ac3079",
+      "max_other_issuer_share": 0.00435
+    }
   },
   "ib:VT": {
     "as_of_date": "2026-09-30",
@@ -613,7 +709,31 @@
       }
     ],
     "complete_sector_profile": true,
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "nvidia": 0.0452,
+        "apple": 0.0409,
+        "microsoft": 0.0323,
+        "alphabet": 0.0307,
+        "amazon_com": 0.0205,
+        "taiwan_semiconductor": 0.0162,
+        "broadcom": 0.0139,
+        "meta_platforms": 0.0135,
+        "micron_technology": 0.0102,
+        "tesla": 0.0088,
+        "samsung_electronics": 0.0087,
+        "amd": 0.0084,
+        "eli_lilly": 0.0078,
+        "jpmorgan_chase": 0.0075,
+        "berkshire_hathaway": 0.0069
+      },
+      "coverage": 0.2715,
+      "as_of_date": "2026-09-30",
+      "source": "https://api.vanguard.com/rs/ire/01/ind/fund/3141/portfolio-holding/stock.jsonp?callback=angular.callbacks._0&planId=null&asOfType=daily&start=1&count=1600 (Vanguard fund 3141 'VT'; profile page https://investor.vanguard.com/investment-products/etfs/profile/vt)",
+      "source_sha256": "f2166f812b636411d8e07dbdd5cb387b052416d3336abb9027f934b83ad19a70",
+      "max_other_issuer_share": 0.00345
+    }
   },
   "ib:ACWI": {
     "as_of_date": "2026-09-30",
@@ -639,6 +759,30 @@
       }
     ],
     "complete_sector_profile": true,
-    "core": true
+    "core": true,
+    "holdings": {
+      "issuers": {
+        "apple": 0.0497,
+        "nvidia": 0.0489,
+        "microsoft": 0.0366,
+        "alphabet": 0.0327,
+        "amazon_com": 0.0239,
+        "taiwan_semiconductor": 0.0177,
+        "broadcom": 0.0151,
+        "meta_platforms": 0.0133,
+        "tesla": 0.0114,
+        "micron_technology": 0.0102,
+        "eli_lilly": 0.01,
+        "amd": 0.0089,
+        "jpmorgan_chase": 0.0087,
+        "samsung_electronics": 0.0087,
+        "berkshire_hathaway": 0.0075
+      },
+      "coverage": 0.3033,
+      "as_of_date": "2026-10-27",
+      "source": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf/latest-holdings.csv (iShares MSCI ACWI ETF product page: https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf)",
+      "source_sha256": "a296035d64bc62f1136750c37c0047d4a87c31b2d0aeede80036712a521603c7",
+      "max_other_issuer_share": 0.00375
+    }
   }
 }

@@ -18,9 +18,19 @@ Contract (pinned):
   `reason`, or decided after the block, never resolve a breach.
 - Issuer aggregation uses an optional `issuer` profile key (single stocks
   default to their ticker; 9988+BABA -> 'alibaba'). Fund look-through uses a
-  dated profile `holdings` field (issuer -> share, plus `source`,
-  `as_of_date`, `coverage`); the uncovered fraction goes to
-  `unknown_lookthrough_pct_equities`, never spread over members.
+  dated profile `holdings` field: `issuers` (issuer -> share of fund NAV),
+  `coverage`, `as_of_date`, `source` plus an optional `max_other_issuer_share`
+  (0..1, no larger than the smallest listed share: the upper bound for any
+  issuer outside the declared list). Holdings missing `as_of_date`, or older
+  than HOLDINGS_MAX_AGE_DAYS (90) days before the block's `as_of_date`, are
+  not verified evidence: the fund falls back to a single ticker issuer (the
+  plain-position fallback) and raises `unknown_issuer_lookthrough`. The
+  uncovered fraction goes to `unknown_lookthrough_pct_equities`, never spread
+  over members; with a declared `max_other_issuer_share` the unlisted tail
+  joins it only when the fund's equity share times `max_other_issuer_share`
+  could clear the issuer limit on its own (each unlisted issuer is otherwise
+  verified too small to breach the limit), while profiles without one keep
+  the whole uncovered fraction unverified.
 - Replay reads profiles/limits/theses/decisions ONLY from
   `v2_record['configuration']` (the merged settings stored and fingerprinted
   in the record) - never re-reads the profiles JSON path or private config.
@@ -67,6 +77,10 @@ EPS = 1e-9
 BUSINESS_WARNING_PCT_INVESTED = 5.
 ISSUER_BREACH_LIMITS = ('issuer_pct_equities', 'issuer_pct_nav', 'top4_pct_equities')
 THESIS_LIMIT_PREFIX = 'thesis_pct_equities:'
+# Fund look-through is verified evidence only inside this window from the
+# block's as_of_date: stale or undated holdings must not be silently spread
+# into issuer shares, they make the fund an (unverified) single ticker issuer.
+HOLDINGS_MAX_AGE_DAYS = 90
 
 
 def unavailable_block(as_of_date, warnings):
@@ -97,8 +111,30 @@ def _merged_limits(config):
     return limits
 
 
-def _issuer_of(position, profile):
-    """Explicit `issuer` wins; declared `holdings` enable look-through; else ticker."""
+def _holdings_fresh(holdings, as_of_date):
+    """Holdings count as verified only when dated within HOLDINGS_MAX_AGE_DAYS.
+
+    Missing or unparseable dates on either side count as stale (the caller
+    then treats the fund as holdings-less), so look-through is never silently
+    applied from unverified data. A `None` anchor only occurs on direct
+    harness-style calls with no block date; production callers (save hook,
+    replay, what-if) always pass the block date, so the None branch defaults
+    to fresh rather than silently degrading every direct probe.
+    """
+    if as_of_date is None:
+        return True  # None anchor: direct harness calls only; production paths always pass a date
+    try:
+        anchor, seen = date.fromisoformat(as_of_date), holdings.get('as_of_date')
+        if not isinstance(seen, str):
+            return False
+        return (anchor - date.fromisoformat(seen)).days <= HOLDINGS_MAX_AGE_DAYS
+    except (ValueError, TypeError):
+        return False
+
+
+def _issuer_of(position, profile, as_of_date=None):
+    """Explicit `issuer` wins; fresh declared `holdings` enable look-through;
+    stale/undated holdings or none fall back to the ticker like plain positions."""
     issuer = profile.get('issuer')
     if issuer is not None:
         if not isinstance(issuer, str) or not issuer.strip():
@@ -108,13 +144,20 @@ def _issuer_of(position, profile):
     if holdings is not None:
         if not isinstance(holdings, dict):
             raise ValueError('Invalid profile holdings')
-        return None, holdings
+        if _holdings_fresh(holdings, as_of_date):
+            return None, holdings
     identifier = position.get('id', '')
     return (identifier.split(':', 1)[1] if ':' in identifier else identifier), None
 
 
 def _lookthrough(holdings):
-    """Validate declared fund holdings; return (resolved issuer shares, uncovered fraction)."""
+    """Validate declared fund holdings.
+
+    Returns (resolved issuer shares, uncovered fraction, max_other_issuer_share
+    as declared or None). The optional `max_other_issuer_share` upper-bounds
+    any issuer outside the listed set: it must stay in 0..1 and not exceed the
+    smallest listed share.
+    """
     declared = holdings.get('issuers')
     shares = {}
     if isinstance(declared, dict):
@@ -128,8 +171,14 @@ def _lookthrough(holdings):
         coverage = sum(shares.values())
     if not _finite(coverage) or coverage < 0 or coverage > 1 + 1e-8 or sum(shares.values()) > coverage + 1e-8:
         raise ValueError('Invalid holdings coverage')
+    max_other = holdings.get('max_other_issuer_share')
+    if max_other is not None:
+        if not _finite(max_other) or max_other < 0 or max_other > 1 + 1e-8:
+            raise ValueError('Invalid profile holdings')
+        if shares and max_other > min(shares.values()) + EPS:
+            raise ValueError('Invalid profile holdings')
     resolved = sorted(shares.items(), key=lambda item: item[0])
-    return resolved, max(0., 1. - float(coverage))
+    return resolved, max(0., 1. - float(coverage)), (None if max_other is None else float(max_other))
 
 
 def _score_excluding_car(v2_result):
@@ -175,6 +224,7 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
     limits = _merged_limits(config)
     issuers, thesis_equity, positions_equity = {}, {}, {}
     equities = invested = core = china = car = uncovered = 0.
+    tails, stale = [], 0.
     for position in positions:
         value = float(position['value_usd'])
         if not math.isfinite(value) or value < 0:
@@ -205,14 +255,28 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         positions_equity[identifier] = positions_equity.get(identifier, 0.) + equity
         if profile is not None and profile.get('core') is True:
             core += equity
-        issuer, holdings = _issuer_of(position, profile)
+        issuer, holdings = _issuer_of(position, profile, as_of_date)
         if holdings is None:
             issuers[issuer] = issuers.get(issuer, 0.) + equity
+            if (profile is not None and profile.get('issuer') is None
+                    and profile.get('holdings') is not None):
+                stale += equity  # undated/stale look-through: unverified fallback
             continue
-        resolved, share_unknown = _lookthrough(holdings)
+        resolved, share_unknown, max_other = _lookthrough(holdings)
         for name, share in resolved:
             issuers[name] = issuers.get(name, 0.) + equity * share
-        uncovered += equity * share_unknown
+        if share_unknown > 0:
+            if max_other is None:
+                uncovered += equity * share_unknown
+            else:
+                tails.append((equity, share_unknown, max_other))
+    for tail_equity, tail_unknown, max_other in tails:
+        # The unlisted tail of a fund with a declared max_other_issuer_share is
+        # only an unverified risk when one unlisted issuer times the fund's
+        # equity share could clear the issuer limit on its own - otherwise it
+        # is verified too small to breach anything.
+        if tail_equity * max_other / equities * 100 > limits['issuer_pct_equities'] + EPS:
+            uncovered += tail_equity * tail_unknown
     linked = config.get('linked_theses') if isinstance(config.get('linked_theses'), dict) else {}
     for name, thesis in sorted(linked.items()):
         members = set(thesis.get('members') or []) if isinstance(thesis, dict) else set()
@@ -264,7 +328,7 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         warnings.append(WARNING_COUNTRY)
     if any(breach['limit'].startswith(THESIS_LIMIT_PREFIX) for breach in breaches):
         warnings.append(WARNING_THESIS)
-    if facts['unknown_lookthrough_pct_equities'] > EPS:
+    if facts['unknown_lookthrough_pct_equities'] > EPS or stale > EPS:
         warnings.append(WARNING_UNKNOWN_LOOKTHROUGH)
     if facts['business_pct_invested'] > BUSINESS_WARNING_PCT_INVESTED + EPS:
         warnings.append(WARNING_BUSINESS)
