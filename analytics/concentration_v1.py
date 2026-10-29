@@ -31,6 +31,13 @@ Contract (pinned):
   could clear the issuer limit on its own (each unlisted issuer is otherwise
   verified too small to breach the limit), while profiles without one keep
   the whole uncovered fraction unverified.
+- One breach per issuer over a limit, subject in the key: an issuer over the
+  equities limit breaches under `issuer_pct_equities:<issuer>` and one over
+  the NAV limit under `issuer_pct_nav:<issuer>`; the plain limits
+  (`top4_pct_equities`, `core_min_pct_equities`, `country_pct_equities_china`,
+  `thesis_pct_equities:<name>`) keep their plain keys. Decision records
+  (still limit-name-matched until the subject-aware step) therefore resolve
+  these breaches only when a record carries the exact prefixed key.
 - Replay reads profiles/limits/theses/decisions ONLY from
   `v2_record['configuration']` (the merged settings stored and fingerprinted
   in the record) - never re-reads the profiles JSON path or private config.
@@ -43,6 +50,7 @@ Block shape (scored):
  thesis_pct_equities: {..}},
  facts: {largest_issuer: {id, pct_equities, pct_nav},
          top4_issuers: {ids, pct_equities}, core_pct_equities,
+         issuers_over_limit: [{id, pct_equities, pct_nav}],
          country_pct_equities: {}, thesis_pct_equities: {},
          unknown_lookthrough_pct_equities, business_pct_invested,
          score_excluding_car},
@@ -75,7 +83,10 @@ EPS = 1e-9
 # F5: an unmeasured business correlation drives the headline; above this share
 # of invested capital the score must be read as provisional.
 BUSINESS_WARNING_PCT_INVESTED = 5.
-ISSUER_BREACH_LIMITS = ('issuer_pct_equities', 'issuer_pct_nav', 'top4_pct_equities')
+# Breach keys carry their subject after the ':': every issuer over a limit
+# gets its own breach (limit=ISSUER_*_PREFIX + issuer), not just the largest.
+ISSUER_EQ_PREFIX = 'issuer_pct_equities:'
+ISSUER_NAV_PREFIX = 'issuer_pct_nav:'
 THESIS_LIMIT_PREFIX = 'thesis_pct_equities:'
 # Fund look-through is verified evidence only inside this window from the
 # block's as_of_date: stale or undated holdings must not be silently spread
@@ -284,6 +295,10 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         if amount > EPS:
             thesis_equity[name] = amount
     ordered = sorted(issuers.items(), key=lambda item: (-item[1], item[0]))
+    # Per-issuer percentages of both denominators in `ordered` order (pct
+    # equities descending): one breach per issuer over a limit, subject in key.
+    issuer_pcts = [(issuer, amount / equities * 100, amount / total * 100)
+                   for issuer, amount in ordered]
     facts = {
         'largest_issuer': (dict(id=ordered[0][0],
                                 pct_equities=ordered[0][1] / equities * 100,
@@ -292,6 +307,10 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         'top4_issuers': dict(ids=[issuer for issuer, _ in ordered[:4]],
                              pct_equities=sum(amount for _, amount in ordered[:4]) / equities * 100
                              if equities > 0 else 0.),
+        'issuers_over_limit': [dict(id=issuer, pct_equities=pct_eq, pct_nav=pct_nav)
+                               for issuer, pct_eq, pct_nav in issuer_pcts
+                               if pct_eq > limits['issuer_pct_equities'] + EPS
+                               or pct_nav > limits['issuer_pct_nav'] + EPS],
         'core_pct_equities': core / equities * 100 if equities > 0 else 0.,
         'country_pct_equities': ({'china': china / equities * 100} if china > EPS and equities > 0 else {}),
         'thesis_pct_equities': ({name: amount / equities * 100 for name, amount in sorted(thesis_equity.items())}
@@ -302,11 +321,11 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
     }
     breaches = []
     if equities > EPS:
-        largest = facts['largest_issuer']
-        if largest['pct_equities'] > limits['issuer_pct_equities'] + EPS:
-            breaches.append(dict(limit='issuer_pct_equities', value=largest['pct_equities'], decision_id=None))
-        if largest['pct_nav'] > limits['issuer_pct_nav'] + EPS:
-            breaches.append(dict(limit='issuer_pct_nav', value=largest['pct_nav'], decision_id=None))
+        for issuer, pct_eq, pct_nav in issuer_pcts:
+            if pct_eq > limits['issuer_pct_equities'] + EPS:
+                breaches.append(dict(limit=ISSUER_EQ_PREFIX + issuer, value=pct_eq, decision_id=None))
+            if pct_nav > limits['issuer_pct_nav'] + EPS:
+                breaches.append(dict(limit=ISSUER_NAV_PREFIX + issuer, value=pct_nav, decision_id=None))
         if facts['top4_issuers']['pct_equities'] > limits['top4_pct_equities'] + EPS:
             breaches.append(dict(limit='top4_pct_equities', value=facts['top4_issuers']['pct_equities'],
                                  decision_id=None))
@@ -320,7 +339,8 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
             if thesis_limit is not None and value > thesis_limit + EPS:
                 breaches.append(dict(limit=THESIS_LIMIT_PREFIX + name, value=value, decision_id=None))
     warnings = []
-    if any(breach['limit'] in ISSUER_BREACH_LIMITS for breach in breaches):
+    if any(breach['limit'].startswith(ISSUER_EQ_PREFIX) or breach['limit'].startswith(ISSUER_NAV_PREFIX)
+           or breach['limit'] == 'top4_pct_equities' for breach in breaches):
         warnings.append(WARNING_ISSUER)
     if any(breach['limit'] == 'core_min_pct_equities' for breach in breaches):
         warnings.append(WARNING_CORE)

@@ -75,6 +75,13 @@ def _concentration(section):
         largest, top4 = facts['largest_issuer'], facts['top4_issuers']
         raw_id = largest['id'] if isinstance(largest['id'], str) else str(largest['id'])
         issuer_id = raw_id.split(':', 1)[1] if raw_id.startswith('ib:') else raw_id
+        over_limit = []
+        for entry in facts.get('issuers_over_limit') or []:
+            if (not isinstance(entry, dict) or not isinstance(entry.get('id'), str)
+                    or not _num(entry.get('pct_equities')) or not _num(entry.get('pct_nav'))):
+                return None
+            over_limit.append(dict(id=entry['id'], pct_equities=entry['pct_equities'],
+                                   pct_nav=entry['pct_nav']))
         shares = dict(issuer_id=issuer_id, issuer_pct_equities=largest['pct_equities'],
                       issuer_pct_nav=largest['pct_nav'], top4_pct_equities=top4['pct_equities'],
                       top4_ids=[str(i) for i in top4.get('ids') or []],
@@ -82,7 +89,8 @@ def _concentration(section):
                       unknown_lookthrough_pct_equities=facts.get('unknown_lookthrough_pct_equities'),
                       business_pct_invested=facts.get('business_pct_invested'),
                       score_excluding_car=facts.get('score_excluding_car'),
-                      thesis_pct_equities={str(k): v for k, v in (facts.get(THESIS_KEY) or {}).items()})
+                      thesis_pct_equities={str(k): v for k, v in (facts.get(THESIS_KEY) or {}).items()},
+                      issuers_over_limit=over_limit)
         for key in ('issuer_pct_equities','top4_pct_equities','core_pct_equities'):
             if not _num(shares[key]): return None
         for key in ('issuer_pct_nav','china_pct_equities','unknown_lookthrough_pct_equities',
@@ -108,6 +116,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
     Returns None when no block is saved (today's render exactly) or when the
     block is malformed; an unavailable block renders one explicit row.
     """
+    from analytics.concentration_v1 import ISSUER_EQ_PREFIX, ISSUER_NAV_PREFIX
     block = _concentration(section)
     if block is None:
         return None
@@ -135,6 +144,10 @@ def concentration_section(section, decisions=None, as_of_date=None):
     def limit_for(key):
         if key in limits and key != THESIS_KEY:
             return limits[key], LIMIT_LABELS.get(key, key)
+        for prefix, plain, suffix in ((ISSUER_EQ_PREFIX, 'issuer_pct_equities', ''),
+                                      (ISSUER_NAV_PREFIX, 'issuer_pct_nav', ' / NAV')):
+            if key.startswith(prefix):
+                return limits.get(plain), 'Емітент ' + key[len(prefix):] + suffix
         name = key.split(':', 1)[1] if ':' in key else key.split('.', 1)[1] if '.' in key else None
         theses = limits.get(THESIS_KEY) or {}
         if name and name in theses:
@@ -142,15 +155,59 @@ def concentration_section(section, decisions=None, as_of_date=None):
         return limits.get(key), LIMIT_LABELS.get(key, key)
 
     breach_rows, breach_facts = [], []
-    for item in sorted(block['breaches'], key=lambda item: 0 if not resolved(item) else 1):
-        limit, label = limit_for(item['limit'])
-        minimal = limit is not None and item.get('limit') == 'core_min_pct_equities'
-        nav = item.get('limit') == 'issuer_pct_nav'
-        against = _pct(limit) if limit is not None else ''
-        suffix = ' NAV' if nav else ''
-        value_text = (_pct(item['value']) + suffix + ' нижче цілі ' + against if minimal
-                      else _pct(item['value']) + suffix + ' понад ліміт ' + against + suffix)
-        text = value_text + ' · ' + decision_text(item)
+    sorted_items = sorted(block['breaches'], key=lambda item: 0 if not resolved(item) else 1)
+
+    def subject_of(item):
+        limit = item['limit']
+        if limit.startswith(ISSUER_EQ_PREFIX):
+            return ('issuer', limit[len(ISSUER_EQ_PREFIX):])
+        if limit.startswith(ISSUER_NAV_PREFIX):
+            return ('issuer', limit[len(ISSUER_NAV_PREFIX):])
+        return (None, limit)
+
+    groups, by_subject = [], {}
+    for item in sorted_items:
+        key = subject_of(item)
+        if key not in by_subject:
+            by_subject[key] = []
+            groups.append(key)
+        by_subject[key].append(item)
+    for subject_key in groups:
+        items = by_subject[subject_key]
+        if subject_key[0] is None:
+            item = items[0]
+            limit, label = limit_for(item['limit'])
+            minimal = limit is not None and item.get('limit') == 'core_min_pct_equities'
+            nav = item.get('limit') == 'issuer_pct_nav'
+            against = _pct(limit) if limit is not None else ''
+            suffix = ' NAV' if nav else ''
+            value_text = (_pct(item['value']) + suffix + ' нижче цілі ' + against if minimal
+                          else _pct(item['value']) + suffix + ' понад ліміт ' + against + suffix)
+            text = value_text + ' · ' + decision_text(item)
+        else:
+            # One row per issuer: both denominators (equities and NAV) share it,
+            # subject in the row label, unresolved-first ordering preserved.
+            eq = next((i for i in items if i['limit'].startswith(ISSUER_EQ_PREFIX)), None)
+            nav_item = next((i for i in items if i['limit'].startswith(ISSUER_NAV_PREFIX)), None)
+            primary = eq or nav_item
+            limit, label = limit_for(primary['limit'])
+            value_text = ''
+            against_text = ''
+            if eq is not None:
+                eq_limit = limit_for(eq['limit'])[0]
+                value_text = _pct(eq['value']) + ' акцій'
+                against_text = _pct(eq_limit) if eq_limit is not None else ''
+            if nav_item is not None:
+                nav_limit = limit_for(nav_item['limit'])[0]
+                nav_value = _pct(nav_item['value']) + ' NAV'
+                nav_against = (_pct(nav_limit) + ' NAV') if nav_limit is not None else ' NAV'
+                if value_text:
+                    value_text += ' / ' + nav_value
+                    against_text += ' / ' + nav_against
+                else:
+                    value_text = nav_value
+                    against_text = nav_against
+            text = value_text + ' понад ліміт ' + against_text + ' · ' + decision_text(primary)
         breach_rows.append(('Порушення: ' + label, text))
         breach_facts.append('Порушення ліміту: ' + label + ' ' + text)
 
@@ -189,10 +246,22 @@ def concentration_section(section, decisions=None, as_of_date=None):
         label = warn_labels.get(warning, warning)
         if label not in existing:
             rows.append(('Обмеження', label))
+    unresolved = sum(1 for item in block['breaches'] if not resolved(item))
+    names = []
+    if unresolved:
+        # First 2-3 subject names from the breaches, unresolved-first order:
+        # one name per subject (an issuer's equity and NAV breaches share it).
+        for subject_key in groups:
+            if any(not resolved(item) for item in by_subject[subject_key]):
+                name = subject_key[1] if subject_key[0] is not None else limit_for(subject_key[1])[1]
+                if name not in names:
+                    names.append(name)
+                if len(names) == 3:
+                    break
     summary = [('Концентрація',
                 'Ліміти дотримані' if not block['breaches'] else
-                'Порушень: ' + str(len(block['breaches'])) + '; нерозглянутих: ' +
-                str(sum(1 for item in block['breaches'] if not resolved(item)))),
+                'Порушень: ' + str(len(block['breaches'])) + '; нерозглянутих: ' + str(unresolved)
+                + (' (' + ', '.join(names) + ')' if names else '')),
                ('Емітент', issuer.split(' · ліміт')[0]),
                ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities']) + ' акцій'),
                ('Китай', (_pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-') + ' акцій')]

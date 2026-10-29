@@ -18,7 +18,8 @@ from analytics.allocation_inputs import allocation_settings, profile_for
 from analytics.allocation_score import history_frame
 from analytics.holy_grail_data import (CACHE_DIR, CONFIG_PATH, CASH_EQUIVALENTS, DATA_DIR,
                                        extract_exposures, enrich_snapshot_file, load_config)
-from analytics.concentration_v1 import (THESIS_LIMIT_PREFIX, VERSION as CONCENTRATION_VERSION,
+from analytics.concentration_v1 import (ISSUER_EQ_PREFIX, ISSUER_NAV_PREFIX, THESIS_LIMIT_PREFIX,
+                                        VERSION as CONCENTRATION_VERSION,
                                         build_block, unavailable_block, validate_saved_concentration)
 
 
@@ -178,6 +179,16 @@ def limit_value(facts, limit):
             if str(key).lower() == 'china':
                 return value
         return None
+    for prefix, field in ((ISSUER_EQ_PREFIX, 'pct_equities'), (ISSUER_NAV_PREFIX, 'pct_nav')):
+        # Prefixed issuer keys: tail = issuer id, value from issuers_over_limit.
+        if isinstance(limit, str) and limit.startswith(prefix):
+            issuer = limit[len(prefix):]
+            for entry in facts.get('issuers_over_limit') or []:
+                if isinstance(entry, dict) and entry.get('id') == issuer:
+                    value = entry.get(field)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                        return value
+                    return None
     return None
 
 
@@ -192,7 +203,13 @@ def _decision_state(breach, decisions, as_of_date):
 
 
 def concentration_state(block, decisions, as_of_date):
-    """Per-limit value/breach/decision readout with the block's own warnings."""
+    """Per-limit and per-issuer value/breach/decision readout with the block's own warnings.
+
+    The plain limit states keep their largest-issuer readout (issuer breaches
+    now live under per-issuer prefixed keys), and the per-issuer view lists
+    every issuer over a limit with both denominators, breach flags and the
+    decision state of its own breaches.
+    """
     if not isinstance(block, dict) or block.get('version') != CONCENTRATION_VERSION:
         return {'status': 'absent'}
     if block.get('status') == 'unavailable':
@@ -204,6 +221,14 @@ def concentration_state(block, decisions, as_of_date):
         if isinstance(breach, dict) and isinstance(breach.get('limit'), str):
             breached.setdefault(breach['limit'], breach)
     try:
+        largest = facts.get('largest_issuer') or {}
+        issuer_breaches = {}
+        for breach in block.get('breaches') or []:
+            if not (isinstance(breach, dict) and isinstance(breach.get('limit'), str)):
+                continue
+            for prefix, denominator in ((ISSUER_EQ_PREFIX, 'eq'), (ISSUER_NAV_PREFIX, 'nav')):
+                if breach['limit'].startswith(prefix):
+                    issuer_breaches.setdefault(breach['limit'][len(prefix):], {})[denominator] = breach
         states = {}
         for key, limit in limits.items():
             if key == 'thesis_pct_equities':
@@ -215,13 +240,32 @@ def concentration_state(block, decisions, as_of_date):
                     _decision_state(breached.get(THESIS_LIMIT_PREFIX + name, {}), decisions, as_of_date))
                     for name, value in sorted((limit or {}).items())}
                 continue
-            states[key] = _limit_state(limit_value(facts, key), limit, breached.get(key, {}),
-                                       _decision_state(breached.get(key, {}), decisions, as_of_date))
-        largest = facts.get('largest_issuer') or {}
+            breach = breached.get(key, {})
+            if key in ('issuer_pct_equities', 'issuer_pct_nav') and isinstance(largest.get('id'), str):
+                # Subject in the key: the plain state stays the largest issuer's
+                # state; older blocks without prefixed keys keep their plain hit.
+                breach = breached.get(key + ':' + largest['id'], breach)
+            states[key] = _limit_state(limit_value(facts, key), limit, breach,
+                                       _decision_state(breach, decisions, as_of_date))
+        over_ids = [entry['id'] for entry in facts.get('issuers_over_limit') or []
+                    if isinstance(entry, dict) and isinstance(entry.get('id'), str)]
+        issuer_states = []
+        for issuer in over_ids + sorted(name for name in issuer_breaches if name not in over_ids):
+            eq_breach = issuer_breaches.get(issuer, {}).get('eq')
+            nav_breach = issuer_breaches.get(issuer, {}).get('nav')
+            issuer_states.append(dict(id=issuer, limits={
+                'issuer_pct_equities': _limit_state(
+                    limit_value(facts, ISSUER_EQ_PREFIX + issuer), limits.get('issuer_pct_equities'),
+                    eq_breach or {}, _decision_state(eq_breach or {}, decisions, as_of_date)),
+                'issuer_pct_nav': _limit_state(
+                    limit_value(facts, ISSUER_NAV_PREFIX + issuer), limits.get('issuer_pct_nav'),
+                    nav_breach or {}, _decision_state(nav_breach or {}, decisions, as_of_date)),
+            }))
     except (AttributeError, KeyError, TypeError):
         return {'status': 'unavailable', 'warnings': ['concentration_state_invalid']}
     return {'status': 'scored', 'warnings': list(block.get('warnings') or []),
             'largest_issuer': largest, 'top4_issuers': facts.get('top4_issuers'),
+            'issuers_over_limit': issuer_states,
             'business_pct_invested': facts.get('business_pct_invested'),
             'score_excluding_car': facts.get('score_excluding_car'),
             'unknown_lookthrough_pct_equities': facts.get('unknown_lookthrough_pct_equities'),
