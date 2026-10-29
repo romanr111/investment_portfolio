@@ -295,10 +295,14 @@ def concentration_section(section, decisions=None, as_of_date=None):
         if text == 'нерозглянуто':
             return ' · нерозглянуто'
         verb = text.split(';')[0].replace('рішення: ', '')
-        return ' · ' + verb + ((' до ' + text.split('розгляд ')[-1]) if 'розгляд ' in text else '')
+        return ' · ✓ ' + verb + ((' до ' + text.split('розгляд ')[-1]) if 'розгляд ' in text else '')
     # The counter needs its evidence in place: compact breach explanations ride
     # in the sheet summary, largest impact first (owner 2026-10-29: sorted by
     # the primary denominator's value, alphabetical label breaking ties).
+    # A blank row and the band header come from view data, so the writer (and
+    # every render) sees the same layout - no hand-placed separator rows.)
+    summary.extend([('', ''),
+                    ('Порушення: за впливом, найбільші зверху', '#')])
     summary += [(row[0], row[1] + _decision_suffix(row[3])) for row in sorted(
         breach_summary_items, key=lambda row: (-(row[2] if _num(row[2]) else 0.), row[0]))]
     return dict(unavailable=None, rows=rows, summary=summary, breach_facts=breach_facts)

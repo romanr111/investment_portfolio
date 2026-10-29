@@ -37,6 +37,12 @@ _COLORS = {
         "subtotal": "F7F6F2",
         "border": "DEDED8",
         "white": "FFFFFF",
+        "accept": "137333",
+        "score_zone": "E8F0FE",
+        "conc_zone": "FEF3D0",
+        "band_zone": "FDE8E8",
+        "breach_zone": "FCE8E6",
+        "resolved_zone": "E6F4EA",
     }.items()
 }
 
@@ -181,6 +187,158 @@ def _compact_format(cell: CellValue) -> dict[str, str] | None:
         "pattern": f"{positive}{prefix}{number}{suffix};-{prefix}{number}{suffix};"
         + ("0.0%" if percent else '"$"0'),
     }
+
+
+_SAFEGUARD_CONC_LABELS = frozenset({'Концентрація', 'Емітент', 'Топ-4 / Core', 'Китай'})
+_SAFEGUARD_BAND_LABEL = 'Порушення: за впливом, найбільші зверху'
+_SAFEGUARD_MARGIN = 20
+
+
+def _cell_text(value: Any) -> str:
+    """Rendered text of a row value; CellValue renders its own value."""
+    if isinstance(value, CellValue):
+        value = value.value
+    return '' if value is None else str(value)
+
+
+def _breach_value_runs(text: str) -> list[dict[str, Any]]:
+    """Rich-text runs of a compact breach value (dark value, gray limit,
+    green accepted status, dark unresolved status) - owner-approved hierarchy,
+    so the eye lands on the number and the limit stays secondary.
+    """
+    limit_start = text.find(' (ліміт')
+    status_start = text.find(' · ', max(limit_start, 0))
+    runs: list[dict[str, Any]] = [{'format': {
+        'bold': True, 'foregroundColor': _COLORS['text']}}]
+    if limit_start >= 0:
+        runs.append({'startIndex': limit_start, 'format': {
+            'bold': False, 'foregroundColor': _COLORS['muted']}})
+    if status_start >= 0:
+        tail = text[status_start:]
+        accepted = '✓' in tail or 'прийнято' in tail
+        runs.append({'startIndex': status_start, 'format': {
+            'bold': False,
+            'foregroundColor': _COLORS['accept'] if accepted else _COLORS['text']}})
+    return runs
+
+
+def _safeguard_zone_requests(
+    sheet_id: int,
+    rows: tuple,
+    start_row: int,
+    first_column: int,
+    grid_rows: int,
+) -> list[dict[str, Any]]:
+    """Owner-approved zone design of the compact safeguard block (PR #24).
+
+    Zone fills ride below the block (score blue / concentration amber /
+    band red / breaches pink, accepted rows green), labels bold, value runs
+    colored; explicit heights keep wrapped values readable while the tab's
+    column widths - shared with the Performance block - stay untouched.
+    Idempotent: every request overwrites the same userEnteredFormat fields,
+    and the margin under the block is cleared so a shorter next render
+    cannot keep the previous layout's colored ghosts.
+    """
+    requests: list[dict[str, Any]] = []
+    for offset, row in enumerate(rows):
+        label = _cell_text(row[0]) if row else ''
+        value = _cell_text(row[1]) if len(row) > 1 else ''
+        row_index = start_row + offset
+        if not label and not value:
+            requests.append(
+                {
+                    'updateDimensionProperties': {
+                        'range': {'sheetId': sheet_id, 'dimension': 'ROWS',
+                                  'startIndex': row_index, 'endIndex': row_index + 1},
+                        'properties': {'pixelSize': 14},
+                        'fields': 'pixelSize',
+                    }
+                }
+            )
+            continue
+        if label.startswith('Порушення: '):
+            if label == _SAFEGUARD_BAND_LABEL:
+                fill, height, resolved = 'band_zone', 30, False
+            else:
+                resolved = '✓' in value or 'прийнято' in value
+                fill, height = 'resolved_zone' if resolved else 'breach_zone', 32
+            value_runs = _breach_value_runs(value) if label != _SAFEGUARD_BAND_LABEL else None
+        elif label in _SAFEGUARD_CONC_LABELS:
+            fill, height, resolved = 'conc_zone', 26, False
+            value_runs = None  # plain values, styled with the label below
+        else:
+            fill, height, resolved = 'score_zone', 27, False
+            value_runs = None
+        _append_format_request(
+            requests, sheet_id, row_index, row_index + 1,
+            first_column, first_column + 2,
+            {
+                'backgroundColor': _COLORS[fill],
+                'textFormat': {'bold': True, 'foregroundColor': _COLORS['text'],
+                               'fontSize': 10},
+            },
+            'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat(bold,foregroundColor,fontSize)',
+        )
+        if value_runs is None:
+            # plain value: bold dark, same cell font size
+            _append_format_request(
+                requests, sheet_id, row_index, row_index + 1,
+                first_column + 1, first_column + 2,
+                {'textFormat': {'bold': True, 'foregroundColor': _COLORS['text'],
+                                'fontSize': 10},
+                 'wrapStrategy': 'WRAP',
+                 'verticalAlignment': 'MIDDLE'},
+                'userEnteredFormat.textFormat(bold,foregroundColor,fontSize),userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment',
+            )
+        else:
+            requests.append(
+                {
+                    'updateCells': {
+                        'start': {'sheetId': sheet_id, 'rowIndex': row_index,
+                                  'columnIndex': first_column + 1},
+                        'rows': [{'values': [{
+                            'userEnteredFormat': {
+                                'backgroundColor': _COLORS[fill],
+                                'wrapStrategy': 'WRAP',
+                                'verticalAlignment': 'MIDDLE',
+                            },
+                            'textFormatRun': value_runs,
+                        }]}],
+                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRun',
+                    }
+                }
+            )
+        requests.append(
+            {
+                'updateDimensionProperties': {
+                    'range': {'sheetId': sheet_id, 'dimension': 'ROWS',
+                              'startIndex': row_index, 'endIndex': row_index + 1},
+                    'properties': {'pixelSize': height},
+                    'fields': 'pixelSize',
+                }
+            }
+        )
+    block_end = start_row + len(rows)
+    margin_end = min(block_end + _SAFEGUARD_MARGIN, grid_rows)
+    # Ghost margin: clear values and formats below the block (inside the grid)
+    # so a shorter next render cannot keep the previous layout's colored rows.
+    if margin_end > block_end:
+        _append_format_request(
+            requests, sheet_id, block_end, margin_end,
+            first_column, first_column + 2, {},
+            'userEnteredFormat',
+        )
+        requests.append(
+            {
+                'updateCells': {
+                    'start': {'sheetId': sheet_id, 'rowIndex': block_end,
+                              'columnIndex': first_column},
+                    'rows': [{'values': [{}]} for _ in range(margin_end - block_end)],
+                    'fields': 'userEnteredValue',
+                }
+            }
+        )
+    return requests
 
 
 def _append_format_request(
@@ -646,6 +804,13 @@ def _tab_requests(
                     {"numberFormat": number_format},
                     "userEnteredFormat.numberFormat",
                 )
+
+    if "diversification_summary" in block_ranges:
+        start, _, first_column, _ = block_ranges["diversification_summary"]
+        block = next((b for b in tab.blocks if b.name == "diversification_summary"), None)
+        if block is not None and block.rows:
+            requests.extend(_safeguard_zone_requests(
+                sheet_id, block.rows, start, first_column, row_count))
 
     _append_format_request(
         requests,
