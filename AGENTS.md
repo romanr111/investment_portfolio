@@ -18,6 +18,7 @@ Personal portfolio automation: IB Gateway live data, dividend income estimates, 
 
 ## Python project notes
 
+- Do not create or expand unit tests unless the user explicitly requests them. Run existing tests and other appropriate checks, and adapt existing fixtures when authorized.
 - Keep `data/` local-only. Only `data/README.md` is tracked. Do not commit credentials, snapshots, or private sheets config.
 - Use Headroom as the primary context-optimization layer for bulky/noisy outputs. Do not default to RTK when Headroom is available.
 - Prefer `just` for project commands when a recipe exists (see `justfile` or `.agents/references/commands.md`).

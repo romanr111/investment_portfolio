@@ -21,8 +21,8 @@ from src.portfolio_ledger.storage import PortfolioLedger
 
 
 def _extract_allocation_rows(tab):
-    block = next(block for block in tab.blocks if block.name == "allocation")
-    return {row[0]: row[1].value for row in block.rows[2:]}
+    block = next(block for block in tab.blocks if block.name == "compact_allocation")
+    return {row[0]: row[1].value for row in block.rows[2:] if len(row) >= 3}
 
 
 def _sum_allocation_row_values(rows):
@@ -70,7 +70,8 @@ class TestPortfolioTotals(unittest.TestCase):
                 "net_worth": 150,
                 "allocations": {},
             }
-            data_source._save_combined_data_to_json = lambda data: None
+            persisted = []
+            data_source._save_combined_data_to_json = lambda data: persisted.append(dict(data))
             data_source.portfolio_contract = build_portfolio_contract(
                 ledger=PortfolioLedger(Path(temp_dir)),
                 live_crypto_quantities={"BTC": 0.001},
@@ -85,6 +86,7 @@ class TestPortfolioTotals(unittest.TestCase):
             combined = data_source.get_combined_data()
 
             self.assertEqual(combined["DATA_CONTRACT_VERSION"], 2)
+            self.assertEqual(persisted[0], combined)
             self.assertIn("POSITION_DATA", combined)
             self.assertIn("ACTIVITY_DATA", combined)
             self.assertIn("PERFORMANCE_DATA", combined)

@@ -1,0 +1,601 @@
+{
+  "plain": {
+    "IB_DATA": {
+      "Stocks": {
+        "asset_0": 100,
+        "asset_1": 100,
+        "asset_2": 100,
+        "asset_3": 100,
+        "asset_4": 100,
+        "asset_5": 100,
+        "asset_6": 100,
+        "asset_7": 100,
+        "asset_8": 100,
+        "asset_9": 100,
+        "asset_10": 100,
+        "asset_11": 100,
+        "asset_12": 100,
+        "asset_13": 100,
+        "asset_14": 100
+      }
+    },
+    "TOTAL_ASSETS": 1500,
+    "CASH_DATA": {
+      "Total": 0
+    },
+    "DATA_METADATA": {
+      "last_updated": "2026-09-30T20:00:00"
+    },
+    "POSITION_DATA": {
+      "as_of_date": "2026-09-30"
+    },
+    "IB_PERFORMANCE": {
+      "rate_of_return_pct": -6.8
+    },
+    "HOLY_GRAIL_DATA": {
+      "method_version": "holy_grail_progress_v1",
+      "as_of_date": "2026-09-30",
+      "calculated_at": "2026-10-28T15:13:45.312679+00:00",
+      "return_window_start": "2021-10-31",
+      "return_window_end": "2026-09-30",
+      "observation_count": 60,
+      "effective_streams": 15.000000000000004,
+      "estimated_progress_pct": 100.0,
+      "target_streams": 15,
+      "target_range": [15,20],
+      "target_achieved": false,
+      "qualification_status": "pending",
+      "status": "provisional",
+      "scope": "whole_portfolio",
+      "modeled": false,
+      "coverage": {
+        "direct_pct": 100.0,
+        "proxy_pct": 0.0,
+        "uncovered_pct": 0.0,
+        "cash_pct": 0.0
+      },
+      "concentration": {
+        "effective_streams": 15.000000000000004,
+        "max_cluster_risk_share_pct": 6.66666666666667,
+        "cluster_count": 15,
+        "risk_shares": {"yf:asset_0": 6.666666666666668,"yf:asset_1": 6.666666666666665,"yf:asset_2": 6.666666666666665,"yf:asset_3": 6.666666666666665,"yf:asset_4": 6.66666666666667,"yf:asset_5": 6.666666666666665,"yf:asset_6": 6.666666666666667,"yf:asset_7": 6.666666666666667,"yf:asset_8": 6.666666666666663,"yf:asset_9": 6.666666666666668,"yf:asset_10": 6.666666666666668,"yf:asset_11": 6.666666666666661,"yf:asset_12": 6.666666666666667,"yf:asset_13": 6.666666666666665,"yf:asset_14": 6.666666666666668},
+        "diversification_ratio": 3.872983346207416
+      },
+      "stability": {
+        "recent_36m_effective_streams": 15.000000000000004,
+        "ratio": 1.0
+      },
+      "constraints": ["qualification_pending"],
+      "input_fingerprint": "31a61890012abe6fa4e314567aef97157f1fd51a7e7c13950491df9849dd0256",
+      "configuration_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "retrospective": true,
+      "source_provenance": {},
+      "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+      "holdings_fingerprint": "0fea51631c6bb9007d0d2531ef50bcad8145b1a6776c93e2e82b81b1d5beb88e"
+    },
+    "DIVERSIFICATION_DATA": {
+      "count_version": "risk_equivalent_streams_v1",
+      "policy_version": "diversification_policy_v1",
+      "as_of_date": "2026-09-30",
+      "calculated_at": "2026-10-28T15:13:45.328814+00:00",
+      "status": "provisional",
+      "effective_streams": 15.0,
+      "modeled_exposure_count": 15,
+      "target_range": [15,20],
+      "volatility_reduction_pct": 74.18011102528388,
+      "return_window_start": "2021-10-31",
+      "return_window_end": "2026-09-30",
+      "observation_count": 60,
+      "scope": "whole_portfolio",
+      "reserve_share_pct": 0.0,
+      "coverage": {
+        "direct_pct": 100.00000000000001,
+        "proxy_pct": 0.0,
+        "uncovered_pct": 0.0,
+        "reserve_pct": 0.0
+      },
+      "checks": [{"id": "family_concentration","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 40.0,"reasons": []},{"id": "issuer_concentration","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "breadth","state": "pass","value": 15.0,"upper_bound": 15.0,"threshold": 15.0,"reasons": []},{"id": "stability","state": "pass","value": 1.0,"upper_bound": 1.0,"threshold": 0.75,"reasons": []},{"id": "recession","state": "unknown","value": 0.0,"upper_bound": 100.00000000000001,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "inflation","state": "unknown","value": 0.0,"upper_bound": 100.00000000000001,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "liquidity_crypto","state": "unknown","value": 0.0,"upper_bound": 100.00000000000001,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "counterparty","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 5.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "local_fx","state": "unknown","value": 0.0,"upper_bound": 100.00000000000001,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "illiquidity","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]}],
+      "scenarios": {
+        "recession": {"loss_min_pct": 0.0,"loss_max_pct": 100.00000000000001,"unknown_pct": 100.00000000000001},
+        "inflation": {"loss_min_pct": 0.0,"loss_max_pct": 100.00000000000001,"unknown_pct": 100.00000000000001},
+        "market_liquidity": {"loss_min_pct": 0.0,"loss_max_pct": 100.00000000000001,"unknown_pct": 100.00000000000001},
+        "crypto_crash": {"loss_min_pct": 0.0,"loss_max_pct": 100.00000000000001,"unknown_pct": 100.00000000000001},
+        "local_fx": {"loss_min_pct": 0.0,"loss_max_pct": 100.00000000000001,"unknown_pct": 100.00000000000001}
+      },
+      "stability": {
+        "recent_effective_streams": 15.0,
+        "ratio": 1.0
+      },
+      "concentration": {
+        "family_risk_shares_pct": {},
+        "max_family_risk_pct": 0.0,
+        "unmapped_risk_pct": 100.0
+      },
+      "confidence": "low",
+      "constraints": [],
+      "policy_fingerprint": "1effaf4d65255704dd1f3371555dad202a76f020f8dac3010978cdab54473715",
+      "score_min": 20,
+      "score_max": 100,
+      "score": null,
+      "check_counts": {
+        "pass": 2,
+        "fail": 0,
+        "unknown": 8
+      },
+      "critical_failures": [],
+      "holdings_fingerprint": "adb2733cdb9654d56e1bf85864a54f84912b5686cb5144c411b262d29582d9e6",
+      "configuration_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+      "retrospective": true,
+      "source_provenance": {},
+      "cash_share_pct": 0.0,
+      "qualification_status": "pending",
+      "indicator": {
+        "version": "holy_grail_indicator_v1",
+        "count_version": "risk_equivalent_streams_v1",
+        "as_of_date": "2026-09-30",
+        "status": "modeled",
+        "effective_streams": 15.0,
+        "direct_only_effective_streams": 15.0,
+        "recent_effective_streams": 15.0,
+        "direct_only_recent_effective_streams": 15.0,
+        "target_range": [15,20],
+        "observation_count": 60,
+        "modeled_exposure_count": 15,
+        "return_window_start": "2021-10-31",
+        "return_window_end": "2026-09-30",
+        "coverage": {"direct": 100.00000000000001,"model": 0.0,"reserve": 0.0,"cash": 0.0,"uncovered": 0.0},
+        "models": [],
+        "top_correlations": [{"left": "asset_3","right": "asset_4","correlation": 1.121588454295349e-16},{"left": "asset_6","right": "asset_9","correlation": 1.0047563236395838e-16},{"left": "asset_4","right": "asset_13","correlation": 1.0047563236395833e-16}],
+        "uncovered": [],
+        "warnings": [],
+        "holdings_fingerprint": "adb2733cdb9654d56e1bf85864a54f84912b5686cb5144c411b262d29582d9e6",
+        "configuration": {"mappings": {}},
+        "configuration_fingerprint": "3f787605b453c343de682ab875572403eb845a9cbe9c83d68366f4540f81f3bf",
+        "source_provenance": {},
+        "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+        "reconciliation_delta_usd": 0.0,
+        "result_fingerprint": "5c95e40185e6b87eb2c3c9df81ecde722d18cfd68bed126d4dedf440d97b9904"
+      }
+    }
+  },
+  "qualified": {
+    "method_version": "holy_grail_progress_v1",
+    "as_of_date": "2026-09-30",
+    "calculated_at": "2026-10-28T15:13:45.342823+00:00",
+    "return_window_start": "2021-10-31",
+    "return_window_end": "2026-09-30",
+    "observation_count": 60,
+    "effective_streams": 15.000000000000004,
+    "estimated_progress_pct": 100.0,
+    "target_streams": 15,
+    "target_range": [15,20],
+    "target_achieved": true,
+    "qualification_status": "reviewed",
+    "status": "available",
+    "scope": "whole_portfolio",
+    "modeled": false,
+    "coverage": {
+      "direct_pct": 100.0,
+      "proxy_pct": 0.0,
+      "uncovered_pct": 0.0,
+      "cash_pct": 0.0
+    },
+    "concentration": {
+      "effective_streams": 15.000000000000004,
+      "max_cluster_risk_share_pct": 6.66666666666667,
+      "cluster_count": 15,
+      "risk_shares": {
+        "yf:asset_0": 6.666666666666668,
+        "yf:asset_1": 6.666666666666665,
+        "yf:asset_2": 6.666666666666665,
+        "yf:asset_3": 6.666666666666665,
+        "yf:asset_4": 6.66666666666667,
+        "yf:asset_5": 6.666666666666665,
+        "yf:asset_6": 6.666666666666667,
+        "yf:asset_7": 6.666666666666667,
+        "yf:asset_8": 6.666666666666663,
+        "yf:asset_9": 6.666666666666668,
+        "yf:asset_10": 6.666666666666668,
+        "yf:asset_11": 6.666666666666661,
+        "yf:asset_12": 6.666666666666667,
+        "yf:asset_13": 6.666666666666665,
+        "yf:asset_14": 6.666666666666668
+      },
+      "diversification_ratio": 3.872983346207416
+    },
+    "stability": {
+      "recent_36m_effective_streams": 15.000000000000004,
+      "ratio": 1.0
+    },
+    "constraints": [],
+    "input_fingerprint": "d1e25b6d8ea8292dc5428665521f69b7b77d4345b5cfb0698b8413500b045f09",
+    "configuration_fingerprint": "17fbd39df3f4b43e8f1d89c2ee7b6f1be4f53cc77b3675d7a8a2286899f80d88",
+    "retrospective": true,
+    "source_provenance": {},
+    "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+    "holdings_fingerprint": "0fea51631c6bb9007d0d2531ef50bcad8145b1a6776c93e2e82b81b1d5beb88e"
+  },
+  "empty": {
+    "version": "holy_grail_indicator_v1",
+    "count_version": "risk_equivalent_streams_v1",
+    "as_of_date": "2026-09-30",
+    "status": "unavailable",
+    "effective_streams": null,
+    "direct_only_effective_streams": null,
+    "recent_effective_streams": null,
+    "direct_only_recent_effective_streams": null,
+    "target_range": [15,20],
+    "observation_count": 0,
+    "modeled_exposure_count": 0,
+    "return_window_start": null,
+    "return_window_end": null,
+    "coverage": {
+      "direct": 0.0,
+      "model": 0.0,
+      "reserve": 0.0,
+      "cash": 0.0,
+      "uncovered": 100.00000000000001
+    },
+    "models": [],
+    "top_correlations": [],
+    "uncovered": [{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"},{"category": "Stocks","share_pct": 6.666666666666667,"reason": "missing_or_short_history"}],
+    "warnings": ["insufficient_common_history"],
+    "holdings_fingerprint": "adb2733cdb9654d56e1bf85864a54f84912b5686cb5144c411b262d29582d9e6",
+    "configuration": {
+      "mappings": {}
+    },
+    "configuration_fingerprint": "3f787605b453c343de682ab875572403eb845a9cbe9c83d68366f4540f81f3bf",
+    "source_provenance": {},
+    "history_fingerprint": "c89a148be40e6752261e3038609a4b68de22fa3bfdaf32f884edffb8480b9bbe",
+    "reconciliation_delta_usd": 0.0,
+    "result_fingerprint": "20ff9f7f346082683832a86ba8f7d7e06302b48963207863aeb119fb1d660a97"
+  },
+  "allocation": {
+    "IB_DATA": {
+      "Stocks": {
+        "SPY": 90
+      },
+      "Bonds": {
+        "SHV": 10
+      }
+    },
+    "TOTAL_ASSETS": 110,
+    "CASH_DATA": {
+      "Total": 10
+    },
+    "POSITION_DATA": {
+      "as_of_date": "2026-09-30"
+    },
+    "DATA_METADATA": {
+      "last_updated": "2026-09-30"
+    },
+    "HOLY_GRAIL_DATA": {
+      "method_version": "holy_grail_progress_v1",
+      "as_of_date": "2026-09-30",
+      "calculated_at": "2026-10-28T15:13:45.374903+00:00",
+      "return_window_start": "2021-10-31",
+      "return_window_end": "2026-09-30",
+      "observation_count": 60,
+      "effective_streams": 1.024687595245352,
+      "estimated_progress_pct": 6.831250634969013,
+      "target_streams": 15,
+      "target_range": [15,20],
+      "target_achieved": false,
+      "qualification_status": "pending",
+      "status": "provisional",
+      "scope": "whole_portfolio",
+      "modeled": false,
+      "coverage": {
+        "direct_pct": 90.9090909091,
+        "proxy_pct": 0.0,
+        "uncovered_pct": 0.0,
+        "cash_pct": 9.0909090909
+      },
+      "concentration": {
+        "effective_streams": 1.024687595245352,
+        "max_cluster_risk_share_pct": 98.78048780487805,
+        "cluster_count": 2,
+        "risk_shares": {"yf:SPY": 98.78048780487805,"yf:SHV": 1.2195121951219512},
+        "diversification_ratio": 1.1043152607484654
+      },
+      "stability": {
+        "recent_36m_effective_streams": 1.0204842496814197,
+        "ratio": 0.995897924808072
+      },
+      "constraints": ["qualification_pending","risk_concentration"],
+      "input_fingerprint": "dfdd71b231e5122fc35e02daee167037cd2c141c55ab58060a54da3fba8c3670",
+      "configuration_fingerprint": "a9d141282ab9e686d2adec6b144c07df57b6b9efbf42dae424834dd39d9a024d",
+      "retrospective": true,
+      "source_provenance": {},
+      "history_fingerprint": "a7e91ce47dbef037ef816ea83ab7faf0fde69016380eda51ce63ed7938803cbd",
+      "holdings_fingerprint": "f24cabd64b37fa69af327811e14032446faf32d0be77ead345fd09e944764f7f"
+    },
+    "DIVERSIFICATION_DATA": {
+      "allocation_score": {
+        "version": "capital_diversification_v1",
+        "scope": "invested_assets",
+        "as_of_date": "2026-09-30",
+        "status": "modeled",
+        "score": 38.330357142857146,
+        "raw_score": 38.330357142857146,
+        "display_score": 38,
+        "sensitivity_score": null,
+        "sensitivity_display_score": null,
+        "warnings": [],
+        "groups": [{"id": "equity_us","weight": 0.9},{"id": "treasury_short","weight": 0.1}],
+        "pairs": [{"left": "equity_us","right": "treasury_short","correlation": 0.0,"observations": 60,"last_month": "2026-09-30","months": ["2021-10-31","2021-11-30","2021-12-31","2022-01-31","2022-02-28","2022-03-31","2022-04-30","2022-05-31","2022-06-30","2022-07-31","2022-08-31","2022-09-30","2022-10-31","2022-11-30","2022-12-31","2023-01-31","2023-02-28","2023-03-31","2023-04-30","2023-05-31","2023-06-30","2023-07-31","2023-08-31","2023-09-30","2023-10-31","2023-11-30","2023-12-31","2024-01-31","2024-02-29","2024-03-31","2024-04-30","2024-05-31","2024-06-30","2024-07-31","2024-08-31","2024-09-30","2024-10-31","2024-11-30","2024-12-31","2025-01-31","2025-02-28","2025-03-31","2025-04-30","2025-05-31","2025-06-30","2025-07-31","2025-08-31","2025-09-30","2025-10-31","2025-11-30","2025-12-31","2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31","2026-06-30","2026-07-31","2026-08-31","2026-09-30"],"kind": "measured"}],
+        "sectors": {"equity_us": {"Information Technology": 0.5,"Financials": 0.5}},
+        "profiles": [{"position_id": "ib:SPY","definition": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "equity_us","share": 1,"sectors": {"Information Technology": 0.5,"Financials": 0.5}}]}},{"position_id": "ib:SHV","definition": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "treasury_short","share": 1}]}}],
+        "coverage": {"cash_pct_nav": 9.090909090909092,"invested_pct_nav": 90.9090909090909,"unknown_pct_invested": 0.0,"missing_pair_max_points": 0.0,"modeled_pct_invested": 0.0},
+        "holdings_fingerprint": "4346624a43476740c334b0c78e43458543e192574b2f644dc981035e1f0e51eb",
+        "configuration": {"calibration": {"version": "capital_diversification_v1","as_of_date": "2026-09-30","coefficient": 151.07142857142858,"reference": {"equity_us": 0.25,"treasury_short": 0.25,"gold": 0.25,"car_business": 0.25},"sectors": {"equity_us": {"Information Technology": 0.5,"Financials": 0.5}},"profiles": {},"histories": {"equity_us": {"2021-10-31T00:00:00.000": -0.311289193130199,"2021-11-30T00:00:00.000": -0.098887009093896,"2021-12-31T00:00:00.000": -0.115721263292144,"2022-01-31T00:00:00.000": -0.160759328260529,"2022-02-28T00:00:00.000": -0.012998276775598,"2022-03-31T00:00:00.000": 0.00377181271829,"2022-04-30T00:00:00.000": 0.10259136762679,"2022-05-31T00:00:00.000": -0.147519187543376,"2022-06-30T00:00:00.000": 0.063694127343527,"2022-07-31T00:00:00.000": -0.178772041175955,"2022-08-31T00:00:00.000": -0.104333279166525,"2022-09-30T00:00:00.000": 0.130223275733872,"2022-10-31T00:00:00.000": -0.171488418739228,"2022-11-30T00:00:00.000": 0.203393818140856,"2022-12-31T00:00:00.000": -0.014564965884057,"2023-01-31T00:00:00.000": 0.189435550003438,"2023-02-28T00:00:00.000": -0.141992612321831,"2023-03-31T00:00:00.000": -0.02077929563829,"2023-04-30T00:00:00.000": -0.045932098004378,"2023-05-31T00:00:00.000": -0.100398078553275,"2023-06-30T00:00:00.000": 0.025666562014891,"2023-07-31T00:00:00.000": 0.088897140796697,"2023-08-31T00:00:00.000": -0.036700506219709,"2023-09-30T00:00:00.000": -0.000116351468328,"2023-10-31T00:00:00.000": 0.023197588881115,"2023-11-30T00:00:00.000": 0.058260426863849,"2023-12-31T00:00:00.000": 0.142621526022592,"2024-01-31T00:00:00.000": -0.113316428800661,"2024-02-29T00:00:00.000": -0.020510194477796,"2024-03-31T00:00:00.000": -0.015548074340564,"2024-04-30T00:00:00.000": 0.085277072618376,"2024-05-31T00:00:00.000": 0.026253479673192,"2024-06-30T00:00:00.000": -0.138129334391283,"2024-07-31T00:00:00.000": 0.18361892677377,"2024-08-31T00:00:00.000": -0.069963657418954,"2024-09-30T00:00:00.000": -0.059042824194988,"2024-10-31T00:00:00.000": -0.040385646279787,"2024-11-30T00:00:00.000": -0.006074292268569,"2024-12-31T00:00:00.000": -0.086459024774585,"2025-01-31T00:00:00.000": -0.208925889953546,"2025-02-28T00:00:00.000": 0.125956928303002,"2025-03-31T00:00:00.000": 0.241666358992309,"2025-04-30T00:00:00.000": -0.058611794190888,"2025-05-31T00:00:00.000": 0.007211650578713,"2025-06-30T00:00:00.000": 0.022909612808712,"2025-07-31T00:00:00.000": -0.02136008956794,"2025-08-31T00:00:00.000": 0.417228650264155,"2025-09-30T00:00:00.000": 0.148790921989186,"2025-10-31T00:00:00.000": 0.152695247446666,"2025-11-30T00:00:00.000": -0.003355407481542,"2025-12-31T00:00:00.000": 0.041747256671857,"2026-01-31T00:00:00.000": -0.154705532140085,"2026-02-28T00:00:00.000": 0.012104778643126,"2026-03-31T00:00:00.000": 0.123763888959724,"2026-04-30T00:00:00.000": 0.056027607694268,"2026-05-31T00:00:00.000": 0.080620963573984,"2026-06-30T00:00:00.000": -0.021514837696207,"2026-07-31T00:00:00.000": -0.034505527694551,"2026-08-31T00:00:00.000": -0.241532133318137,"2026-09-30T00:00:00.000": 0.198566053120448},"gold": {"2021-10-31T00:00:00.000": -0.016284661439236,"2021-11-30T00:00:00.000": -0.055064946779677,"2021-12-31T00:00:00.000": -0.255561132939307,"2022-01-31T00:00:00.000": -0.028037862725855,"2022-02-28T00:00:00.000": 0.056118659454069,"2022-03-31T00:00:00.000": -0.045244616022672,"2022-04-30T00:00:00.000": 0.071199193951527,"2022-05-31T00:00:00.000": -0.010651054235182,"2022-06-30T00:00:00.000": -0.021033596141488,"2022-07-31T00:00:00.000": 0.126919654069702,"2022-08-31T00:00:00.000": -0.219720123206182,"2022-09-30T00:00:00.000": 0.087218165993301,"2022-10-31T00:00:00.000": -0.016168430471645,"2022-11-30T00:00:00.000": 0.088124636902773,"2022-12-31T00:00:00.000": 0.021638561515462,"2023-01-31T00:00:00.000": -0.292879159255242,"2023-02-28T00:00:00.000": -0.229604382833132,"2023-03-31T00:00:00.000": -0.027744580149881,"2023-04-30T00:00:00.000": 0.044236786175609,"2023-05-31T00:00:00.000": 0.322332746160735,"2023-06-30T00:00:00.000": -0.02298986672748,"2023-07-31T00:00:00.000": -0.047574196254043,"2023-08-31T00:00:00.000": -0.075541409432286,"2023-09-30T00:00:00.000": -0.047734237409604,"2023-10-31T00:00:00.000": 0.2589287226609,"2023-11-30T00:00:00.000": 0.019340560224719,"2023-12-31T00:00:00.000": -0.120191315918818,"2024-01-31T00:00:00.000": 0.071507829282179,"2024-02-29T00:00:00.000": 0.051720275361658,"2024-03-31T00:00:00.000": 0.024813925856243,"2024-04-30T00:00:00.000": -0.103941958758731,"2024-05-31T00:00:00.000": 0.10814871576526,"2024-06-30T00:00:00.000": 0.077506199187924,"2024-07-31T00:00:00.000": -0.081735105334323,"2024-08-31T00:00:00.000": 0.12408285718952,"2024-09-30T00:00:00.000": -0.02012982881166,"2024-10-31T00:00:00.000": -0.171121281051935,"2024-11-30T00:00:00.000": 0.193214566226368,"2024-12-31T00:00:00.000": 0.006808699859869,"2025-01-31T00:00:00.000": 0.058529548949177,"2025-02-28T00:00:00.000": 0.15357739656941,"2025-03-31T00:00:00.000": 0.14334307426294,"2025-04-30T00:00:00.000": -0.011821971269521,"2025-05-31T00:00:00.000": -0.041755323557087,"2025-06-30T00:00:00.000": 0.293072096521219,"2025-07-31T00:00:00.000": -0.008557107866535,"2025-08-31T00:00:00.000": -0.063732559285918,"2025-09-30T00:00:00.000": 0.142813608362485,"2025-10-31T00:00:00.000": -0.062908489307004,"2025-11-30T00:00:00.000": 0.170625835541417,"2025-12-31T00:00:00.000": 0.119840784898255,"2026-01-31T00:00:00.000": -0.199038306572526,"2026-02-28T00:00:00.000": -0.16611288446907,"2026-03-31T00:00:00.000": -0.030177858013819,"2026-04-30T00:00:00.000": -0.014479490974511,"2026-05-31T00:00:00.000": -0.199230539434608,"2026-06-30T00:00:00.000": -0.037905851041222,"2026-07-31T00:00:00.000": 0.156789737630529,"2026-08-31T00:00:00.000": -0.082405765299053,"2026-09-30T00:00:00.000": -0.165372945583997},"treasury_short": {"2021-10-31T00:00:00.000": -0.29872494696898,"2021-11-30T00:00:00.000": -0.06221848966245,"2021-12-31T00:00:00.000": -0.126094142169024,"2022-01-31T00:00:00.000": 0.064814047046198,"2022-02-28T00:00:00.000": -0.002991609726796,"2022-03-31T00:00:00.000": 0.173571744221772,"2022-04-30T00:00:00.000": -0.093605163925994,"2022-05-31T00:00:00.000": 0.132205428569794,"2022-06-30T00:00:00.000": -0.034551616726399,"2022-07-31T00:00:00.000": 0.043112234016253,"2022-08-31T00:00:00.000": 0.100647205771938,"2022-09-30T00:00:00.000": 0.032126427252961,"2022-10-31T00:00:00.000": 0.228157275727954,"2022-11-30T00:00:00.000": 0.120054974116618,"2022-12-31T00:00:00.000": 0.099554713921336,"2023-01-31T00:00:00.000": -0.081190231365216,"2023-02-28T00:00:00.000": 0.05942560316822,"2023-03-31T00:00:00.000": -0.103029824113976,"2023-04-30T00:00:00.000": 0.16072131666817,"2023-05-31T00:00:00.000": -0.008290547920913,"2023-06-30T00:00:00.000": 0.258952930423569,"2023-07-31T00:00:00.000": 0.019436897901396,"2023-08-31T00:00:00.000": -0.028267783523352,"2023-09-30T00:00:00.000": -0.155400359639779,"2023-10-31T00:00:00.000": -0.060968179235219,"2023-11-30T00:00:00.000": -0.014382881835566,"2023-12-31T00:00:00.000": -0.04191792104661,"2024-01-31T00:00:00.000": -0.067959793561133,"2024-02-29T00:00:00.000": 0.102388237327376,"2024-03-31T00:00:00.000": -0.061958238320658,"2024-04-30T00:00:00.000": -0.257770495548664,"2024-05-31T00:00:00.000": -0.037806698529664,"2024-06-30T00:00:00.000": -0.071700777896556,"2024-07-31T00:00:00.000": -0.243055431825166,"2024-08-31T00:00:00.000": 0.333070506842548,"2024-09-30T00:00:00.000": 0.23313041346687,"2024-10-31T00:00:00.000": 0.001381682500175,"2024-11-30T00:00:00.000": -0.113181879379626,"2024-12-31T00:00:00.000": 0.00625204868239,"2025-01-31T00:00:00.000": -0.100609436854225,"2025-02-28T00:00:00.000": 0.120842867755143,"2025-03-31T00:00:00.000": -0.128684613262492,"2025-04-30T00:00:00.000": 0.035609606228746,"2025-05-31T00:00:00.000": 0.029951779411583,"2025-06-30T00:00:00.000": 0.030456030342269,"2025-07-31T00:00:00.000": -0.113571711903571,"2025-08-31T00:00:00.000": 0.092250171525032,"2025-09-30T00:00:00.000": -0.157581267809393,"2025-10-31T00:00:00.000": 0.063563828206641,"2025-11-30T00:00:00.000": -0.121394446722815,"2025-12-31T00:00:00.000": -0.178909661825536,"2026-01-31T00:00:00.000": 0.093368414790347,"2026-02-28T00:00:00.000": 0.05558757623557,"2026-03-31T00:00:00.000": 0.095429436841112,"2026-04-30T00:00:00.000": 0.027861656400816,"2026-05-31T00:00:00.000": -0.136841112727142,"2026-06-30T00:00:00.000": 0.192815180286329,"2026-07-31T00:00:00.000": 0.01403496228101,"2026-08-31T00:00:00.000": -0.200087449434584,"2026-09-30T00:00:00.000": 0.081971515531364}},"history_provenance": {},"business": ["car_business"],"business_correlation": 0.25,"sensitivity_correlation": 0.75,"reference_score": 99.99999999999999,"reference_components": {"diversity": 0.6562499999999999,"breadth": 0.034375,"raw_score": 1.515625,"score": 1.515625,"display_score": 1},"fingerprint": "b4f19c5e79644330b4b7651d27b5e1c27d2d9806484704655e8e6b956093f24e"},"profiles": {"ib:SPY": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "equity_us","share": 1,"sectors": {"Information Technology": 0.5,"Financials": 0.5}}]},"ib:EFA": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/efa-ishares-msci-eafe-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_developed","share": 1,"sectors": {"Financials": 0.2619,"Industrials": 0.1875,"Information Technology": 0.111,"Health Care": 0.0998,"Consumer Discretionary": 0.0801,"Consumer Staples": 0.0642,"Materials": 0.059800000000000006,"Energy": 0.0391,"Communication Services": 0.038900000000000004,"Utilities": 0.0366}}],"source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043"},"ib:MCHI": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/mchi-ishares-msci-china-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 0.22440000000000002,"Financials": 0.20879999999999999,"Communication Services": 0.1784,"Information Technology": 0.11449999999999999,"Health Care": 0.0636,"Materials": 0.054400000000000004,"Industrials": 0.053399999999999996,"Energy": 0.035699999999999996,"Consumer Staples": 0.0279,"Utilities": 0.018799999999999997}}],"source_sha256": "03fc414552a98e67e0dcbf7909dc6bf0d01631fb8c3d505a0a7b765e95e59e61"},"ib:EWY": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/ewy-ishares-msci-south-korea-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_emerging","share": 1,"sectors": {"Information Technology": 0.5156000000000001,"Industrials": 0.1844,"Financials": 0.10550000000000001,"Consumer Discretionary": 0.053099999999999994,"Communication Services": 0.0285,"Health Care": 0.028300000000000002,"Consumer Staples": 0.0216,"Energy": 0.0141,"Materials": 0.0137,"Utilities": 0.0031}}],"source_sha256": "f3746083568b2ba9e6a0139c4fc8d4658d0595dad52e5ac5e673d2b09141a57a"},"ib:EMXC": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf","components": [{"group": "equity_emerging","share": 1,"sectors": {}}]},"ib:KWEB": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://kraneshares.com/etf/kweb/","components": [{"group": "equity_china","share": 1,"sectors": {}}],"themes": ["ai"],"theme_source": "https://kraneshares.com/etf/kweb/"},"ib:SHV": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "treasury_short","share": 1}]},"ib:IEF": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "treasury_medium","share": 1}]},"ib:TLT": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "treasury_long","share": 1}]},"ib:LQD": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_ig_usd","share": 1}]},"ib:HYG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_usd","share": 1}]},"ib:IHYG.L": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_eur","share": 1}]},"ib:IAU": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "gold","share": 1}]},"ib:SLV": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "silver","share": 1}]},"ib:DBC": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "commodities","share": 1}]},"ib:BTC-USD": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "crypto","share": 1}]},"ib:SPHY": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_usd","share": 1}]},"ib:IHYG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_eur","share": 1}]},"ib:COMB": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "commodities","share": 1}]},"ib:BRK B": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:GOOG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Communication Services": 1}}]},"ib:AMZN": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:META": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Communication Services": 1}}]},"ib:NKE": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:SPGI": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:COF": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:WHR": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:MCO": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:CPRT": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Industrials": 1}}]},"ib:IBKR": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:UBER": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Industrials": 1}}]},"ib:BN": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_developed","share": 1,"sectors": {"Financials": 1}}]},"ib:9988": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:BABA": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:BRK-B": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]}},"unsupported_ids": [],"group_definitions": {"equity_us": {"label": "Акції США","representative": "SPY"},"equity_developed": {"label": "Акції розвинених ринків поза США","representative": "EFA"},"equity_china": {"label": "Акції Китаю","representative": "MCHI"},"equity_emerging": {"label": "Акції інших emerging markets","representative": "EMXC"},"treasury_short": {"label": "US Treasury 0-1 рік","representative": "SHV"},"treasury_medium": {"label": "US Treasury понад 1-10 років","representative": "IEF"},"treasury_long": {"label": "US Treasury понад 10 років","representative": "TLT"},"credit_ig_usd": {"label": "Investment grade кредит USD","representative": "LQD"},"credit_hy_usd": {"label": "High yield кредит USD / lending","representative": "HYG"},"credit_hy_eur": {"label": "High yield кредит EUR","representative": "IHYG.L"},"gold": {"label": "Золото","representative": "IAU"},"silver": {"label": "Срібло","representative": "SLV"},"commodities": {"label": "Товарні активи","representative": "DBC"},"crypto": {"label": "Крипторинок","representative": "BTC-USD"},"car_business": {"label": "Car Resale: український бізнес","representative": null}}},
+        "configuration_fingerprint": "951e4ec78854a9eee131b4672f973354ab93defe906d98da698267745cc070af",
+        "calibration_fingerprint": "b4f19c5e79644330b4b7651d27b5e1c27d2d9806484704655e8e6b956093f24e",
+        "source_provenance": {},
+        "histories": {"equity_us": {"2021-10-31T00:00:00.000": -0.311289193130199,"2021-11-30T00:00:00.000": -0.098887009093896,"2021-12-31T00:00:00.000": -0.115721263292144,"2022-01-31T00:00:00.000": -0.160759328260529,"2022-02-28T00:00:00.000": -0.012998276775598,"2022-03-31T00:00:00.000": 0.00377181271829,"2022-04-30T00:00:00.000": 0.10259136762679,"2022-05-31T00:00:00.000": -0.147519187543376,"2022-06-30T00:00:00.000": 0.063694127343527,"2022-07-31T00:00:00.000": -0.178772041175955,"2022-08-31T00:00:00.000": -0.104333279166525,"2022-09-30T00:00:00.000": 0.130223275733872,"2022-10-31T00:00:00.000": -0.171488418739228,"2022-11-30T00:00:00.000": 0.203393818140856,"2022-12-31T00:00:00.000": -0.014564965884057,"2023-01-31T00:00:00.000": 0.189435550003438,"2023-02-28T00:00:00.000": -0.141992612321831,"2023-03-31T00:00:00.000": -0.02077929563829,"2023-04-30T00:00:00.000": -0.045932098004378,"2023-05-31T00:00:00.000": -0.100398078553275,"2023-06-30T00:00:00.000": 0.025666562014891,"2023-07-31T00:00:00.000": 0.088897140796697,"2023-08-31T00:00:00.000": -0.036700506219709,"2023-09-30T00:00:00.000": -0.000116351468328,"2023-10-31T00:00:00.000": 0.023197588881115,"2023-11-30T00:00:00.000": 0.058260426863849,"2023-12-31T00:00:00.000": 0.142621526022592,"2024-01-31T00:00:00.000": -0.113316428800661,"2024-02-29T00:00:00.000": -0.020510194477796,"2024-03-31T00:00:00.000": -0.015548074340564,"2024-04-30T00:00:00.000": 0.085277072618376,"2024-05-31T00:00:00.000": 0.026253479673192,"2024-06-30T00:00:00.000": -0.138129334391283,"2024-07-31T00:00:00.000": 0.18361892677377,"2024-08-31T00:00:00.000": -0.069963657418954,"2024-09-30T00:00:00.000": -0.059042824194988,"2024-10-31T00:00:00.000": -0.040385646279787,"2024-11-30T00:00:00.000": -0.006074292268569,"2024-12-31T00:00:00.000": -0.086459024774585,"2025-01-31T00:00:00.000": -0.208925889953546,"2025-02-28T00:00:00.000": 0.125956928303002,"2025-03-31T00:00:00.000": 0.241666358992309,"2025-04-30T00:00:00.000": -0.058611794190888,"2025-05-31T00:00:00.000": 0.007211650578713,"2025-06-30T00:00:00.000": 0.022909612808712,"2025-07-31T00:00:00.000": -0.02136008956794,"2025-08-31T00:00:00.000": 0.417228650264155,"2025-09-30T00:00:00.000": 0.148790921989186,"2025-10-31T00:00:00.000": 0.152695247446666,"2025-11-30T00:00:00.000": -0.003355407481542,"2025-12-31T00:00:00.000": 0.041747256671857,"2026-01-31T00:00:00.000": -0.154705532140085,"2026-02-28T00:00:00.000": 0.012104778643126,"2026-03-31T00:00:00.000": 0.123763888959724,"2026-04-30T00:00:00.000": 0.056027607694268,"2026-05-31T00:00:00.000": 0.080620963573984,"2026-06-30T00:00:00.000": -0.021514837696207,"2026-07-31T00:00:00.000": -0.034505527694551,"2026-08-31T00:00:00.000": -0.241532133318137,"2026-09-30T00:00:00.000": 0.198566053120448},"treasury_short": {"2021-10-31T00:00:00.000": -0.29872494696898,"2021-11-30T00:00:00.000": -0.06221848966245,"2021-12-31T00:00:00.000": -0.126094142169024,"2022-01-31T00:00:00.000": 0.064814047046198,"2022-02-28T00:00:00.000": -0.002991609726796,"2022-03-31T00:00:00.000": 0.173571744221772,"2022-04-30T00:00:00.000": -0.093605163925994,"2022-05-31T00:00:00.000": 0.132205428569794,"2022-06-30T00:00:00.000": -0.034551616726399,"2022-07-31T00:00:00.000": 0.043112234016253,"2022-08-31T00:00:00.000": 0.100647205771938,"2022-09-30T00:00:00.000": 0.032126427252961,"2022-10-31T00:00:00.000": 0.228157275727954,"2022-11-30T00:00:00.000": 0.120054974116618,"2022-12-31T00:00:00.000": 0.099554713921336,"2023-01-31T00:00:00.000": -0.081190231365216,"2023-02-28T00:00:00.000": 0.05942560316822,"2023-03-31T00:00:00.000": -0.103029824113976,"2023-04-30T00:00:00.000": 0.16072131666817,"2023-05-31T00:00:00.000": -0.008290547920913,"2023-06-30T00:00:00.000": 0.258952930423569,"2023-07-31T00:00:00.000": 0.019436897901396,"2023-08-31T00:00:00.000": -0.028267783523352,"2023-09-30T00:00:00.000": -0.155400359639779,"2023-10-31T00:00:00.000": -0.060968179235219,"2023-11-30T00:00:00.000": -0.014382881835566,"2023-12-31T00:00:00.000": -0.04191792104661,"2024-01-31T00:00:00.000": -0.067959793561133,"2024-02-29T00:00:00.000": 0.102388237327376,"2024-03-31T00:00:00.000": -0.061958238320658,"2024-04-30T00:00:00.000": -0.257770495548664,"2024-05-31T00:00:00.000": -0.037806698529664,"2024-06-30T00:00:00.000": -0.071700777896556,"2024-07-31T00:00:00.000": -0.243055431825166,"2024-08-31T00:00:00.000": 0.333070506842548,"2024-09-30T00:00:00.000": 0.23313041346687,"2024-10-31T00:00:00.000": 0.001381682500175,"2024-11-30T00:00:00.000": -0.113181879379626,"2024-12-31T00:00:00.000": 0.00625204868239,"2025-01-31T00:00:00.000": -0.100609436854225,"2025-02-28T00:00:00.000": 0.120842867755143,"2025-03-31T00:00:00.000": -0.128684613262492,"2025-04-30T00:00:00.000": 0.035609606228746,"2025-05-31T00:00:00.000": 0.029951779411583,"2025-06-30T00:00:00.000": 0.030456030342269,"2025-07-31T00:00:00.000": -0.113571711903571,"2025-08-31T00:00:00.000": 0.092250171525032,"2025-09-30T00:00:00.000": -0.157581267809393,"2025-10-31T00:00:00.000": 0.063563828206641,"2025-11-30T00:00:00.000": -0.121394446722815,"2025-12-31T00:00:00.000": -0.178909661825536,"2026-01-31T00:00:00.000": 0.093368414790347,"2026-02-28T00:00:00.000": 0.05558757623557,"2026-03-31T00:00:00.000": 0.095429436841112,"2026-04-30T00:00:00.000": 0.027861656400816,"2026-05-31T00:00:00.000": -0.136841112727142,"2026-06-30T00:00:00.000": 0.192815180286329,"2026-07-31T00:00:00.000": 0.01403496228101,"2026-08-31T00:00:00.000": -0.200087449434584,"2026-09-30T00:00:00.000": 0.081971515531364}},
+        "history_fingerprint": "81acf5e987ddd768873942d6e28f9c3d4c9a641bef2d14bf66825369777fcba0",
+        "positions": [{"id": "ib:SPY","category": "Stocks","value_usd": 90.0,"series": "yf:SPY","symbol": "SPY","provider": "yfinance","currency": null,"kind": "direct","weak_proxy": false,"risk_flags": [],"qualification": {"status": "draft"},"source_identity": null},{"id": "ib:SHV","category": "Bonds","value_usd": 10.0,"series": "yf:SHV","symbol": "SHV","provider": "yfinance","currency": null,"kind": "direct","weak_proxy": false,"risk_flags": [],"qualification": {"status": "draft"},"source_identity": null}],
+        "cash_value": 10.0,
+        "input_flags": [],
+        "window_start": "2021-10-31",
+        "window_end": "2026-09-30",
+        "diversity": 0.18000000000000002,
+        "breadth": 0.44550000000000006,
+        "result_fingerprint": "085e46563e5004a3bacc580bad789dc06506824854ffc0dfa76289e0c19c9582"
+      }
+    }
+  },
+  "business": {
+    "IB_DATA": {
+      "Stocks": {
+        "SPY": 90
+      },
+      "Bonds": {
+        "SHV": 10
+      }
+    },
+    "TOTAL_ASSETS": 140,
+    "CASH_DATA": {
+      "Total": 10
+    },
+    "POSITION_DATA": {
+      "as_of_date": "2026-09-30",
+      "other_assets": [{"asset_id": "car-one","carrying_value_usd": 30}]
+    },
+    "DATA_METADATA": {
+      "last_updated": "2026-09-30"
+    },
+    "HOLY_GRAIL_DATA": {
+      "method_version": "holy_grail_progress_v1",
+      "as_of_date": "2026-09-30",
+      "calculated_at": "2026-10-28T15:13:45.399029+00:00",
+      "return_window_start": "2021-10-31",
+      "return_window_end": "2026-09-30",
+      "observation_count": 60,
+      "effective_streams": 1.024687595245352,
+      "estimated_progress_pct": 6.831250634969013,
+      "target_streams": 15,
+      "target_range": [15,20],
+      "target_achieved": false,
+      "qualification_status": "pending",
+      "status": "provisional",
+      "scope": "covered_subset",
+      "modeled": true,
+      "coverage": {
+        "direct_pct": 71.4285714286,
+        "proxy_pct": 0.0,
+        "uncovered_pct": 21.4285714286,
+        "cash_pct": 7.1428571429
+      },
+      "concentration": {
+        "effective_streams": 1.024687595245352,
+        "max_cluster_risk_share_pct": 98.78048780487805,
+        "cluster_count": 2,
+        "risk_shares": {"yf:SPY": 98.78048780487805,"yf:SHV": 1.2195121951219512},
+        "diversification_ratio": 1.1043152607484654
+      },
+      "stability": {
+        "recent_36m_effective_streams": 1.0204842496814197,
+        "ratio": 0.995897924808072
+      },
+      "constraints": ["local_market_risk_unmodeled","qualification_pending","resale_execution_risk_unmodeled","risk_concentration","uncovered_exposures","weak_proxy"],
+      "input_fingerprint": "2e902005de99ef05c075248fef34524c6492721e5e7f26a9286d0af2204c100a",
+      "configuration_fingerprint": "c5bcad0535d6389a1bb4c376edae67f5564d74e71596192caf93613033e4255e",
+      "retrospective": true,
+      "source_provenance": {},
+      "history_fingerprint": "a7e91ce47dbef037ef816ea83ab7faf0fde69016380eda51ce63ed7938803cbd",
+      "holdings_fingerprint": "63379bb71df50e1d977932a3c6ead285649e38fb7e2149d7df0a7363f4a9f601"
+    },
+    "DIVERSIFICATION_DATA": {
+      "allocation_score": {
+        "version": "capital_diversification_v1",
+        "scope": "invested_assets",
+        "as_of_date": "2026-09-30",
+        "status": "modeled",
+        "score": 62.90680473372782,
+        "raw_score": 62.90680473372782,
+        "display_score": 62,
+        "sensitivity_score": 36.08939137785292,
+        "sensitivity_display_score": 36,
+        "warnings": [],
+        "groups": [{"id": "car_business","weight": 0.23076923076923078},{"id": "equity_us","weight": 0.6923076923076923},{"id": "treasury_short","weight": 0.07692307692307693}],
+        "pairs": [{"left": "car_business","right": "equity_us","correlation": 0.25,"observations": null,"last_month": null,"months": [],"kind": "modeled"},{"left": "car_business","right": "treasury_short","correlation": 0.25,"observations": null,"last_month": null,"months": [],"kind": "modeled"},{"left": "equity_us","right": "treasury_short","correlation": 0.0,"observations": 60,"last_month": "2026-09-30","months": ["2021-10-31","2021-11-30","2021-12-31","2022-01-31","2022-02-28","2022-03-31","2022-04-30","2022-05-31","2022-06-30","2022-07-31","2022-08-31","2022-09-30","2022-10-31","2022-11-30","2022-12-31","2023-01-31","2023-02-28","2023-03-31","2023-04-30","2023-05-31","2023-06-30","2023-07-31","2023-08-31","2023-09-30","2023-10-31","2023-11-30","2023-12-31","2024-01-31","2024-02-29","2024-03-31","2024-04-30","2024-05-31","2024-06-30","2024-07-31","2024-08-31","2024-09-30","2024-10-31","2024-11-30","2024-12-31","2025-01-31","2025-02-28","2025-03-31","2025-04-30","2025-05-31","2025-06-30","2025-07-31","2025-08-31","2025-09-30","2025-10-31","2025-11-30","2025-12-31","2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31","2026-06-30","2026-07-31","2026-08-31","2026-09-30"],"kind": "measured"}],
+        "sectors": {"equity_us": {"Information Technology": 0.5,"Financials": 0.5}},
+        "profiles": [{"position_id": "ib:SPY","definition": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "equity_us","share": 1,"sectors": {"Information Technology": 0.5,"Financials": 0.5}}]}},{"position_id": "ib:SHV","definition": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "treasury_short","share": 1}]}},{"position_id": "other_assets:0","definition": {"as_of_date": "2026-09-30","source": "confirmed business model","source_identity": {"asset_id": "car-one"},"components": [{"group": "car_business","share": 1}]}}],
+        "coverage": {"cash_pct_nav": 7.142857142857142,"invested_pct_nav": 92.85714285714286,"unknown_pct_invested": 0.0,"missing_pair_max_points": 0.0,"modeled_pct_invested": 23.076923076923077},
+        "holdings_fingerprint": "52081f7d6a27b836d36c3660e4725c3d16796d5e1d9dd5d48807394cd3174bd0",
+        "configuration": {"calibration": {"version": "capital_diversification_v1","as_of_date": "2026-09-30","coefficient": 151.07142857142858,"reference": {"equity_us": 0.25,"treasury_short": 0.25,"gold": 0.25,"car_business": 0.25},"sectors": {"equity_us": {"Information Technology": 0.5,"Financials": 0.5}},"profiles": {},"histories": {"equity_us": {"2021-10-31T00:00:00.000": -0.311289193130199,"2021-11-30T00:00:00.000": -0.098887009093896,"2021-12-31T00:00:00.000": -0.115721263292144,"2022-01-31T00:00:00.000": -0.160759328260529,"2022-02-28T00:00:00.000": -0.012998276775598,"2022-03-31T00:00:00.000": 0.00377181271829,"2022-04-30T00:00:00.000": 0.10259136762679,"2022-05-31T00:00:00.000": -0.147519187543376,"2022-06-30T00:00:00.000": 0.063694127343527,"2022-07-31T00:00:00.000": -0.178772041175955,"2022-08-31T00:00:00.000": -0.104333279166525,"2022-09-30T00:00:00.000": 0.130223275733872,"2022-10-31T00:00:00.000": -0.171488418739228,"2022-11-30T00:00:00.000": 0.203393818140856,"2022-12-31T00:00:00.000": -0.014564965884057,"2023-01-31T00:00:00.000": 0.189435550003438,"2023-02-28T00:00:00.000": -0.141992612321831,"2023-03-31T00:00:00.000": -0.02077929563829,"2023-04-30T00:00:00.000": -0.045932098004378,"2023-05-31T00:00:00.000": -0.100398078553275,"2023-06-30T00:00:00.000": 0.025666562014891,"2023-07-31T00:00:00.000": 0.088897140796697,"2023-08-31T00:00:00.000": -0.036700506219709,"2023-09-30T00:00:00.000": -0.000116351468328,"2023-10-31T00:00:00.000": 0.023197588881115,"2023-11-30T00:00:00.000": 0.058260426863849,"2023-12-31T00:00:00.000": 0.142621526022592,"2024-01-31T00:00:00.000": -0.113316428800661,"2024-02-29T00:00:00.000": -0.020510194477796,"2024-03-31T00:00:00.000": -0.015548074340564,"2024-04-30T00:00:00.000": 0.085277072618376,"2024-05-31T00:00:00.000": 0.026253479673192,"2024-06-30T00:00:00.000": -0.138129334391283,"2024-07-31T00:00:00.000": 0.18361892677377,"2024-08-31T00:00:00.000": -0.069963657418954,"2024-09-30T00:00:00.000": -0.059042824194988,"2024-10-31T00:00:00.000": -0.040385646279787,"2024-11-30T00:00:00.000": -0.006074292268569,"2024-12-31T00:00:00.000": -0.086459024774585,"2025-01-31T00:00:00.000": -0.208925889953546,"2025-02-28T00:00:00.000": 0.125956928303002,"2025-03-31T00:00:00.000": 0.241666358992309,"2025-04-30T00:00:00.000": -0.058611794190888,"2025-05-31T00:00:00.000": 0.007211650578713,"2025-06-30T00:00:00.000": 0.022909612808712,"2025-07-31T00:00:00.000": -0.02136008956794,"2025-08-31T00:00:00.000": 0.417228650264155,"2025-09-30T00:00:00.000": 0.148790921989186,"2025-10-31T00:00:00.000": 0.152695247446666,"2025-11-30T00:00:00.000": -0.003355407481542,"2025-12-31T00:00:00.000": 0.041747256671857,"2026-01-31T00:00:00.000": -0.154705532140085,"2026-02-28T00:00:00.000": 0.012104778643126,"2026-03-31T00:00:00.000": 0.123763888959724,"2026-04-30T00:00:00.000": 0.056027607694268,"2026-05-31T00:00:00.000": 0.080620963573984,"2026-06-30T00:00:00.000": -0.021514837696207,"2026-07-31T00:00:00.000": -0.034505527694551,"2026-08-31T00:00:00.000": -0.241532133318137,"2026-09-30T00:00:00.000": 0.198566053120448},"gold": {"2021-10-31T00:00:00.000": -0.016284661439236,"2021-11-30T00:00:00.000": -0.055064946779677,"2021-12-31T00:00:00.000": -0.255561132939307,"2022-01-31T00:00:00.000": -0.028037862725855,"2022-02-28T00:00:00.000": 0.056118659454069,"2022-03-31T00:00:00.000": -0.045244616022672,"2022-04-30T00:00:00.000": 0.071199193951527,"2022-05-31T00:00:00.000": -0.010651054235182,"2022-06-30T00:00:00.000": -0.021033596141488,"2022-07-31T00:00:00.000": 0.126919654069702,"2022-08-31T00:00:00.000": -0.219720123206182,"2022-09-30T00:00:00.000": 0.087218165993301,"2022-10-31T00:00:00.000": -0.016168430471645,"2022-11-30T00:00:00.000": 0.088124636902773,"2022-12-31T00:00:00.000": 0.021638561515462,"2023-01-31T00:00:00.000": -0.292879159255242,"2023-02-28T00:00:00.000": -0.229604382833132,"2023-03-31T00:00:00.000": -0.027744580149881,"2023-04-30T00:00:00.000": 0.044236786175609,"2023-05-31T00:00:00.000": 0.322332746160735,"2023-06-30T00:00:00.000": -0.02298986672748,"2023-07-31T00:00:00.000": -0.047574196254043,"2023-08-31T00:00:00.000": -0.075541409432286,"2023-09-30T00:00:00.000": -0.047734237409604,"2023-10-31T00:00:00.000": 0.2589287226609,"2023-11-30T00:00:00.000": 0.019340560224719,"2023-12-31T00:00:00.000": -0.120191315918818,"2024-01-31T00:00:00.000": 0.071507829282179,"2024-02-29T00:00:00.000": 0.051720275361658,"2024-03-31T00:00:00.000": 0.024813925856243,"2024-04-30T00:00:00.000": -0.103941958758731,"2024-05-31T00:00:00.000": 0.10814871576526,"2024-06-30T00:00:00.000": 0.077506199187924,"2024-07-31T00:00:00.000": -0.081735105334323,"2024-08-31T00:00:00.000": 0.12408285718952,"2024-09-30T00:00:00.000": -0.02012982881166,"2024-10-31T00:00:00.000": -0.171121281051935,"2024-11-30T00:00:00.000": 0.193214566226368,"2024-12-31T00:00:00.000": 0.006808699859869,"2025-01-31T00:00:00.000": 0.058529548949177,"2025-02-28T00:00:00.000": 0.15357739656941,"2025-03-31T00:00:00.000": 0.14334307426294,"2025-04-30T00:00:00.000": -0.011821971269521,"2025-05-31T00:00:00.000": -0.041755323557087,"2025-06-30T00:00:00.000": 0.293072096521219,"2025-07-31T00:00:00.000": -0.008557107866535,"2025-08-31T00:00:00.000": -0.063732559285918,"2025-09-30T00:00:00.000": 0.142813608362485,"2025-10-31T00:00:00.000": -0.062908489307004,"2025-11-30T00:00:00.000": 0.170625835541417,"2025-12-31T00:00:00.000": 0.119840784898255,"2026-01-31T00:00:00.000": -0.199038306572526,"2026-02-28T00:00:00.000": -0.16611288446907,"2026-03-31T00:00:00.000": -0.030177858013819,"2026-04-30T00:00:00.000": -0.014479490974511,"2026-05-31T00:00:00.000": -0.199230539434608,"2026-06-30T00:00:00.000": -0.037905851041222,"2026-07-31T00:00:00.000": 0.156789737630529,"2026-08-31T00:00:00.000": -0.082405765299053,"2026-09-30T00:00:00.000": -0.165372945583997},"treasury_short": {"2021-10-31T00:00:00.000": -0.29872494696898,"2021-11-30T00:00:00.000": -0.06221848966245,"2021-12-31T00:00:00.000": -0.126094142169024,"2022-01-31T00:00:00.000": 0.064814047046198,"2022-02-28T00:00:00.000": -0.002991609726796,"2022-03-31T00:00:00.000": 0.173571744221772,"2022-04-30T00:00:00.000": -0.093605163925994,"2022-05-31T00:00:00.000": 0.132205428569794,"2022-06-30T00:00:00.000": -0.034551616726399,"2022-07-31T00:00:00.000": 0.043112234016253,"2022-08-31T00:00:00.000": 0.100647205771938,"2022-09-30T00:00:00.000": 0.032126427252961,"2022-10-31T00:00:00.000": 0.228157275727954,"2022-11-30T00:00:00.000": 0.120054974116618,"2022-12-31T00:00:00.000": 0.099554713921336,"2023-01-31T00:00:00.000": -0.081190231365216,"2023-02-28T00:00:00.000": 0.05942560316822,"2023-03-31T00:00:00.000": -0.103029824113976,"2023-04-30T00:00:00.000": 0.16072131666817,"2023-05-31T00:00:00.000": -0.008290547920913,"2023-06-30T00:00:00.000": 0.258952930423569,"2023-07-31T00:00:00.000": 0.019436897901396,"2023-08-31T00:00:00.000": -0.028267783523352,"2023-09-30T00:00:00.000": -0.155400359639779,"2023-10-31T00:00:00.000": -0.060968179235219,"2023-11-30T00:00:00.000": -0.014382881835566,"2023-12-31T00:00:00.000": -0.04191792104661,"2024-01-31T00:00:00.000": -0.067959793561133,"2024-02-29T00:00:00.000": 0.102388237327376,"2024-03-31T00:00:00.000": -0.061958238320658,"2024-04-30T00:00:00.000": -0.257770495548664,"2024-05-31T00:00:00.000": -0.037806698529664,"2024-06-30T00:00:00.000": -0.071700777896556,"2024-07-31T00:00:00.000": -0.243055431825166,"2024-08-31T00:00:00.000": 0.333070506842548,"2024-09-30T00:00:00.000": 0.23313041346687,"2024-10-31T00:00:00.000": 0.001381682500175,"2024-11-30T00:00:00.000": -0.113181879379626,"2024-12-31T00:00:00.000": 0.00625204868239,"2025-01-31T00:00:00.000": -0.100609436854225,"2025-02-28T00:00:00.000": 0.120842867755143,"2025-03-31T00:00:00.000": -0.128684613262492,"2025-04-30T00:00:00.000": 0.035609606228746,"2025-05-31T00:00:00.000": 0.029951779411583,"2025-06-30T00:00:00.000": 0.030456030342269,"2025-07-31T00:00:00.000": -0.113571711903571,"2025-08-31T00:00:00.000": 0.092250171525032,"2025-09-30T00:00:00.000": -0.157581267809393,"2025-10-31T00:00:00.000": 0.063563828206641,"2025-11-30T00:00:00.000": -0.121394446722815,"2025-12-31T00:00:00.000": -0.178909661825536,"2026-01-31T00:00:00.000": 0.093368414790347,"2026-02-28T00:00:00.000": 0.05558757623557,"2026-03-31T00:00:00.000": 0.095429436841112,"2026-04-30T00:00:00.000": 0.027861656400816,"2026-05-31T00:00:00.000": -0.136841112727142,"2026-06-30T00:00:00.000": 0.192815180286329,"2026-07-31T00:00:00.000": 0.01403496228101,"2026-08-31T00:00:00.000": -0.200087449434584,"2026-09-30T00:00:00.000": 0.081971515531364}},"history_provenance": {},"business": ["car_business"],"business_correlation": 0.25,"sensitivity_correlation": 0.75,"reference_score": 99.99999999999999,"reference_components": {"diversity": 0.6562499999999999,"breadth": 0.034375,"raw_score": 1.515625,"score": 1.515625,"display_score": 1},"fingerprint": "b4f19c5e79644330b4b7651d27b5e1c27d2d9806484704655e8e6b956093f24e"},"profiles": {"ib:SPY": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "equity_us","share": 1,"sectors": {"Information Technology": 0.5,"Financials": 0.5}}]},"ib:EFA": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/efa-ishares-msci-eafe-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_developed","share": 1,"sectors": {"Financials": 0.2619,"Industrials": 0.1875,"Information Technology": 0.111,"Health Care": 0.0998,"Consumer Discretionary": 0.0801,"Consumer Staples": 0.0642,"Materials": 0.059800000000000006,"Energy": 0.0391,"Communication Services": 0.038900000000000004,"Utilities": 0.0366}}],"source_sha256": "5c19e797f109dfffb5044b13453e8fe918f26997f493db39ce4bff8865c76043"},"ib:MCHI": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/mchi-ishares-msci-china-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 0.22440000000000002,"Financials": 0.20879999999999999,"Communication Services": 0.1784,"Information Technology": 0.11449999999999999,"Health Care": 0.0636,"Materials": 0.054400000000000004,"Industrials": 0.053399999999999996,"Energy": 0.035699999999999996,"Consumer Staples": 0.0279,"Utilities": 0.018799999999999997}}],"source_sha256": "03fc414552a98e67e0dcbf7909dc6bf0d01631fb8c3d505a0a7b765e95e59e61"},"ib:EWY": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/literature/fact-sheet/ewy-ishares-msci-south-korea-etf-fund-fact-sheet-en-us.pdf","components": [{"group": "equity_emerging","share": 1,"sectors": {"Information Technology": 0.5156000000000001,"Industrials": 0.1844,"Financials": 0.10550000000000001,"Consumer Discretionary": 0.053099999999999994,"Communication Services": 0.0285,"Health Care": 0.028300000000000002,"Consumer Staples": 0.0216,"Energy": 0.0141,"Materials": 0.0137,"Utilities": 0.0031}}],"source_sha256": "f3746083568b2ba9e6a0139c4fc8d4658d0595dad52e5ac5e673d2b09141a57a"},"ib:EMXC": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://www.ishares.com/us/products/288504/ishares-msci-emerging-markets-ex-china-etf","components": [{"group": "equity_emerging","share": 1,"sectors": {}}]},"ib:KWEB": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "https://kraneshares.com/etf/kweb/","components": [{"group": "equity_china","share": 1,"sectors": {}}],"themes": ["ai"],"theme_source": "https://kraneshares.com/etf/kweb/"},"ib:SHV": {"as_of_date": "2026-09-30","source": "https://example.org/fund","components": [{"group": "treasury_short","share": 1}]},"ib:IEF": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "treasury_medium","share": 1}]},"ib:TLT": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "treasury_long","share": 1}]},"ib:LQD": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_ig_usd","share": 1}]},"ib:HYG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_usd","share": 1}]},"ib:IHYG.L": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_eur","share": 1}]},"ib:IAU": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "gold","share": 1}]},"ib:SLV": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "silver","share": 1}]},"ib:DBC": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "commodities","share": 1}]},"ib:BTC-USD": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "crypto","share": 1}]},"ib:SPHY": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_usd","share": 1}]},"ib:IHYG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "credit_hy_eur","share": 1}]},"ib:COMB": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "commodities","share": 1}]},"ib:BRK B": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:GOOG": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Communication Services": 1}}]},"ib:AMZN": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:META": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Communication Services": 1}}]},"ib:NKE": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:SPGI": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:COF": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:WHR": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:MCO": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:CPRT": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Industrials": 1}}]},"ib:IBKR": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"ib:UBER": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Industrials": 1}}]},"ib:BN": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_developed","share": 1,"sectors": {"Financials": 1}}]},"ib:9988": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:BABA": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_china","share": 1,"sectors": {"Consumer Discretionary": 1}}]},"ib:BRK-B": {"as_of_date": "2026-09-30","reviewed_at": "2026-10-26","source": "capital_diversification_v1: reviewed economic classification","components": [{"group": "equity_us","share": 1,"sectors": {"Financials": 1}}]},"other_assets:0": {"as_of_date": "2026-09-30","source": "confirmed business model","source_identity": {"asset_id": "car-one"},"components": [{"group": "car_business","share": 1}]}},"unsupported_ids": [],"group_definitions": {"equity_us": {"label": "Акції США","representative": "SPY"},"equity_developed": {"label": "Акції розвинених ринків поза США","representative": "EFA"},"equity_china": {"label": "Акції Китаю","representative": "MCHI"},"equity_emerging": {"label": "Акції інших emerging markets","representative": "EMXC"},"treasury_short": {"label": "US Treasury 0-1 рік","representative": "SHV"},"treasury_medium": {"label": "US Treasury понад 1-10 років","representative": "IEF"},"treasury_long": {"label": "US Treasury понад 10 років","representative": "TLT"},"credit_ig_usd": {"label": "Investment grade кредит USD","representative": "LQD"},"credit_hy_usd": {"label": "High yield кредит USD / lending","representative": "HYG"},"credit_hy_eur": {"label": "High yield кредит EUR","representative": "IHYG.L"},"gold": {"label": "Золото","representative": "IAU"},"silver": {"label": "Срібло","representative": "SLV"},"commodities": {"label": "Товарні активи","representative": "DBC"},"crypto": {"label": "Крипторинок","representative": "BTC-USD"},"car_business": {"label": "Car Resale: український бізнес","representative": null}}},
+        "configuration_fingerprint": "bc203a8245e24627e9630124907e5e182ba0abe4715076fc0e3be15d64b3c16d",
+        "calibration_fingerprint": "b4f19c5e79644330b4b7651d27b5e1c27d2d9806484704655e8e6b956093f24e",
+        "source_provenance": {},
+        "histories": {"equity_us": {"2021-10-31T00:00:00.000": -0.311289193130199,"2021-11-30T00:00:00.000": -0.098887009093896,"2021-12-31T00:00:00.000": -0.115721263292144,"2022-01-31T00:00:00.000": -0.160759328260529,"2022-02-28T00:00:00.000": -0.012998276775598,"2022-03-31T00:00:00.000": 0.00377181271829,"2022-04-30T00:00:00.000": 0.10259136762679,"2022-05-31T00:00:00.000": -0.147519187543376,"2022-06-30T00:00:00.000": 0.063694127343527,"2022-07-31T00:00:00.000": -0.178772041175955,"2022-08-31T00:00:00.000": -0.104333279166525,"2022-09-30T00:00:00.000": 0.130223275733872,"2022-10-31T00:00:00.000": -0.171488418739228,"2022-11-30T00:00:00.000": 0.203393818140856,"2022-12-31T00:00:00.000": -0.014564965884057,"2023-01-31T00:00:00.000": 0.189435550003438,"2023-02-28T00:00:00.000": -0.141992612321831,"2023-03-31T00:00:00.000": -0.02077929563829,"2023-04-30T00:00:00.000": -0.045932098004378,"2023-05-31T00:00:00.000": -0.100398078553275,"2023-06-30T00:00:00.000": 0.025666562014891,"2023-07-31T00:00:00.000": 0.088897140796697,"2023-08-31T00:00:00.000": -0.036700506219709,"2023-09-30T00:00:00.000": -0.000116351468328,"2023-10-31T00:00:00.000": 0.023197588881115,"2023-11-30T00:00:00.000": 0.058260426863849,"2023-12-31T00:00:00.000": 0.142621526022592,"2024-01-31T00:00:00.000": -0.113316428800661,"2024-02-29T00:00:00.000": -0.020510194477796,"2024-03-31T00:00:00.000": -0.015548074340564,"2024-04-30T00:00:00.000": 0.085277072618376,"2024-05-31T00:00:00.000": 0.026253479673192,"2024-06-30T00:00:00.000": -0.138129334391283,"2024-07-31T00:00:00.000": 0.18361892677377,"2024-08-31T00:00:00.000": -0.069963657418954,"2024-09-30T00:00:00.000": -0.059042824194988,"2024-10-31T00:00:00.000": -0.040385646279787,"2024-11-30T00:00:00.000": -0.006074292268569,"2024-12-31T00:00:00.000": -0.086459024774585,"2025-01-31T00:00:00.000": -0.208925889953546,"2025-02-28T00:00:00.000": 0.125956928303002,"2025-03-31T00:00:00.000": 0.241666358992309,"2025-04-30T00:00:00.000": -0.058611794190888,"2025-05-31T00:00:00.000": 0.007211650578713,"2025-06-30T00:00:00.000": 0.022909612808712,"2025-07-31T00:00:00.000": -0.02136008956794,"2025-08-31T00:00:00.000": 0.417228650264155,"2025-09-30T00:00:00.000": 0.148790921989186,"2025-10-31T00:00:00.000": 0.152695247446666,"2025-11-30T00:00:00.000": -0.003355407481542,"2025-12-31T00:00:00.000": 0.041747256671857,"2026-01-31T00:00:00.000": -0.154705532140085,"2026-02-28T00:00:00.000": 0.012104778643126,"2026-03-31T00:00:00.000": 0.123763888959724,"2026-04-30T00:00:00.000": 0.056027607694268,"2026-05-31T00:00:00.000": 0.080620963573984,"2026-06-30T00:00:00.000": -0.021514837696207,"2026-07-31T00:00:00.000": -0.034505527694551,"2026-08-31T00:00:00.000": -0.241532133318137,"2026-09-30T00:00:00.000": 0.198566053120448},"treasury_short": {"2021-10-31T00:00:00.000": -0.29872494696898,"2021-11-30T00:00:00.000": -0.06221848966245,"2021-12-31T00:00:00.000": -0.126094142169024,"2022-01-31T00:00:00.000": 0.064814047046198,"2022-02-28T00:00:00.000": -0.002991609726796,"2022-03-31T00:00:00.000": 0.173571744221772,"2022-04-30T00:00:00.000": -0.093605163925994,"2022-05-31T00:00:00.000": 0.132205428569794,"2022-06-30T00:00:00.000": -0.034551616726399,"2022-07-31T00:00:00.000": 0.043112234016253,"2022-08-31T00:00:00.000": 0.100647205771938,"2022-09-30T00:00:00.000": 0.032126427252961,"2022-10-31T00:00:00.000": 0.228157275727954,"2022-11-30T00:00:00.000": 0.120054974116618,"2022-12-31T00:00:00.000": 0.099554713921336,"2023-01-31T00:00:00.000": -0.081190231365216,"2023-02-28T00:00:00.000": 0.05942560316822,"2023-03-31T00:00:00.000": -0.103029824113976,"2023-04-30T00:00:00.000": 0.16072131666817,"2023-05-31T00:00:00.000": -0.008290547920913,"2023-06-30T00:00:00.000": 0.258952930423569,"2023-07-31T00:00:00.000": 0.019436897901396,"2023-08-31T00:00:00.000": -0.028267783523352,"2023-09-30T00:00:00.000": -0.155400359639779,"2023-10-31T00:00:00.000": -0.060968179235219,"2023-11-30T00:00:00.000": -0.014382881835566,"2023-12-31T00:00:00.000": -0.04191792104661,"2024-01-31T00:00:00.000": -0.067959793561133,"2024-02-29T00:00:00.000": 0.102388237327376,"2024-03-31T00:00:00.000": -0.061958238320658,"2024-04-30T00:00:00.000": -0.257770495548664,"2024-05-31T00:00:00.000": -0.037806698529664,"2024-06-30T00:00:00.000": -0.071700777896556,"2024-07-31T00:00:00.000": -0.243055431825166,"2024-08-31T00:00:00.000": 0.333070506842548,"2024-09-30T00:00:00.000": 0.23313041346687,"2024-10-31T00:00:00.000": 0.001381682500175,"2024-11-30T00:00:00.000": -0.113181879379626,"2024-12-31T00:00:00.000": 0.00625204868239,"2025-01-31T00:00:00.000": -0.100609436854225,"2025-02-28T00:00:00.000": 0.120842867755143,"2025-03-31T00:00:00.000": -0.128684613262492,"2025-04-30T00:00:00.000": 0.035609606228746,"2025-05-31T00:00:00.000": 0.029951779411583,"2025-06-30T00:00:00.000": 0.030456030342269,"2025-07-31T00:00:00.000": -0.113571711903571,"2025-08-31T00:00:00.000": 0.092250171525032,"2025-09-30T00:00:00.000": -0.157581267809393,"2025-10-31T00:00:00.000": 0.063563828206641,"2025-11-30T00:00:00.000": -0.121394446722815,"2025-12-31T00:00:00.000": -0.178909661825536,"2026-01-31T00:00:00.000": 0.093368414790347,"2026-02-28T00:00:00.000": 0.05558757623557,"2026-03-31T00:00:00.000": 0.095429436841112,"2026-04-30T00:00:00.000": 0.027861656400816,"2026-05-31T00:00:00.000": -0.136841112727142,"2026-06-30T00:00:00.000": 0.192815180286329,"2026-07-31T00:00:00.000": 0.01403496228101,"2026-08-31T00:00:00.000": -0.200087449434584,"2026-09-30T00:00:00.000": 0.081971515531364}},
+        "history_fingerprint": "81acf5e987ddd768873942d6e28f9c3d4c9a641bef2d14bf66825369777fcba0",
+        "positions": [{"id": "ib:SPY","category": "Stocks","value_usd": 90.0,"series": "yf:SPY","symbol": "SPY","provider": "yfinance","currency": null,"kind": "direct","weak_proxy": false,"risk_flags": [],"qualification": {"status": "draft"},"source_identity": null},{"id": "ib:SHV","category": "Bonds","value_usd": 10.0,"series": "yf:SHV","symbol": "SHV","provider": "yfinance","currency": null,"kind": "direct","weak_proxy": false,"risk_flags": [],"qualification": {"status": "draft"},"source_identity": null},{"id": "other_assets:0","category": "Other Bets","value_usd": 30.0,"series": "fred:CUSR0000SETA02","symbol": "CUSR0000SETA02","provider": "fred","currency": null,"kind": "proxy","weak_proxy": true,"risk_flags": ["local_market_risk_unmodeled","resale_execution_risk_unmodeled"],"qualification": {"status": "draft"},"source_identity": {"asset_id": "car-one"}}],
+        "cash_value": 10.0,
+        "input_flags": [],
+        "window_start": "2021-10-31",
+        "window_end": "2026-09-30",
+        "diversity": 0.3727810650887574,
+        "breadth": 0.2636094674556213,
+        "result_fingerprint": "009c1786523756c231421b467901c68406e4d6589ac742710cd4d4b195ee1109"
+      }
+    }
+  },
+  "quality_0.01": {
+    "count_version": "risk_equivalent_streams_v1",
+    "policy_version": "diversification_policy_v1",
+    "as_of_date": "2026-09-30",
+    "calculated_at": "2026-10-28T15:14:44.552496+00:00",
+    "status": "provisional",
+    "effective_streams": 14.999999990666792,
+    "modeled_exposure_count": 15,
+    "target_range": [15,20],
+    "volatility_reduction_pct": 74.18011101725114,
+    "return_window_start": "2021-10-31",
+    "return_window_end": "2026-09-30",
+    "observation_count": 60,
+    "scope": "whole_portfolio",
+    "reserve_share_pct": 0.0,
+    "coverage": {
+      "direct_pct": 99.99999999999996,
+      "proxy_pct": 0.0,
+      "uncovered_pct": 0.0,
+      "reserve_pct": 0.0
+    },
+    "checks": [{"id": "family_concentration","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 40.0,"reasons": []},{"id": "issuer_concentration","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "breadth","state": "fail","value": 14.999999990666792,"upper_bound": 14.999999990666792,"threshold": 15.0,"reasons": []},{"id": "stability","state": "pass","value": 1.0000000000000002,"upper_bound": 1.0000000000000002,"threshold": 0.75,"reasons": []},{"id": "recession","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "inflation","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "liquidity_crypto","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "counterparty","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 5.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "local_fx","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "illiquidity","state": "unknown","value": 0.0,"upper_bound": 99.99999999999999,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]}],
+    "scenarios": {
+      "recession": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999999,
+        "unknown_pct": 99.99999999999999
+      },
+      "inflation": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999999,
+        "unknown_pct": 99.99999999999999
+      },
+      "market_liquidity": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999999,
+        "unknown_pct": 99.99999999999999
+      },
+      "crypto_crash": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999999,
+        "unknown_pct": 99.99999999999999
+      },
+      "local_fx": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999999,
+        "unknown_pct": 99.99999999999999
+      }
+    },
+    "stability": {
+      "recent_effective_streams": 14.999999990666796,
+      "ratio": 1.0000000000000002
+    },
+    "concentration": {
+      "family_risk_shares_pct": {},
+      "max_family_risk_pct": 0.0,
+      "unmapped_risk_pct": 100.0
+    },
+    "confidence": "low",
+    "constraints": [],
+    "policy_fingerprint": "1effaf4d65255704dd1f3371555dad202a76f020f8dac3010978cdab54473715",
+    "score_min": 10,
+    "score_max": 90,
+    "score": null,
+    "check_counts": {
+      "pass": 1,
+      "fail": 1,
+      "unknown": 8
+    },
+    "critical_failures": ["breadth"],
+    "holdings_fingerprint": "cc82bb3f5e59c48a4d755573a508b0282c6a346ba3d7a191ffc00d377bc1f02d",
+    "configuration_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+    "retrospective": true,
+    "source_provenance": {},
+    "cash_share_pct": 0.0,
+    "qualification_status": "pending"
+  },
+  "quality_0.99": {
+    "count_version": "risk_equivalent_streams_v1",
+    "policy_version": "diversification_policy_v1",
+    "as_of_date": "2026-09-30",
+    "calculated_at": "2026-10-28T15:14:44.574378+00:00",
+    "status": "provisional",
+    "effective_streams": 14.999908645185263,
+    "modeled_exposure_count": 15,
+    "target_range": [15,20],
+    "volatility_reduction_pct": 74.18003239921896,
+    "return_window_start": "2021-10-31",
+    "return_window_end": "2026-09-30",
+    "observation_count": 60,
+    "scope": "whole_portfolio",
+    "reserve_share_pct": 0.0,
+    "coverage": {
+      "direct_pct": 99.99999999999997,
+      "proxy_pct": 0.0,
+      "uncovered_pct": 0.0,
+      "reserve_pct": 0.0
+    },
+    "checks": [{"id": "family_concentration","state": "unknown","value": 0.0,"upper_bound": 100.0,"threshold": 40.0,"reasons": []},{"id": "issuer_concentration","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "breadth","state": "fail","value": 14.999908645185263,"upper_bound": 14.999908645185263,"threshold": 15.0,"reasons": []},{"id": "stability","state": "pass","value": 1.0000000000000004,"upper_bound": 1.0000000000000004,"threshold": 0.75,"reasons": []},{"id": "recession","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "inflation","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "liquidity_crypto","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "counterparty","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 5.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "local_fx","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 10.0,"reasons": ["incomplete_exposure_evidence"]},{"id": "illiquidity","state": "unknown","value": 0.0,"upper_bound": 99.99999999999997,"threshold": 20.0,"reasons": ["incomplete_exposure_evidence"]}],
+    "scenarios": {
+      "recession": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999997,
+        "unknown_pct": 99.99999999999997
+      },
+      "inflation": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999997,
+        "unknown_pct": 99.99999999999997
+      },
+      "market_liquidity": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999997,
+        "unknown_pct": 99.99999999999997
+      },
+      "crypto_crash": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999997,
+        "unknown_pct": 99.99999999999997
+      },
+      "local_fx": {
+        "loss_min_pct": 0.0,
+        "loss_max_pct": 99.99999999999997,
+        "unknown_pct": 99.99999999999997
+      }
+    },
+    "stability": {
+      "recent_effective_streams": 14.99990864518527,
+      "ratio": 1.0000000000000004
+    },
+    "concentration": {
+      "family_risk_shares_pct": {},
+      "max_family_risk_pct": 0.0,
+      "unmapped_risk_pct": 100.0
+    },
+    "confidence": "low",
+    "constraints": [],
+    "policy_fingerprint": "1effaf4d65255704dd1f3371555dad202a76f020f8dac3010978cdab54473715",
+    "score_min": 10,
+    "score_max": 90,
+    "score": null,
+    "check_counts": {
+      "pass": 1,
+      "fail": 1,
+      "unknown": 8
+    },
+    "critical_failures": ["breadth"],
+    "holdings_fingerprint": "49ac90f0d240ba78a498a2efcdcae3dc6ee0fd09fc5ed6872cd0684c751fa6d0",
+    "configuration_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "history_fingerprint": "910851c9bc3c509eb4f76df46f9a0223498d9bbc5476a5d5217a93c988edfdfd",
+    "retrospective": true,
+    "source_provenance": {},
+    "cash_share_pct": 0.0,
+    "qualification_status": "pending"
+  }
+}

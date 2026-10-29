@@ -216,6 +216,73 @@ class SpreadsheetFormatter:
 class PortfolioFormatter(SpreadsheetFormatter):
     """Handles portfolio-specific formatting operations."""
 
+    def capture_holy_grail_groups(self) -> None:
+        """Capture section ownership before the caller clears or rewrites the sheet."""
+        metadata = self.worksheet.spreadsheet.fetch_sheet_metadata()
+        sheet = next((s for s in metadata.get("sheets", []) if s.get("properties", {}).get("sheetId") == self.worksheet.id), {})
+        groups = sheet.get("rowGroups", [])
+        starts = set()
+        if groups:
+            last = max(g.get("range", {}).get("startIndex", 0) for g in groups)
+            column = self.worksheet.get(f"A1:A{max(last, 1)}")
+            starts = {i + 1 for i, row in enumerate(column)
+                      if row and row[0] in {"Holy Grail - Details", "Диверсифікація - Details"}}
+        self._previous_details_groups = [g for g in groups if g.get("range", {}).get("startIndex") in starts]
+
+    def format_holy_grail(self, details_range, *, quality=False, indicator=False, allocation=False, number_kind=None) -> None:
+        if number_kind not in (None, 'allocation_points'):
+            raise ValueError('Unsupported Holy Grail number kind')
+        requests = [{"repeatCell": {
+            "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
+                      "endRowIndex": 10, "startColumnIndex": 1, "endColumnIndex": 2},
+            "cell": {"userEnteredFormat": {"numberFormat": ({"type": "NUMBER", "pattern": '0" зі 100"'} if number_kind == 'allocation_points' else {"type": "PERCENT", "pattern": "0%"} if allocation else {"type": "NUMBER", "pattern": "0.0"} if indicator else {"type": "NUMBER", "pattern": '0"/100"'} if quality else {"type": "PERCENT", "pattern": "0.0%"})}},
+            "fields": "userEnteredFormat.numberFormat",
+        }}, {"repeatCell": {
+            "range": {"sheetId": self.worksheet.id, "startRowIndex": 9,
+                      "endRowIndex": 14, "startColumnIndex": 0, "endColumnIndex": 2},
+            "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+            "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+        }}]
+        if quality and details_range:
+            if not hasattr(self, "_previous_details_groups"):
+                self.capture_holy_grail_groups()
+            owned = self._previous_details_groups
+            restored = set()
+            for group in sorted(owned, key=lambda g: g.get("depth", 1), reverse=True):
+                old = group["range"]
+                bounds_old = {"sheetId": self.worksheet.id, "dimension": "ROWS",
+                              "startIndex": old["startIndex"], "endIndex": old["endIndex"]}
+                requests.append({"deleteDimensionGroup": {"range": bounds_old}})
+                span = (old["startIndex"], old["endIndex"])
+                if span not in restored:
+                    requests.append({"updateDimensionProperties": {"range": bounds_old,
+                                     "properties": {"hiddenByUser": False}, "fields": "hiddenByUser"}})
+                    restored.add(span)
+            old_end = max((g["range"]["endIndex"] for g in owned), default=0)
+            if old_end > details_range[1]:
+                requests.append({"updateCells": {"range": {
+                    "sheetId": self.worksheet.id, "startRowIndex": details_range[1],
+                    "endRowIndex": old_end, "startColumnIndex": 0, "endColumnIndex": 2},
+                    "fields": "userEnteredValue"}})
+        if details_range and details_range[1] > details_range[0]:
+            bounds = {"sheetId": self.worksheet.id, "dimension": "ROWS",
+                      "startIndex": details_range[0], "endIndex": details_range[1]}
+            requests.extend([
+                {"repeatCell": {
+                    "range": {"sheetId": self.worksheet.id, "startRowIndex": details_range[0],
+                              "endRowIndex": details_range[1], "startColumnIndex": 0, "endColumnIndex": 2},
+                    "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+                    "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+                }},
+                {"addDimensionGroup": {"range": bounds}},
+                {"updateDimensionGroup": {"dimensionGroup": {"range": bounds, "depth": 1, "collapsed": True}, "fields": "collapsed"}},
+                {"updateDimensionProperties": {"range": bounds, "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
+            ])
+        self.worksheet.spreadsheet.batch_update({"requests": requests})
+        if quality:
+            self._previous_details_groups = ([{"range": bounds, "depth": 1}]
+                                             if details_range and details_range[1] > details_range[0] else [])
+
     def format_portfolio_table(
         self, table_data: List[List[Union[str, float]]], header_rows: List[int]
     ) -> None:

@@ -61,6 +61,61 @@ For missing positions, use the same collector with `IB_FLEX_QUERY_ID_PORTFOLIO_S
 
 ## Generate and verify
 
+### Holy Grail saved-data enrichment
+
+Prefer validated `DIVERSIFICATION_DATA.allocation_score_v2` for new snapshots.
+Show its 0-100 points, Cash separately, and the scenario range and constraints.
+The shared saved view reads historical v1 percentages, DR-squared counts and
+policy checks with their original labels and units. A present invalid v2 result
+must not fall back to a prior result. See `docs/diversification-methodology.md`.
+
+`DataSource.get_combined_data()` calculates v2 only when the `allocation`
+configuration is present. Render saved data through `saved_diversification_view()`;
+never fetch histories or calculate risk in the report. Preserve the four approved
+summary cards, financial figures, and privacy exclusions.
+
+For historical replay, validate quarter-end holdings and use a new derived copy:
+
+```bash
+just holy-grail --snapshot VERIFIED_QUARTER_END_SNAPSHOT \
+  --output data/derived_snapshots/quarter_diversification.json --offline
+venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
+  --year YEAR --quarter QUARTER --before VERIFIED_BASELINE \
+  --after data/derived_snapshots/quarter_diversification.json
+```
+
+The command refuses overwrite, automatic snapshot folders and latest-pointer
+changes, preserving financial fields. `--offline` reuses cached histories;
+`--config PATH --cache-dir PATH` can select private inputs explicitly. Retrieved
+or backfilled data is retrospective, including unverified publication vintages.
+Exclude future observations and preserve holdings sold after the quarter end.
+
+Count version `risk_equivalent_streams_v1` uses sample-covariance DR squared on
+36–60 common monthly USD returns. Preserve “N ефективних джерел дохідності /
+ціль 15–20”, with risk-equivalence/subset qualifiers. This is not Dalio's
+proprietary methodology. A hedge can push the count beyond the number of
+exposures; show that warning. Below-target rounding must display “<15”.
+
+Policy version `diversification_policy_v1` gives ten points per passed check,
+with unknowns producing bounds, not reweighting or a confidence interval.
+All unknown: “Недостатньо даних”. Always show key concentration/breadth/
+counterparty failures, reserve share and input confidence. Cash can improve
+loss resilience without improving risky-asset diversification. All confirmed
+reserves: zero streams and no applicable score. Stablecoins are not exempt.
+
+Statistical checks need 60 observations, >=99% non-reserve suitable coverage
+and no material weak-proxy/stale limitation. Value checks use conservative
+bounds; materially stale valuations prevent their resolution. Bond shocks use
+dated duration inputs; unknown duration never implies protection. Expected-
+return rationale reviews remain separate from factual risk classification.
+Do not approve drafts or turn weak proxies suitable just by filling review fields.
+
+Keep mappings, source evidence, account IDs and rationale records under ignored
+`data/`. Public diagnostics show percentages and generic risk labels only.
+See `docs/diversification-methodology.md` for all ten thresholds, shock tables,
+private input records and replay constraints. Inspect desktop/mobile/print after
+generation; compare preserved sections against the prior HTML.
+
 ```bash
 just report YEAR QUARTER
 ```
@@ -80,3 +135,17 @@ Before delivery:
 Lead with a clickable link to the styled HTML, and PDF if actually produced and checked. Open the styled artifact when the available viewer renders it; retain Markdown as a secondary link or omit it unless useful. Never open only Markdown and present that as the publication result.
 
 State the quarter, actual input dates, validation obtained, and material data-quality or visual-review limits. Keep provenance receipts under local-only `data/` when useful; preserve private inputs and existing report history. Generate locally within the user's request. Publishing or sending the report to Telegram requires explicit authorization.
+
+
+### Prior risk-equivalent indicator
+
+For historical snapshots, the following describes prior DR-squared results only.
+Owned Treasury positions are assets in the current configuration. Preserve
+maturity/duration distinctions: the confirmed <=1-year individual holding uses
+the disclosed, dated SHV proxy; direct long Treasury ETFs such as TLT keep their
+own histories. Never substitute a generic Bonds history or add a manual +1.
+Render its saved count (one decimal), direct-only same-month sensitivity, reserve,
+five-role coverage and model/input limits. Do not gate it on legacy check scores
+or re-fetch/recompute in HTML. See docs/diversification-methodology.md, Simple
+Holy Grail indicator, for replay and scoped sheet delivery. Preserve archive
+behavior and existing privacy/exclusion rules.

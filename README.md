@@ -81,6 +81,81 @@ python -m src.portfolio_sync --run-history-sync --run-dalio-analysis
 - це робить ряд рівномірним для ризик-аналізу Dalio
 - якщо потрібні сирі дати вкладок, використовуйте `--history-frequency raw`
 
+## Диверсифікація та стійкість у Sheets і квартальному HTML
+
+Головний індикатор `capital_diversification_v2` показує **0-100 балів зі 100**
+для інвестованої частини. Він враховує економічні групи, їх кореляції та
+глобальну секторну широту. Cash поза оцінкою і показується окремо. Діапазон
+відображає сценарії, а не довірчий інтервал або прогноз дохідності.
+
+Приватна секція `allocation` у `data/holy_grail_config.json` вмикає розрахунок;
+без секції він вимкнений, а без `method_version` вибирається v2. Явна попередня
+або невідома версія дає недоступний результат. `profiles` містить датовані
+підтвердження активів; публічні профілі збережені в `analytics/models/`.
+HTML і Sheets читають збережений `allocation_score_v2`; пошкоджений блок не
+підмінюється старим числом. Історичні v1, DR² і перевірки залишаються доступними
+для читання у своїх первісних одиницях.
+
+### Діагностика попередніх моделей
+
+
+`DataSource.get_combined_data()` додає опційний v2 до `DIVERSIFICATION_DATA`
+перед збереженням і публікацією. Наступний опис стосується збережених попередніх
+моделей. Sheets та HTML читають один
+збережений результат через `saved_diversification_view()`; представлення не
+завантажують ціни і не обчислюють ризик. Чотири summary cards збережені.
+
+- **Оцінка /100**: десять рівновагових перевірок політики. Чотири пройдені,
+  три провалені та три невизначені дають **40–70/100**. Це межі невирішених
+  перевірок, не ймовірність. Якщо всі невизначені: «Недостатньо даних».
+- **Ефективні джерела / ціль 15–20**: `DR² = (sum(w_i*sigma_i))²/(wᵀΣw)`.
+  Це історичний еквівалент за ризиком, не кількість незалежних стратегій.
+  Від'ємні кореляції збережені; перевищення кількості модельованих експозицій
+  позначається як ефект хеджування. Новий headline не містить % до 15 чи
+  автоматичного твердження «Holy Grail досягнуто».
+- Версії `risk_equivalent_streams_v1` та `diversification_policy_v1`
+  зберігаються окремо. Старий `HOLY_GRAIL_DATA` і legacy analyzer незмінні.
+  Старі snapshots показують чітко позначений попередній метод без нової оцінки;
+  невалідний новий блок не підмінюється старим. Тренди між методами не зіставні.
+- Вікно: останні 60 завершених місяців, adjusted USD returns та sample
+  covariance на тих самих спостереженнях. 36–59 дають попередню кількість,
+  менше 36 приховують її. Ідентичні інструменти, історії та спільні проксі
+  об'єднуються; перекази і зміни балансів не є доходностями.
+- Кеш не додає джерел. Підтверджений USD cash і USD Treasury з залишком
+  <=365 днів є аналітичними резервами без зміни фінансової класифікації.
+  Stablecoins не отримують це виключення. Ідеальний хедж, short/borrowing/
+  leverage не дають нескінченної диверсифікації.
+- HYG lending і BLS/FRED `CUSR0000SETA02` залишаються слабкими проксі.
+  Вони не моделюють platform default/depeg або прибуток car resale в Україні.
+  Неповні/застарілі оцінки, слабкі проксі та невідомі ризики залишають перевірки
+  невизначеними. Володіння активом не схвалює очікувану дохідність.
+
+Повна політика, шоки та формат приватних підтверджень:
+[docs/diversification-methodology.md](docs/diversification-methodology.md).
+Налаштування, історії, source revisions і fingerprints залишаються в ignored
+`data/holy_grail_config.json` та `data/holy_grail_history/`. Повторний запуск
+використовує місячний кеш, спільний бюджет збору 60 секунд та timeout 8 секунд.
+Помилки необов'язкової аналітики не переривають звичайне оновлення. Змінені
+вхідні дані ніколи не використовують стару оцінку. JSON: finite або `null`.
+
+Історичний replay створює нову похідну копію поза автоматичним вибором:
+
+```bash
+just holy-grail --snapshot VERIFIED_QUARTER_END_SNAPSHOT \
+  --output data/derived_snapshots/quarter_diversification.json --offline
+# За потреби: --config PATH --cache-dir PATH; без --offline дозволений bounded refresh.
+venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
+  --year YEAR --quarter QUARTER --before VERIFIED_BASELINE \
+  --after data/derived_snapshots/quarter_diversification.json
+```
+
+Оригінали, `combined_data_latest.json` і фінансові поля зберігаються. Потрібні
+позиції саме на дату оцінки, включно із закритими пізніше. Майбутні доходності
+відкидаються; backfill сьогоднішніми історіями є ретроспективним. Дати
+спостережень і публікацій економічних рядів не ототожнюються. Для похідного
+replay завжди передавайте `--after` явно. Публічні diagnostics: лише відсотки
+та загальні назви ризиків, без балансів, account IDs або приватних rationale.
+
 ## Dalio Holy Grail Analyzer
 
 Модуль `analytics/dalio_holy_grail.py` реалізує risk-аналітику портфеля в дусі Dalio Holy Grail (фокус на незалежних джерелах ризику, а не тільки на кількості інструментів).
@@ -332,3 +407,10 @@ Required GitHub secrets:
 | `TELEGRAM_CHAT_ID` | Your chat ID (get via @userinfobot) |
 
 The workflow can also be triggered manually via `workflow_dispatch` for backfill.
+
+
+Holy Grail prefers the saved capital-weighted allocation score, with Cash
+outside its scope and explicit business-model sensitivity. Older DR-squared
+counts and policy checks remain prior-model diagnostics. Use `just holy-grail-sheet ... --dry-run` followed
+by `--apply` for scoped historical delivery without replacing a worksheet.
+See `docs/diversification-methodology.md` for inputs, limitations and verification.

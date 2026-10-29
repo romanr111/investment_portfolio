@@ -24,6 +24,12 @@ HOLY_GRAIL_COMPONENT_WEIGHTS: Dict[str, float] = {
 }
 
 
+def portfolio_variance_contributions(weights: np.ndarray, covariance: np.ndarray):
+    """Return portfolio variance and Euler contributions in variance units."""
+    contributions = weights * (covariance @ weights)
+    return float(contributions.sum()), contributions
+
+
 DEFAULT_FACTOR_MAP: Dict[str, str] = {
     "Stocks": "Growth/Risk-On",
     "Other Bets": "Growth/Risk-On",
@@ -1928,13 +1934,14 @@ class DalioHolyGrailAnalyzer:
             valid_covariance = cov_subset.loc[valid_cov_assets, valid_cov_assets].astype(float)
             weight_vector = valid_weights.values
             cov_values = valid_covariance.values
-            portfolio_variance = float(weight_vector @ cov_values @ weight_vector)
+            portfolio_variance, variance_contributions = portfolio_variance_contributions(
+                weight_vector, cov_values
+            )
             portfolio_variance = max(portfolio_variance, 0.0)
             portfolio_volatility = math.sqrt(portfolio_variance)
 
             if portfolio_volatility > 0:
-                marginal_contribution = (cov_values @ weight_vector) / portfolio_volatility
-                trc_values = weight_vector * marginal_contribution
+                trc_values = variance_contributions / portfolio_volatility
                 trc_share_signed = trc_values / portfolio_volatility
                 trc_abs_total = float(np.abs(trc_values).sum())
                 if trc_abs_total > 0:
@@ -2013,8 +2020,9 @@ class DalioHolyGrailAnalyzer:
         entropy = float(-(probabilities * np.log(probabilities)).sum())
         return float(np.exp(entropy))
 
+    @staticmethod
     def _hac_clusters_from_correlation(
-        self, correlation: pd.DataFrame, corr_cutoff: float
+        correlation: pd.DataFrame, corr_cutoff: float
     ) -> pd.Series:
         if correlation.empty:
             return pd.Series(dtype=int)
@@ -2036,7 +2044,7 @@ class DalioHolyGrailAnalyzer:
             cluster_ids = sorted(clusters.keys())
             for left_idx, left_cluster_id in enumerate(cluster_ids):
                 for right_cluster_id in cluster_ids[left_idx + 1 :]:
-                    distance_value = self._average_linkage_distance(
+                    distance_value = DalioHolyGrailAnalyzer._average_linkage_distance(
                         distance_matrix,
                         clusters[left_cluster_id],
                         clusters[right_cluster_id],
@@ -2062,8 +2070,8 @@ class DalioHolyGrailAnalyzer:
                 assignments[assets[member_idx]] = cluster_label
         return pd.Series(assignments, dtype=int)
 
+    @staticmethod
     def _average_linkage_distance(
-        self,
         distance_matrix: np.ndarray,
         left_members: set[int],
         right_members: set[int],

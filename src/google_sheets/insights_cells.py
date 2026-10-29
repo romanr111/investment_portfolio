@@ -14,6 +14,9 @@ _NUMERIC_KINDS = {
     "native_amount",
     "amount",
     "weight",
+    "allocation_score",
+    "allocation_points",
+    "risk_equivalent",
 }
 _SUPPORTED_KINDS = _NUMERIC_KINDS | {"date", "status", "link", "formula"}
 _SHEETS_DATE_EPOCH = date(1899, 12, 30)

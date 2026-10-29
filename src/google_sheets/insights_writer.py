@@ -78,6 +78,9 @@ _NUMBER_FORMATS["native_amount_tiny"] = {
     "type": "NUMBER",
     "pattern": "+#,##0.00########;-#,##0.00########;0.00",
 }
+_NUMBER_FORMATS['allocation_score'] = {'type':'PERCENT','pattern':'0%'}
+_NUMBER_FORMATS['allocation_points'] = {'type':'NUMBER','pattern':'0" зі 100"'}
+_NUMBER_FORMATS['risk_equivalent'] = {'type':'NUMBER','pattern':'0.0'}
 
 
 def _api_value(value: Any) -> dict[str, Any]:

@@ -69,6 +69,8 @@ class ReportData:
     special_asset_rows: List[PositionRow] = field(default_factory=list)
     alternative_asset_tables: List[DetailTable] = field(default_factory=list)
     summary_title: str = "Коротко за квартал"
+    holy_grail: Optional[dict] = None
+    diversification: Optional[dict] = None
 
 
 CSS = """
@@ -558,6 +560,56 @@ def _render_split(label: str, a_pct: float, b_pct: float) -> str:
     )
 
 
+def _render_holy_grail(view: Optional[dict]) -> str:
+    if view is None:
+        return ""
+    rows = "".join(f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>" for label, value in view["rows"])
+    if view.get("allocation"):
+        drivers = "".join(f"<li>{_esc(text)}</li>" for text in view['drivers'])
+        risks = "".join(f"<li>{_esc(text)}</li>" for text in view.get('risk_facts', []))
+        return f"""
+<section id="holy-grail">
+  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">Диверсифікація інвестованої частини</h2><span class="sec-rule"></span></div>
+  <p class="hg-value">{_esc(view['headline'])}</p>
+  <p><strong>{_esc(view['status'])}</strong></p>
+  <p>{_esc(view.get('model_status', 'Модельна оцінка'))} станом на {_esc(view['as_of'])}. {_esc(view['coverage_summary'])}</p>
+  <ul>{drivers}</ul>
+  <ul>{risks}</ul>
+  <details open><summary>Як отримано оцінку</summary>
+    <table class="hg-table"><tbody>{rows}</tbody></table>
+  </details>
+</section>
+"""
+    if view.get("indicator"):
+        return f"""
+<section id="holy-grail">
+  <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">Диверсифікація: Holy Grail</h2><span class="sec-rule"></span></div>
+  <p class="hg-value">{_esc(view['headline'])}</p>
+  <p>Еквівалента джерел ризику / орієнтир 15–20.</p>
+  <p>{_esc(view['status'])} станом на {_esc(view['as_of'])}.</p>
+  <p class="footnote">{_esc(view['coverage_summary'])}<br>{_esc(view['principal_constraint'])}</p>
+  <table class="hg-table"><tbody>{rows}</tbody></table>
+</section>
+"""
+
+    return f"""
+<section id="holy-grail">
+  <div class="sec-label">
+    <span class="sec-num">05</span>
+    <h2 class="sec-title">Диверсифікація: Holy Grail</h2>
+    <span class="sec-rule"></span>
+  </div>
+  <p class="hg-value">{_esc(view['headline'])}</p>
+  <p>{_esc(view.get('count_note', 'Попередній метод'))}. Впевненість у вхідних даних: {_esc(view.get('confidence_label', '-'))}.</p>
+  <p class="footnote">{_esc(view.get('critical_text', ''))}<br>{_esc(view.get('principal_constraint', ''))}<br>{_esc(view.get('headline_warning', ''))}</p>
+  <p><strong>{_esc(view['effective'])}</strong> ефективних джерел дохідності / ціль 15-20</p>
+  <p class="footnote">Станом на {_esc(view['as_of'])}. {_esc(view['status'])}.<br>
+  Власна модель статистичної диверсифікації. Минулі кореляції не гарантують майбутньої незалежності.</p>
+  <table class="hg-table"><tbody>{rows}</tbody></table>
+</section>
+"""
+
+
 def render_report(data: ReportData) -> str:
     footnotes = "<br>\n  ".join(_esc(line) for line in data.footnotes)
     footnote_html = f'<p class="footnote">{footnotes}</p>' if data.footnotes else ""
@@ -592,7 +644,16 @@ def render_report(data: ReportData) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Квартальний звіт · {_esc(data.quarter_label)} {_esc(data.year_label)}</title>
-<style>{CSS}</style>
+<style>{CSS}
+.hg-value {{ font-size: clamp(24px, 4vw, 38px); font-weight: 600; color: var(--navy); margin: 0 0 12px; overflow-wrap: anywhere; }}
+.hg-table {{ width: 100%; table-layout: fixed; }}
+.hg-table td {{ white-space: normal; overflow-wrap: anywhere; vertical-align: top; }}
+.hg-table td:first-child {{ width: 43%; }}
+@media print {{
+  #holy-grail {{ break-before: page; }}
+  .hg-table tr {{ break-inside: avoid; }}
+}}
+</style>
 </head>
 <body>
 <div class="page">
@@ -640,6 +701,8 @@ def render_report(data: ReportData) -> str:
 </section>
 
 {alternative_section}
+
+{_render_holy_grail(data.diversification or data.holy_grail)}
 
 <footer>
   <span>Квартальний звіт · {_esc(data.quarter_label)} {_esc(data.year_label)}</span>

@@ -37,4 +37,3 @@ class InsightsIntegrationTests(unittest.TestCase):
         self.assertEqual(timeline.values[(3, 2)], "31 Dec 2026")
         self.assertEqual(book.worksheet("net_worth_timeline").id, timeline.id)
         self.assertEqual(len(book.sheets), 3)
-
