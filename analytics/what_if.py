@@ -18,7 +18,8 @@ from analytics.allocation_inputs import allocation_settings, profile_for
 from analytics.allocation_score import history_frame
 from analytics.holy_grail_data import (CACHE_DIR, CONFIG_PATH, CASH_EQUIVALENTS, DATA_DIR,
                                        extract_exposures, enrich_snapshot_file, load_config)
-from analytics.concentration_v1 import VERSION as CONCENTRATION_VERSION, build_block, unavailable_block
+from analytics.concentration_v1 import (VERSION as CONCENTRATION_VERSION, build_block,
+                                        unavailable_block, validate_saved_concentration)
 
 
 class WhatIfError(ValueError):
@@ -276,6 +277,12 @@ def run(deltas_text, *, snapshot=None, config_path=CONFIG_PATH, cache_dir=None, 
                         if isinstance(saved_v2, dict) else None) or {}
     before_block = (data.get('DIVERSIFICATION_DATA') or {}).get('concentration_v1') \
         if isinstance(data.get('DIVERSIFICATION_DATA'), dict) else None
+    if (isinstance(before_block, dict) and before_block.get('version') == CONCENTRATION_VERSION
+            and 'status' not in before_block
+            and not validate_saved_concentration(before_block, data, saved_v2)):
+        # Same integrity rule as the rendered view: a stale or tampered saved
+        # sibling must not pose as the trusted before-state.
+        before_block = unavailable_block(as_of_date, ['concentration_block_invalid'])
     try:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -54,6 +54,7 @@ SAFEGUARD_LABELS = {
     'unresolved_breach': 'Нерозглянуте порушення ліміту',
     'unknown_issuer_lookthrough': 'Частка емітентів у фондах не підтверджена',
     'business_assumption_material': 'Бізнес-допущення суттєве для оцінки',
+    'concentration_block_invalid': 'введені дані не пройшли перевірку цілісності',
 }
 DECISION_TEXT = {'accept': 'рішення: прийнято', 'reduce': 'рішення: скоротити', 'exit': 'рішення: вийти'}
 THESIS_KEY = 'thesis_pct_equities'
@@ -361,7 +362,18 @@ def allocation_view_v2(data, expected_date=None):
                     ('Висновок', label), ('Сценарний розкид', scenario_range),
                     ('Cash від повного портфеля', _pct(cash)),
                     ('Непокрита інвестована частка', _pct(result['coverage']['unknown_pct_invested']))]
-            safeguards = concentration_section(data['DIVERSIFICATION_DATA'],
+            section = data['DIVERSIFICATION_DATA']
+            block = section.get('concentration_v1')
+            from analytics.concentration_v1 import (unavailable_block, validate_saved_concentration,
+                                                    VERSION as CONCENTRATION_VERSION)
+            if (isinstance(block, dict) and block.get('version') == CONCENTRATION_VERSION
+                    and 'status' not in block
+                    and not validate_saved_concentration(block, data, result)):
+                # A stale or tampered sibling must not render its verdicts with the
+                # valid v2 score; degrade the safeguards, keep the score.
+                section = dict(section, concentration_v1=unavailable_block(
+                    result['as_of_date'], ['concentration_block_invalid']))
+            safeguards = concentration_section(section,
                                                result['configuration'].get('concentration_decisions'),
                                                result['as_of_date'])
             if safeguards:
