@@ -272,6 +272,15 @@ footer {
   .kpi-card, .table-scroll, .split { break-inside: avoid; }
   section { margin-top: 32px; }
 }
+
+.hg-value { font-size: clamp(24px, 4vw, 38px); font-weight: 600; color: var(--navy); margin: 0 0 12px; overflow-wrap: anywhere; }
+.hg-table { width: 100%; table-layout: fixed; }
+.hg-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.hg-table td:first-child { width: 43%; }
+@media print {
+  #holy-grail { break-before: page; }
+  .hg-table tr { break-inside: avoid; }
+}
 </style>
 </head>
 <body>
@@ -317,7 +326,7 @@ footer {
   <h3>Акції</h3>
   <div class="table-scroll"><table><thead><tr><th>Позиція</th><th>Остання активність</th><th class="num">Вага</th><th class="num">Середня ціна</th><th class="num">P/L</th></tr></thead><tbody><tr><td class="ticker">BRK B</td><td><span class="pill pill-add">Збільшив (+14%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:100.0%"></i></span><span class="wval">15.58%</span></span></td><td class="num">490.51$</td><td class="num pos">+1.5%</td></tr><tr><td class="ticker">9988</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:85.6%"></i></span><span class="wval">13.34%</span></span></td><td class="num">152.70$</td><td class="num neg">−30.2%</td></tr><tr><td class="ticker">GOOG</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:81.3%"></i></span><span class="wval">12.66%</span></span></td><td class="num">192.86$</td><td class="num pos">+76.7%</td></tr><tr><td class="ticker">BN</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:50.3%"></i></span><span class="wval">7.84%</span></span></td><td class="num">30.66$</td><td class="num pos">+18.9%</td></tr><tr><td class="ticker">AMZN</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:46.9%"></i></span><span class="wval">7.31%</span></span></td><td class="num">206.56$</td><td class="num pos">+20.6%</td></tr><tr><td class="ticker">META</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:45.5%"></i></span><span class="wval">7.09%</span></span></td><td class="num">649.73$</td><td class="num pos">+11.6%</td></tr><tr><td class="ticker">KWEB</td><td><span class="pill pill-cut">Зменшив (-19%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:40.0%"></i></span><span class="wval">6.23%</span></span></td><td class="num">32.11$</td><td class="num neg">−23.7%</td></tr><tr><td class="ticker">NKE</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:37.8%"></i></span><span class="wval">5.88%</span></span></td><td class="num">74.13$</td><td class="num neg">−52.2%</td></tr><tr><td class="ticker">SPGI</td><td><span class="pill pill-add">Збільшив (+67%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:24.8%"></i></span><span class="wval">3.86%</span></span></td><td class="num">407.36$</td><td class="num neg">−3.2%</td></tr><tr><td class="ticker">COF</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:24.2%"></i></span><span class="wval">3.77%</span></span></td><td class="num">109.05$</td><td class="num pos">+77.0%</td></tr><tr><td class="ticker">WHR</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:23.5%"></i></span><span class="wval">3.66%</span></span></td><td class="num">77.11$</td><td class="num neg">−60.2%</td></tr><tr><td class="ticker">MCO</td><td><span class="pill pill-add">Збільшив (+33%)</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:22.8%"></i></span><span class="wval">3.55%</span></span></td><td class="num">465.26$</td><td class="num neg">−2.4%</td></tr><tr><td class="ticker">CPRT</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:18.8%"></i></span><span class="wval">2.93%</span></span></td><td class="num">38.50$</td><td class="num neg">−29.1%</td></tr><tr><td class="ticker">IBKR</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:18.7%"></i></span><span class="wval">2.91%</span></span></td><td class="num">58.67$</td><td class="num pos">+45.6%</td></tr><tr><td class="ticker">UBER</td><td><span class="hold">Без змін</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:17.2%"></i></span><span class="wval">2.68%</span></span></td><td class="num">73.92$</td><td class="num neg">−7.3%</td></tr><tr><td class="ticker">EWY</td><td><span class="pill pill-new">Нова позиція</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:4.6%"></i></span><span class="wval">0.71%</span></span></td><td class="num">160.55$</td><td class="num pos">+13.8%</td></tr><tr class="closed-row"><td class="ticker">PDD</td><td><span class="pill pill-close">Закрита позиція</span></td><td class="num">1.65% → 0%</td><td class="num">114.28$ → 84.00$</td><td class="num neg">−26.5%</td></tr><tr class="closed-row"><td class="ticker">MSFT</td><td><span class="pill pill-close">Закрита позиція</span></td><td class="num">0.73% → 0%</td><td class="num">402.53$ → 463.43$</td><td class="num pos">+15.1%</td></tr><tr class="total"><td>Підсумок</td><td></td><td class="num">100.00%</td><td></td><td></td></tr></tbody></table></div>
 
-  <div class="split"><div class="split-head"><span>Співвідношення Core/Satellite</span><span class="v">15.58% / 84.42%</span></div><div class="split-bar"><i class="a" style="width:15.58%"></i><i class="b" style="width:84.42%"></i></div></div>
+  <div class="split"><div class="split-head"><span>Співвідношення Core/Satellite</span><span class="v">0.00% / 100.00%</span></div><div class="split-bar"><i class="a" style="width:0.00%"></i><i class="b" style="width:100.00%"></i></div></div>
   <div class="split"><div class="split-head"><span>Співвідношення Китай/Інші</span><span class="v">19.57% / 80.43%</span></div><div class="split-bar"><i class="a" style="width:19.57%"></i><i class="b" style="width:80.43%"></i></div></div>
 
   <h3>Облігації, золото та товарні активи</h3>
@@ -332,6 +341,23 @@ footer {
     <span class="sec-rule"></span>
   </div>
   <h3>Криптовалюти</h3><div class="table-scroll"><table><thead><tr><th>Позиція</th><th>Зміна кількості монет</th><th class="num">Вага (криптовалюти)</th></tr></thead><tbody><tr><td class="ticker">BTC</td><td><span class="pill pill-add">+7.0%</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:100.0%"></i></span><span class="wval">66.06%</span></span></td></tr><tr><td class="ticker">ETH</td><td><span class="pill pill-add">+7.2%</span></td><td class="num"><span class="wcell"><span class="wbar"><i style="width:50.0%"></i></span><span class="wval">33.06%</span></span></td></tr></tbody></table></div><p class="footnote">Кількість монет - зміна балансу за квартал, не прибуток. Вага - частка у криптовалютній частині портфеля на кінець кварталу. Неповна історія операцій: BTC, ETH; джерело зміни кількості не визначено.</p>
+</section>
+
+
+
+<section id="holy-grail">
+  <div class="sec-label">
+    <span class="sec-num">05</span>
+    <h2 class="sec-title">Диверсифікація: Holy Grail</h2>
+    <span class="sec-rule"></span>
+  </div>
+  <p class="hg-value">Дані недоступні</p>
+  <p>Еквівалент за ризиком. Впевненість у вхідних даних: -.</p>
+  <p class="footnote"><br><br></p>
+  <p><strong>-</strong> ефективних джерел дохідності / ціль 15-20</p>
+  <p class="footnote">Станом на -. Немає збереженої оцінки.<br>
+  Власна модель статистичної диверсифікації. Минулі кореляції не гарантують майбутньої незалежності.</p>
+  <table class="hg-table"><tbody></tbody></table>
 </section>
 
 
