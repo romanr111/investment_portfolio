@@ -291,11 +291,17 @@ def build_portfolio_tab(
                 _cell(income["monthly_average"], "amount"),
             ),
             (
-                "Annual estimate",
-                _cell(
-                    income["annual_income"],
-                    "amount",
+                "Annual estimate"
+                + (
+                    " (partial)"
+                    if income["state"] == "Incomplete" and income["annual_income"] is not None
+                    else ""
                 ),
+                CellValue(
+                    income["annual_income"], "amount", annual_yield=income["annual_yield"]
+                )
+                if income["annual_income"] is not None
+                else _cell(None, "amount"),
             ),
         )
     )
@@ -348,7 +354,7 @@ def build_portfolio_tab(
         row_groups=(),
         freeze_rows=2,
         freeze_columns=4,
-        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 115),
+        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 185),
         emphasis_rows=tuple(emphasis),
         pnl_columns=(("holdings", 2),),
     )

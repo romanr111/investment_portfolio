@@ -181,11 +181,17 @@ def _compact_format(cell: CellValue) -> dict[str, str] | None:
         decimals = max(1 if percent else 2, -math.floor(math.log10(units)))
     number = ("0" if percent else "#,##0") + ("." + "0" * decimals if decimals else "")
     prefix, suffix = ("", "%") if percent else ('"$"', "")
+    if (
+        cell.kind == "amount"
+        and cell.annual_yield is not None
+        and math.isfinite(cell.annual_yield * 100)
+    ):
+        suffix = f'" ({cell.annual_yield * 100:.1f}% yield)"'
     positive = "+" if cell.kind in {"money", "percent"} else ""
     return {
         "type": "PERCENT" if percent else "CURRENCY",
         "pattern": f"{positive}{prefix}{number}{suffix};-{prefix}{number}{suffix};"
-        + ("0.0%" if percent else '"$"0'),
+        + ("0.0%" if percent else '"$"0' + suffix),
     }
 
 
