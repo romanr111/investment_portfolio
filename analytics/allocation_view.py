@@ -153,7 +153,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
             return theses[name], 'Теза ' + name
         return limits.get(key), LIMIT_LABELS.get(key, key)
 
-    breach_rows, breach_facts = [], []
+    breach_rows, breach_facts, breach_summary_items = [], [], []
     sorted_items = sorted(block['breaches'], key=lambda item: 0 if not resolved(item) else 1)
 
     def subject_of(item):
@@ -183,6 +183,7 @@ def concentration_section(section, decisions=None, as_of_date=None):
             value_text = (_pct(item['value']) + suffix + ' нижче цілі ' + against if minimal
                           else _pct(item['value']) + suffix + ' понад ліміт ' + against + suffix)
             text = value_text + ' · ' + decision_text(item)
+            row_value = item.get('value')
         else:
             # One row per issuer: both denominators (equities and NAV) share it,
             # subject in the row label, unresolved-first ordering preserved.
@@ -207,8 +208,10 @@ def concentration_section(section, decisions=None, as_of_date=None):
                     value_text = nav_value
                     against_text = nav_against
             text = value_text + ' понад ліміт ' + against_text + ' · ' + decision_text(primary)
+            row_value = (eq or nav_item).get('value')
         breach_rows.append(('Порушення: ' + label, text))
         breach_facts.append('Порушення ліміту: ' + label + ' ' + text)
+        breach_summary_items.append(('Порушення: ' + label, text, row_value))
 
     rows = list(breach_rows)
     issuer = f"{shares['issuer_id']}: {_pct(shares['issuer_pct_equities'])} акцій"
@@ -264,6 +267,11 @@ def concentration_section(section, decisions=None, as_of_date=None):
                ('Емітент', issuer.split(' · ліміт')[0]),
                ('Топ-4 / Core', _pct(shares['top4_pct_equities']) + ' / ' + _pct(shares['core_pct_equities']) + ' акцій'),
                ('Китай', (_pct(shares['china_pct_equities']) if shares['china_pct_equities'] is not None else '-') + ' акцій')]
+    # The counter above needs its evidence in place: breach explanations ride in
+    # the sheet summary, largest impact first (owner 2026-10-29: sorted by the
+    # primary denominator's value, alphabetical label breaking ties).
+    summary += [(label, text) for label, text, value in sorted(
+        breach_summary_items, key=lambda row: (-(row[2] if _num(row[2]) else 0.), row[0]))]
     return dict(unavailable=None, rows=rows, summary=summary, breach_facts=breach_facts)
 
 

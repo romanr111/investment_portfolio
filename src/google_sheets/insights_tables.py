@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 
-from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
+from src.google_sheets.insights_cells import CellBlock, CellValue
 from analytics.diversification_view import saved_diversification_view
 from src.google_sheets.insights_finance import (
     category_rows,
@@ -335,26 +335,19 @@ def build_portfolio_tab(
         ),
         CellBlock("compact_income", tuple(income_rows), start_row=0, start_column=10),
     ]
-    diversification_groups = ()
     headers = {'holdings':1, 'compact_allocation':1, 'compact_income':1}
     if has_diversification:
         label,value = summary[0]
         if isinstance(value,(int,float)):
             summary[0] = (label,CellValue(value,kind))
         blocks.append(CellBlock('diversification_summary',tuple(summary),start_row=9))
-        _,_,bounds = render_blocks(blocks)
-        first = max(b[1] for b in bounds.values()) + 2
-        from analytics.allocation_view import sheet_detail_rows
-        detail_rows = sheet_detail_rows(view['rows']) if view.get('allocation') else view['rows']
-        details = [('Диверсифікація - Details',''),*detail_rows,('Holy Grail - End','')]
-        blocks.append(CellBlock('diversification_details',tuple(tuple(row) for row in details),start_row=first))
-        headers['diversification_details'] = 0
-        diversification_groups = (('diversification_details',1,len(details)),)
+        # Summary only: the tab keeps the core block; the full divergence render
+        # stays in the saved record (owner 2026-10-29 - no Details group in the sheet).
     return InsightTab(
         title=date.fromisoformat(valuation_date).strftime("%d %b %Y"),
         blocks=tuple(blocks),
         header_offsets=headers,
-        row_groups=diversification_groups,
+        row_groups=(),
         freeze_rows=2,
         freeze_columns=4,
         column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 115),

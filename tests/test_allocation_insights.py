@@ -20,12 +20,11 @@ class AllocationInsightsTests(unittest.TestCase):
         self.assertEqual(rows[9][1],data['DIVERSIFICATION_DATA']['allocation_score']['display_score']/100)
         self.assertEqual(typed[(9,1)].kind,'allocation_score')
         self.assertTrue(all(any('Benchmark '+str(i) in row for row in rows) for i in range(5)))
-        details=bounds['diversification_details']
-        self.assertGreater(details[0],max(b[1] for key,b in bounds.items() if key!='diversification_details'))
-        self.assertEqual(rows[details[0]][0],'Диверсифікація - Details')
-        self.assertEqual(rows[details[1]-1][0],'Holy Grail - End')
+        # Summary only (owner 2026-10-29): no Details group leaves the tab.
+        self.assertNotIn('diversification_details',bounds)
+        self.assertEqual([row[0] for row in rows if row[0]=='Диверсифікація - Details'],[])
 
-    def test_actual_updater_reuses_score_format_and_details_group_on_repeat(self):
+    def test_actual_updater_reuses_score_format_without_details_group_on_repeat(self):
         from tests.fake_sheets import FakeSpreadsheet
         from src.google_sheets.insights_refresh import refresh_insights
         book=FakeSpreadsheet();data=self.saved()
@@ -34,4 +33,4 @@ class AllocationInsightsTests(unittest.TestCase):
         main=book.worksheet('30 Sep 2026')
         self.assertEqual(main.values[(10,2)],data['DIVERSIFICATION_DATA']['allocation_score']['display_score']/100)
         self.assertEqual(main.formats[(10,2)]['numberFormat'],{'type':'PERCENT','pattern':'0%'})
-        self.assertEqual(len(main.groups),1)
+        self.assertEqual(len(main.groups),0)
