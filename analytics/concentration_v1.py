@@ -57,6 +57,10 @@ Contract (pinned):
   could clear the issuer limit on its own (each unlisted issuer is otherwise
   verified too small to breach the limit), while profiles without one keep
   the whole uncovered fraction unverified.
+- A profile with `exclude_direct_issuer_concentration: true` excludes its
+  direct position from issuer and top-four measures by owner policy. It still
+  counts in the equities denominator, core, and other exposure measures.
+  Independently declared fund look-through is unaffected.
 - Positions without a profile stay loud instead of silently vanishing: a
   `profile_for` miss (profiles are id-keyed by position id, so a bucket never
   grants a profile) in one of the equity IB buckets extract_exposures emits -
@@ -362,6 +366,8 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         positions_equity[identifier] = positions_equity.get(identifier, 0.) + equity
         if profile.get('core') is True:
             core += equity
+        if profile.get('exclude_direct_issuer_concentration') is True:
+            continue
         issuer, holdings = _issuer_of(position, profile, as_of_date)
         if holdings is None:
             issuers[issuer] = issuers.get(issuer, 0.) + equity
