@@ -318,7 +318,7 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
     )
     stock_annual = _number(fixed_income.get("stocks_yearly"))
     if stock_annual is None and stock_principal is not None and stock_rate is not None:
-        stock_annual = stock_principal * stock_rate
+        stock_annual = _number(stock_principal * stock_rate)
 
     definitions = (
         ("Stocks", stock_principal, stock_rate, stock_annual, "Estimated"),
@@ -348,15 +348,23 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
     items = []
     for source, principal, annual_rate, annual_income, state in definitions:
         if annual_income is None and principal is not None and annual_rate is not None:
-            annual_income = principal * annual_rate
+            annual_income = _number(principal * annual_rate)
         if annual_income is None:
             state = "Unavailable"
+        yield_value = (
+            annual_income / principal
+            if annual_income is not None and principal is not None and principal > 0
+            else None
+        )
+        if yield_value is not None and not math.isfinite(yield_value * 100):
+            yield_value = None
         items.append(
             {
                 "source": source,
                 "principal": principal,
                 "annual_rate": annual_rate,
                 "annual_income": annual_income,
+                "annual_yield": yield_value,
                 "monthly_average": annual_income / 12 if annual_income is not None else None,
                 "state": state,
             }

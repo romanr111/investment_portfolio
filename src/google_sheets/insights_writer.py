@@ -186,7 +186,7 @@ def _compact_format(cell: CellValue) -> dict[str, str] | None:
         and cell.annual_yield is not None
         and math.isfinite(cell.annual_yield * 100)
     ):
-        suffix = f'" ({cell.annual_yield * 100:.1f}% yield)"'
+        suffix = f'" ({cell.annual_yield * 100:.1f}% p.a.)"'
     positive = "+" if cell.kind in {"money", "percent"} else ""
     return {
         "type": "PERCENT" if percent else "CURRENCY",

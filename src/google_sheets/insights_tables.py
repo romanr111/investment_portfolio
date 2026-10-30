@@ -277,10 +277,9 @@ def build_portfolio_tab(
     income_rows.extend(
         (
             item["source"],
-            _cell(item["monthly_average"], "amount"),
+            CellValue(item["monthly_average"], "amount", annual_yield=item["annual_yield"]),
         )
         for item in income["items"]
-        if item["monthly_average"] not in (None, 0)
     )
     income_rows.extend(
         (
