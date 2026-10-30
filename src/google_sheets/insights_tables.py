@@ -168,16 +168,21 @@ def build_portfolio_tab(
             continue
         if len(holding_rows) > 2:
             holding_rows.append(("",))
-        if len(positions) > 1:  # a lone category row is data, not a summary
-            emphasis.append(("holdings", len(holding_rows)))
+        emphasis.append(("holdings", len(holding_rows)))
+        cash_totals = [row for row in positions if row["symbol"] == "Cash total"] if category == "Cash" else []
+        total_positions = cash_totals or positions
         total = (
-            sum(row["value_usd"] for row in positions)
-            if all(row["value_usd"] is not None for row in positions)
+            sum(row["value_usd"] for row in total_positions)
+            if all(row["value_usd"] is not None for row in total_positions)
             else None
         )
         holding_rows.append((category, _cell(total, "amount")))
         for row in positions:
-            if not row["tiny"] and row["symbol"] != category:  # symbol stays visible; skip exact category-name echo
+            if (
+                not row["tiny"]
+                and row["symbol"] != category
+                and not (category == "Cash" and row["symbol"] == "Cash total")
+            ):
                 holding_rows.append(
                     (
                         row["symbol"],
@@ -185,7 +190,10 @@ def build_portfolio_tab(
                         _percent(row["pnl_pct"]) if row["pnl_pct"] is not None else "",
                     )
                 )
-        tiny = [row for row in positions if row["tiny"]]
+        tiny = [
+            row for row in positions
+            if row["tiny"] and not (category == "Cash" and row["symbol"] == "Cash total")
+        ]
         if tiny and len(tiny) < len(positions):
             holding_rows.append(
                 (

@@ -133,8 +133,7 @@ class InsightsTablesTests(unittest.TestCase):
         self.assertIn("Commodities", labels)
         self.assertNotIn("Commodities total", labels)
         self.assertIn("AAA", labels)
-        # The subtotal tint marks groups that render rows inside them only;
-        # a lone category row is data and reads plain.
+        # Every category subtotal is emphasized, including singleton categories.
         emphasized = {
             offset for name, offset in tab.emphasis_rows if name == "holdings"
         }
@@ -143,7 +142,7 @@ class InsightsTablesTests(unittest.TestCase):
         )):
             with self.subTest(label=row[0]):
                 if row[0] in ("Cash", "Commodities", "Crypto Lending", "P2P Lending"):
-                    self.assertNotIn(index, emphasized)
+                    self.assertIn(index, emphasized)
                 if row[0] == "Stocks":  # detail + tiny rows under the subtotal
                     self.assertIn(index, emphasized)
 
