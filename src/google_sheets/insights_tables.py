@@ -272,7 +272,7 @@ def build_portfolio_tab(
         )
     income_rows = [
         ("Fixed income",),
-        ("Source", "Monthly USD"),
+        ("Source", "Monthly USD (% p.a.)"),
     ]
     income_rows.extend(
         (
