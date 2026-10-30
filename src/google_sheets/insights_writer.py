@@ -1096,6 +1096,16 @@ def _tab_requests(
         _append_format_request(
             requests,
             sheet_id,
+            end - 1,
+            end,
+            first_column,
+            first_column + 1,
+            {"textFormat": {"foregroundColor": _COLORS["text"]}},
+            "userEnteredFormat.textFormat.foregroundColor",
+        )
+        _append_format_request(
+            requests,
+            sheet_id,
             0,
             1,
             8,
