@@ -321,9 +321,9 @@ def _safeguard_zone_requests(
                                 'wrapStrategy': 'WRAP',
                                 'verticalAlignment': 'MIDDLE',
                             },
-                            'textFormatRun': value_runs,
+                            'textFormatRuns': value_runs,
                         }]}],
-                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRun',
+                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRuns',
                     }
                 }
             )
