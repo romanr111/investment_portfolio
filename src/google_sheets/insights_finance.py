@@ -305,7 +305,7 @@ def snapshot_comparison(
     }
 
 
-def income_breakdown(combined_data: dict) -> dict[str, Any]:
+def income_breakdown(combined_data: dict, *, fixed_only: bool = False) -> dict[str, Any]:
     """Separate estimated income components from transaction receipts."""
     fixed_income = combined_data.get("FIXED_INCOME_DATA")
     fixed_income = fixed_income if isinstance(fixed_income, dict) else {}
@@ -318,7 +318,7 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
     )
     stock_annual = _number(fixed_income.get("stocks_yearly"))
     if stock_annual is None and stock_principal is not None and stock_rate is not None:
-        stock_annual = stock_principal * stock_rate
+        stock_annual = _number(stock_principal * stock_rate)
 
     definitions = (
         ("Stocks", stock_principal, stock_rate, stock_annual, "Estimated"),
@@ -345,18 +345,29 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
         ),
     )
 
+    if fixed_only:
+        definitions = definitions[1:]
+
     items = []
     for source, principal, annual_rate, annual_income, state in definitions:
         if annual_income is None and principal is not None and annual_rate is not None:
-            annual_income = principal * annual_rate
+            annual_income = _number(principal * annual_rate)
         if annual_income is None:
             state = "Unavailable"
+        yield_value = (
+            annual_income / principal
+            if annual_income is not None and principal is not None and principal > 0
+            else None
+        )
+        if yield_value is not None and not math.isfinite(yield_value * 100):
+            yield_value = None
         items.append(
             {
                 "source": source,
                 "principal": principal,
                 "annual_rate": annual_rate,
                 "annual_income": annual_income,
+                "annual_yield": yield_value,
                 "monthly_average": annual_income / 12 if annual_income is not None else None,
                 "state": state,
             }
@@ -364,6 +375,28 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
 
     available = [item["annual_income"] for item in items if item["annual_income"] is not None]
     annual_total = sum(available) if available else None
+    valid_basis = all(
+        item["annual_income"] is not None
+        and item["principal"] is not None
+        and item["principal"] >= 0
+        and (item["principal"] != 0 or item["annual_income"] == 0)
+        for item in items
+    )
+    annual_principal = (
+        sum(item["principal"] for item in items) if valid_basis else None
+    )
+    if annual_principal is not None and not math.isfinite(annual_principal):
+        annual_principal = None
+    annual_yield = (
+        annual_total / annual_principal
+        if annual_total is not None
+        and math.isfinite(annual_total)
+        and annual_principal is not None
+        and annual_principal > 0
+        else None
+    )
+    if annual_yield is not None and not math.isfinite(annual_yield * 100):
+        annual_yield = None
     receipts = combined_data.get("INCOME_RECEIPTS")
     if isinstance(receipts, dict):
         receipt_view = {
@@ -385,6 +418,8 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
     return {
         "items": items,
         "annual_income": annual_total,
+        "annual_principal": annual_principal,
+        "annual_yield": annual_yield,
         "monthly_average": annual_total / 12 if annual_total is not None else None,
         "state": "Estimated" if len(available) == len(items) else "Incomplete",
         "receipts": receipt_view,

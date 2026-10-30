@@ -181,11 +181,17 @@ def _compact_format(cell: CellValue) -> dict[str, str] | None:
         decimals = max(1 if percent else 2, -math.floor(math.log10(units)))
     number = ("0" if percent else "#,##0") + ("." + "0" * decimals if decimals else "")
     prefix, suffix = ("", "%") if percent else ('"$"', "")
+    if (
+        cell.kind == "amount"
+        and cell.annual_yield is not None
+        and math.isfinite(cell.annual_yield * 100)
+    ):
+        suffix = f'" ({cell.annual_yield * 100:.1f}%)"'
     positive = "+" if cell.kind in {"money", "percent"} else ""
     return {
         "type": "PERCENT" if percent else "CURRENCY",
         "pattern": f"{positive}{prefix}{number}{suffix};-{prefix}{number}{suffix};"
-        + ("0.0%" if percent else '"$"0'),
+        + ("0.0%" if percent else '"$"0' + suffix),
     }
 
 
@@ -315,9 +321,9 @@ def _safeguard_zone_requests(
                                 'wrapStrategy': 'WRAP',
                                 'verticalAlignment': 'MIDDLE',
                             },
-                            'textFormatRun': value_runs,
+                            'textFormatRuns': value_runs,
                         }]}],
-                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRun',
+                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRuns',
                     }
                 }
             )
@@ -1087,6 +1093,16 @@ def _tab_requests(
                 },
                 "userEnteredFormat.textFormat(fontSize,bold,foregroundColor)",
             )
+        _append_format_request(
+            requests,
+            sheet_id,
+            end - 1,
+            end,
+            first_column,
+            first_column + 1,
+            {"textFormat": {"foregroundColor": _COLORS["text"]}},
+            "userEnteredFormat.textFormat.foregroundColor",
+        )
         _append_format_request(
             requests,
             sheet_id,

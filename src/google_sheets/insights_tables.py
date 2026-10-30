@@ -128,7 +128,7 @@ def build_portfolio_tab(
         combined_data, previous_snapshot, valuation_date, previous_date
     )
     liquidity = liquidity_ladder(combined_data, settings)
-    income = income_breakdown(combined_data)
+    income = income_breakdown(combined_data, fixed_only=True)
     fire = fire_progress(combined_data, settings)
     statuses = source_statuses(combined_data)
     twr = _number((combined_data.get("IB_PERFORMANCE") or {}).get("rate_of_return_pct"))
@@ -168,16 +168,21 @@ def build_portfolio_tab(
             continue
         if len(holding_rows) > 2:
             holding_rows.append(("",))
-        if len(positions) > 1:  # a lone category row is data, not a summary
-            emphasis.append(("holdings", len(holding_rows)))
+        emphasis.append(("holdings", len(holding_rows)))
+        cash_totals = [row for row in positions if row["symbol"] == "Cash total"] if category == "Cash" else []
+        total_positions = cash_totals or positions
         total = (
-            sum(row["value_usd"] for row in positions)
-            if all(row["value_usd"] is not None for row in positions)
+            sum(row["value_usd"] for row in total_positions)
+            if all(row["value_usd"] is not None for row in total_positions)
             else None
         )
         holding_rows.append((category, _cell(total, "amount")))
         for row in positions:
-            if not row["tiny"] and row["symbol"] != category:  # symbol stays visible; skip exact category-name echo
+            if (
+                not row["tiny"]
+                and row["symbol"] != category
+                and not (category == "Cash" and row["symbol"] == "Cash total")
+            ):
                 holding_rows.append(
                     (
                         row["symbol"],
@@ -185,7 +190,10 @@ def build_portfolio_tab(
                         _percent(row["pnl_pct"]) if row["pnl_pct"] is not None else "",
                     )
                 )
-        tiny = [row for row in positions if row["tiny"]]
+        tiny = [
+            row for row in positions
+            if row["tiny"] and not (category == "Cash" and row["symbol"] == "Cash total")
+        ]
         if tiny and len(tiny) < len(positions):
             holding_rows.append(
                 (
@@ -271,16 +279,15 @@ def build_portfolio_tab(
             ("Accessible cash", _cell(liquidity["cash_available_now"], "amount"))
         )
     income_rows = [
-        ("Estimated income",),
-        ("Source", "Monthly USD"),
+        ("Fixed income",),
+        ("Source", "Monthly USD (% p.a.)"),
     ]
     income_rows.extend(
         (
             item["source"],
-            _cell(item["monthly_average"], "amount"),
+            CellValue(item["monthly_average"], "amount", annual_yield=item["annual_yield"]),
         )
         for item in income["items"]
-        if item["monthly_average"] not in (None, 0)
     )
     income_rows.extend(
         (
@@ -291,11 +298,17 @@ def build_portfolio_tab(
                 _cell(income["monthly_average"], "amount"),
             ),
             (
-                "Annual estimate",
-                _cell(
-                    income["annual_income"],
-                    "amount",
+                "Annual estimate"
+                + (
+                    " (partial)"
+                    if income["state"] == "Incomplete" and income["annual_income"] is not None
+                    else ""
                 ),
+                CellValue(
+                    income["annual_income"], "amount", annual_yield=income["annual_yield"]
+                )
+                if income["annual_income"] is not None
+                else _cell(None, "amount"),
             ),
         )
     )
@@ -348,7 +361,7 @@ def build_portfolio_tab(
         row_groups=(),
         freeze_rows=2,
         freeze_columns=4,
-        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 115),
+        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 185),
         emphasis_rows=tuple(emphasis),
         pnl_columns=(("holdings", 2),),
     )
