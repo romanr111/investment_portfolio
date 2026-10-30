@@ -305,7 +305,7 @@ def snapshot_comparison(
     }
 
 
-def income_breakdown(combined_data: dict) -> dict[str, Any]:
+def income_breakdown(combined_data: dict, *, fixed_only: bool = False) -> dict[str, Any]:
     """Separate estimated income components from transaction receipts."""
     fixed_income = combined_data.get("FIXED_INCOME_DATA")
     fixed_income = fixed_income if isinstance(fixed_income, dict) else {}
@@ -344,6 +344,9 @@ def income_breakdown(combined_data: dict) -> dict[str, Any]:
             "Manual estimate",
         ),
     )
+
+    if fixed_only:
+        definitions = definitions[1:]
 
     items = []
     for source, principal, annual_rate, annual_income, state in definitions:

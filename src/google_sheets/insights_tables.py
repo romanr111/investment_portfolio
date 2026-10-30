@@ -128,7 +128,7 @@ def build_portfolio_tab(
         combined_data, previous_snapshot, valuation_date, previous_date
     )
     liquidity = liquidity_ladder(combined_data, settings)
-    income = income_breakdown(combined_data)
+    income = income_breakdown(combined_data, fixed_only=True)
     fire = fire_progress(combined_data, settings)
     statuses = source_statuses(combined_data)
     twr = _number((combined_data.get("IB_PERFORMANCE") or {}).get("rate_of_return_pct"))
@@ -271,7 +271,7 @@ def build_portfolio_tab(
             ("Accessible cash", _cell(liquidity["cash_available_now"], "amount"))
         )
     income_rows = [
-        ("Estimated income",),
+        ("Fixed income",),
         ("Source", "Monthly USD"),
     ]
     income_rows.extend(
