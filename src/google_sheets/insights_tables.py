@@ -353,7 +353,7 @@ def build_portfolio_tab(
         row_groups=(),
         freeze_rows=2,
         freeze_columns=4,
-        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 150),
+        column_widths=(190, 120, 100, 190, 110, 80, 150, 160, 100, 28, 220, 185),
         emphasis_rows=tuple(emphasis),
         pnl_columns=(("holdings", 2),),
     )
