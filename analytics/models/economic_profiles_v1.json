@@ -577,6 +577,23 @@
     ],
     "issuer": "alibaba"
   },
+  "ib:BRK.B": {
+    "as_of_date": "2026-09-30",
+    "issuer": "berkshire_hathaway",
+    "core": true,
+    "exclude_direct_issuer_concentration": true,
+    "reviewed_at": "2026-10-26",
+    "source": "capital_diversification_v1: reviewed economic classification",
+    "components": [
+      {
+        "group": "equity_us",
+        "share": 1,
+        "sectors": {
+          "Financials": 1
+        }
+      }
+    ]
+  },
   "ib:BRK-B": {
     "as_of_date": "2026-09-30",
     "issuer": "berkshire_hathaway",
