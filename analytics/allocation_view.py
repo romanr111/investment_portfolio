@@ -116,7 +116,7 @@ def _concentration(section):
         if not isinstance(facts, dict) or not isinstance(limits, dict):
             return None
         largest, top4 = facts['largest_issuer'], facts['top4_issuers']
-        raw_id = largest['id'] if isinstance(largest['id'], str) else str(largest['id'])
+        raw_id = largest['id'] if isinstance(largest['id'], str) else 'Немає'
         issuer_id = raw_id.split(':', 1)[1] if raw_id.startswith('ib:') else raw_id
         over_limit = []
         for entry in facts.get('issuers_over_limit') or []:
