@@ -451,7 +451,7 @@ def sheet_detail_rows(rows):
     return packed
 
 
-def allocation_view_v2(data, expected_date=None):
+def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
     """Present only whitelisted fields from a fully replayed v2 record."""
     from analytics.allocation_v2_inputs import validate_saved_allocation_v2
     from analytics.diversification_view import _empty
@@ -501,7 +501,7 @@ def allocation_view_v2(data, expected_date=None):
                 label += ' · Не всі сценарії доступні'
             if result['status'] == 'provisional': label += ' · Попередньо'
             from analytics.car_resale_market import conclusion_note
-            view['conclusion_note'] = conclusion_note(result, data.get('CAR_RESALE_MARKET_CONTEXT'))
+            view['conclusion_note'] = conclusion_note(result, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc)
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
             definitions = result['configuration']['group_definitions']
             largest = group_label(groups[0]['id'], definitions) + ': ' + _pct(groups[0]['weight'] * 100)

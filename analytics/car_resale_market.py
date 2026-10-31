@@ -69,12 +69,12 @@ def build_context(cutoff, observations):
     return result
 
 
-def validated_context(context, as_of_date):
+def validated_context(context, saved_at_utc):
     try:
         if not isinstance(context, dict) or context.get('version') != VERSION:
             return None
         cutoff = _instant(context['cutoff'])
-        if cutoff.date() > date.fromisoformat(as_of_date):
+        if cutoff > _instant(saved_at_utc):
             return None
         source_rows = [{k: v for k, v in row.items() if k != 'change_pct'}
                        for row in context['observations']]
@@ -83,7 +83,7 @@ def validated_context(context, as_of_date):
         return None
 
 
-def conclusion_note(result, context):
+def conclusion_note(result, context, saved_at_utc=None):
     """Explain saved scenarios and optional verified context without changing the score."""
     lines = ['Оцінка інвестованої частини. Бізнесова кореляція - припущення, не вимірювання.']
     scenarios = result.get('scenarios', {})
@@ -100,7 +100,7 @@ def conclusion_note(result, context):
                 text += ' - ' + category
             lines.append(label + ': ' + text)
     lines.append('Історія та припущення не гарантують майбутній результат. Кеш поза балом.')
-    valid = validated_context(context, result['as_of_date'])
+    valid = validated_context(context, saved_at_utc)
     if valid:
         lines.append('Ринковий контекст станом на ' + valid['cutoff'][:10] +
                      '; не прибуток і не кореляція бізнесу:')

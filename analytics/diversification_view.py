@@ -40,13 +40,13 @@ def _legacy(data,expected_date):
     return view
 
 
-def _saved_diversification_view(data,expected_date=None):
+def _saved_diversification_view(data,expected_date=None,saved_at_utc=None):
     data=data.get('data',data)
     if 'DIVERSIFICATION_DATA' not in data: return _legacy(data,expected_date)
     q=data['DIVERSIFICATION_DATA']
     if isinstance(q,dict) and 'allocation_score_v2' in q:
         from analytics.allocation_view import allocation_view_v2
-        return allocation_view_v2(data,expected_date)
+        return allocation_view_v2(data,expected_date,saved_at_utc)
     if isinstance(q,dict) and 'allocation_score' in q:
         from analytics.allocation_view import allocation_view
         view = allocation_view(data,expected_date)
@@ -146,9 +146,9 @@ def _saved_diversification_view(data,expected_date=None):
                 critical_text=critical_text,warnings=warnings,principal_constraint=principal_constraint,headline_warning=headline_warning)
 
 
-def saved_diversification_view(data,expected_date=None):
+def saved_diversification_view(data,expected_date=None,saved_at_utc=None):
     """Malformed optional data must never break ordinary Sheets/report rendering."""
     try:
-        return _saved_diversification_view(data,expected_date)
+        return _saved_diversification_view(data,expected_date,saved_at_utc)
     except (ValueError,TypeError,KeyError,AttributeError,OverflowError):
         return _empty('Некоректний формат збереженої оцінки')

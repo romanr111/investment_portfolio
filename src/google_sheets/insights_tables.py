@@ -108,6 +108,7 @@ def build_portfolio_tab(
     previous_snapshot: Optional[dict] = None,
     previous_date: Optional[str] = None,
     current_date: Optional[str] = None,
+    saved_at_utc: Optional[str] = None,
 ) -> InsightTab:
     """Build the one dated compact portfolio snapshot; no worksheet discovery or I/O.
 
@@ -313,7 +314,7 @@ def build_portfolio_tab(
         )
     )
     has_diversification = 'DIVERSIFICATION_DATA' in combined_data or 'HOLY_GRAIL_DATA' in combined_data
-    view = saved_diversification_view(combined_data, expected_date=valuation_date) if has_diversification else None
+    view = saved_diversification_view(combined_data, expected_date=valuation_date, saved_at_utc=saved_at_utc) if has_diversification else None
     if view is not None and view.get('allocation'):
         summary = [tuple(row) for row in view['sheet_summary']]
         if view.get('conclusion_note'):
