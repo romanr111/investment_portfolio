@@ -488,27 +488,20 @@ def allocation_view_v2(data, expected_date=None):
                         safeguard_summary=(safeguards or {}).get('summary') or [])
         else:
             assessment = result['assessment']
-            if assessment['combined_dependent'] or (assessment['business_dependent'] and assessment['window_dependent']):
-                label = 'Оцінка залежить від припущень і періоду'
-            elif assessment['business_dependent']:
-                label = 'Оцінка залежить від припущень'
-            elif assessment['window_dependent']:
-                label = 'Оцінка залежить від періоду'
-            else:
-                label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
-                         'well_diversified': LABELS[2]}[result['category']]
-            if assessment['combined_dependent'] or assessment['business_dependent'] or assessment['window_dependent']:
-                scored = [(key, scenario) for key, scenario in result['scenarios'].items()
-                          if scenario.get('display_score') is not None]
-                if scored:
-                    worst_key, worst = min(scored, key=lambda item: (item[1]['display_score'], item[0]))
-                    when = ('при бізнесовій кореляції 0,75' if worst_key.endswith('_r075') else
-                            'при бізнесовій кореляції 0,25' if worst_key.endswith('_r025') else
-                            'за 36-місячним вікном' if worst_key.startswith('m36') else 'за 60-місячним вікном')
-                    worst_label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
-                                   'well_diversified': LABELS[2]}[worst['category']]
-                    label = worst_label + ' ' + when + ' · ' + label
-            if result['status'] == 'provisional': label += ' · Попередня оцінка'
+            label = {'concentrated': 'Концентрований',
+                     'partly_diversified': 'Часткова диверсифікація',
+                     'well_diversified': 'Добра диверсифікація'}[result['category']]
+            if assessment['business_dependent']:
+                label += ' · Чутлива до автобізнесу'
+            if assessment['window_dependent']:
+                label += ' · Залежить від періоду'
+            if assessment['combined_dependent']:
+                label += ' · Залежить від сценарію'
+            if assessment['available'] != assessment['expected']:
+                label += ' · Не всі сценарії доступні'
+            if result['status'] == 'provisional': label += ' · Попередньо'
+            from analytics.car_resale_market import conclusion_note
+            view['conclusion_note'] = conclusion_note(result, data.get('CAR_RESALE_MARKET_CONTEXT'))
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
             definitions = result['configuration']['group_definitions']
             largest = group_label(groups[0]['id'], definitions) + ': ' + _pct(groups[0]['weight'] * 100)

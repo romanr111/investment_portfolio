@@ -27,6 +27,7 @@ class CellValue:
     value: Any
     kind: str
     annual_yield: float | None = None
+    note: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in _SUPPORTED_KINDS:

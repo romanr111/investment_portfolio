@@ -316,6 +316,11 @@ def build_portfolio_tab(
     view = saved_diversification_view(combined_data, expected_date=valuation_date) if has_diversification else None
     if view is not None and view.get('allocation'):
         summary = [tuple(row) for row in view['sheet_summary']]
+        if view.get('conclusion_note'):
+            for index, (label, value) in enumerate(summary):
+                if label == 'Висновок':
+                    summary[index] = (label, CellValue(value, 'status', note=view['conclusion_note']))
+                    break
         kind = view.get('number_kind', 'allocation_score')
     elif view is not None and view.get('indicator'):
         summary = [('Holy Grail: еквівалент джерел',view['sheet_number']),('Орієнтир','15–20'),
