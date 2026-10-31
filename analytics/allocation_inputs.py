@@ -48,6 +48,7 @@ def allocation_settings(settings):
     if method != 'capital_diversification_v2':
         raise ValueError('Unknown allocation method')
     config['method_version'] = method
+    config['concentration_round_decimals'] = 1
     for key in ('concentration_limits', 'linked_theses', 'concentration_decisions'):
         if key in config and not isinstance(config[key], dict):
             raise ValueError('Invalid ' + key + ' settings')
