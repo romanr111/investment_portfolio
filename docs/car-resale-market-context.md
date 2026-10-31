@@ -8,4 +8,4 @@ Each observation needs `id`, `label`, `value` (a number or null), `unit`, `perio
 
 The frozen block includes a version, cutoff, observations and fingerprint. The view validates and replays it before rendering the source-dated note. Missing, altered or invalid context is shown as unavailable. Collection is manual; no automatic updates or assumptions about the next snapshot are made.
 
-Generated notes begin with the portfolio note marker. The Sheets writer only replaces or clears notes bearing that marker within its recorded owned range; a different note at the target is a conflict. Existing full-sheet writes remain subject to their usual preflight, and a separate live refresh is required to validate the entire production flow.
+Generated notes end with the portfolio note marker. The Sheets writer only replaces or clears notes bearing that marker within its recorded owned range; a different note at the target is a conflict. It also recognizes notes from the earlier marker-first format. Existing full-sheet writes remain subject to their usual preflight, and a separate live refresh is required to validate the entire production flow.

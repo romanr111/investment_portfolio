@@ -85,14 +85,20 @@ def validated_context(context, as_of_date):
 
 def conclusion_note(result, context):
     """Explain saved scenarios and optional verified context without changing the score."""
-    lines = [NOTE_MARKER, 'Оцінка інвестованої частини. Бізнесова кореляція - припущення, не вимірювання.']
+    lines = ['Оцінка інвестованої частини. Бізнесова кореляція - припущення, не вимірювання.']
     scenarios = result.get('scenarios', {})
     for key, label in [('m60_r025', 'Базовий: 60 міс., кореляція 0,25'),
                        ('m60_r075', 'Стрес: 60 міс., кореляція 0,75'),
                        ('m60', 'Базовий: 60 міс.')]:
         if key in scenarios:
             score = scenarios[key].get('display_score')
-            lines.append(label + ': ' + (str(score) + '/100' if score is not None else 'недоступно'))
+            category = {'concentrated': 'концентрований',
+                        'partly_diversified': 'часткова диверсифікація',
+                        'well_diversified': 'добра диверсифікація'}.get(scenarios[key].get('category'))
+            text = str(score) + '/100' if score is not None else 'недоступно'
+            if score is not None and category:
+                text += ' - ' + category
+            lines.append(label + ': ' + text)
     lines.append('Історія та припущення не гарантують майбутній результат. Кеш поза балом.')
     valid = validated_context(context, result['as_of_date'])
     if valid:
@@ -110,4 +116,5 @@ def conclusion_note(result, context):
             lines.append(f"{row['label']}: {text}; {row['period']}. {row['limitation']} {row['url']}")
     else:
         lines.append('Ринковий контекст: дані недоступні або не додані до цього знімка.')
+    lines.append(NOTE_MARKER)
     return '\n'.join(lines)
