@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import hashlib
 from copy import deepcopy
 from datetime import date, datetime, timedelta
@@ -229,6 +230,23 @@ def _breach_value_runs(text: str) -> list[dict[str, Any]]:
     return runs
 
 
+def _breach_color(text: str) -> dict[str, float]:
+    """Shade by largest displayed percentage-point deviation, capped at 10 pp."""
+    parts = re.split(r'\s*\((?:ліміт|ціль ≥)', text, maxsplit=1)
+    if len(parts) != 2:
+        return _COLORS['breach_zone']
+    def percentages(s):
+        return [float(x.replace(',', '.')) for x in re.findall(r'(\d+(?:[,.]\d+)?)%', s)]
+    values, limits = percentages(parts[0]), percentages(parts[1].split(')')[0])
+    if not values or len(values) != len(limits):
+        return _COLORS['breach_zone']
+    distance = max(abs(value - limit) for value, limit in zip(values, limits))
+    strength = min(distance / 10., 1.)
+    light, strong = (1., .97, .96), (1., .68, .63)
+    return dict(zip(('red', 'green', 'blue'),
+                    (a + (b - a) * strength for a, b in zip(light, strong))))
+
+
 def _safeguard_zone_requests(
     sheet_id: int,
     rows: tuple,
@@ -278,6 +296,8 @@ def _safeguard_zone_requests(
         else:
             fill, resolved = 'score_zone', False
             value_runs = None
+        background = (_breach_color(value) if fill == 'breach_zone'
+                      else _COLORS[fill])
         # Height fits the wrapped text (labels and values share the row):
         # 10pt lines ≈ 13px + padding; floors 26 keep single-line rows airy.
         lines = max(_wrap_lines(label, label_width), _wrap_lines(value, value_width))
@@ -286,7 +306,7 @@ def _safeguard_zone_requests(
             requests, sheet_id, row_index, row_index + 1,
             first_column, first_column + 2,
             {
-                'backgroundColor': _COLORS[fill],
+                'backgroundColor': background,
                 'textFormat': {'bold': True, 'foregroundColor': _COLORS['text'],
                                'fontSize': 10},
             },
@@ -311,13 +331,13 @@ def _safeguard_zone_requests(
                                   'columnIndex': first_column + 1},
                         'rows': [{'values': [{
                             'userEnteredFormat': {
-                                'backgroundColor': _COLORS[fill],
+                                'backgroundColor': background,
                                 'wrapStrategy': 'WRAP',
                                 'verticalAlignment': 'MIDDLE',
                             },
-                            'textFormatRun': value_runs,
+                            'textFormatRuns': value_runs,
                         }]}],
-                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRun',
+                        'fields': 'userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment),textFormatRuns',
                     }
                 }
             )

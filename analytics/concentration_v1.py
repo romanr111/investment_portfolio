@@ -306,12 +306,31 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
     needs its frozen group weights, correlation pairs and sector map, so it is
     computed only when the car group has a positive weight and the main
     scenario was scored.
+    Configurations with concentration_round_decimals=1 compare displayed
+    percentages; older frozen configurations retain exact comparisons.
     """
     from analytics.allocation_inputs import profile_for
     total = float(total)
     if not math.isfinite(total) or total <= 0:
         raise ValueError('invalid_total')
     limits = _merged_limits(config)
+    decimals = config.get('concentration_round_decimals')
+    if decimals not in (None, 1):
+        raise ValueError('Invalid concentration rounding policy')
+
+    def displayed(value):
+        # Match the view's special label for positive values below 0.1%.
+        return .05 if 0 < value < .1 else float(f'{value:.1f}')
+
+    def above(value, limit):
+        if decimals is not None:
+            return displayed(value) > displayed(limit)
+        return value > limit + EPS
+
+    def below(value, limit):
+        if decimals is not None:
+            return displayed(value) < displayed(limit)
+        return value < limit - EPS
     issuers, thesis_equity, positions_equity = {}, {}, {}
     equities = invested = core = china = car = uncovered = 0.
     tails, stale = [], 0.
@@ -388,7 +407,7 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
         # only an unverified risk when one unlisted issuer times the fund's
         # equity share could clear the issuer limit on its own - otherwise it
         # is verified too small to breach anything.
-        if tail_equity * max_other / equities * 100 > limits['issuer_pct_equities'] + EPS:
+        if above(tail_equity * max_other / equities * 100, limits['issuer_pct_equities']):
             uncovered += tail_equity * tail_unknown
     linked = config.get('linked_theses') if isinstance(config.get('linked_theses'), dict) else {}
     for name, thesis in sorted(linked.items()):
@@ -411,8 +430,8 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
                              if equities > 0 else 0.),
         'issuers_over_limit': [dict(id=issuer, pct_equities=pct_eq, pct_nav=pct_nav)
                                for issuer, pct_eq, pct_nav in issuer_pcts
-                               if pct_eq > limits['issuer_pct_equities'] + EPS
-                               or pct_nav > limits['issuer_pct_nav'] + EPS],
+                               if above(pct_eq, limits['issuer_pct_equities'])
+                               or above(pct_nav, limits['issuer_pct_nav'])],
         'core_pct_equities': core / equities * 100 if equities > 0 else 0.,
         'country_pct_equities': ({'china': china / equities * 100} if china > EPS and equities > 0 else {}),
         'thesis_pct_equities': ({name: amount / equities * 100 for name, amount in sorted(thesis_equity.items())}
@@ -425,21 +444,21 @@ def build_block(positions, config, total, as_of_date, v2_result=None):
     breaches = []
     if equities > EPS:
         for issuer, pct_eq, pct_nav in issuer_pcts:
-            if pct_eq > limits['issuer_pct_equities'] + EPS:
+            if above(pct_eq, limits['issuer_pct_equities']):
                 breaches.append(dict(limit=ISSUER_EQ_PREFIX + issuer, value=pct_eq, decision_id=None))
-            if pct_nav > limits['issuer_pct_nav'] + EPS:
+            if above(pct_nav, limits['issuer_pct_nav']):
                 breaches.append(dict(limit=ISSUER_NAV_PREFIX + issuer, value=pct_nav, decision_id=None))
-        if facts['top4_issuers']['pct_equities'] > limits['top4_pct_equities'] + EPS:
+        if above(facts['top4_issuers']['pct_equities'], limits['top4_pct_equities']):
             breaches.append(dict(limit='top4_pct_equities', value=facts['top4_issuers']['pct_equities'],
                                  decision_id=None))
-        if facts['core_pct_equities'] < limits['core_min_pct_equities'] - EPS:
+        if below(facts['core_pct_equities'], limits['core_min_pct_equities']):
             breaches.append(dict(limit='core_min_pct_equities', value=facts['core_pct_equities'], decision_id=None))
         china_value = facts['country_pct_equities'].get('china', 0.)
-        if china_value > limits['country_pct_equities_china'] + EPS:
+        if above(china_value, limits['country_pct_equities_china']):
             breaches.append(dict(limit='country_pct_equities_china', value=china_value, decision_id=None))
         for name, value in facts['thesis_pct_equities'].items():
             thesis_limit = _thesis_limit(config, name, limits)
-            if thesis_limit is not None and value > thesis_limit + EPS:
+            if thesis_limit is not None and above(value, thesis_limit):
                 breaches.append(dict(limit=THESIS_LIMIT_PREFIX + name, value=value, decision_id=None))
     warnings = []
     if any(breach['limit'].startswith(ISSUER_EQ_PREFIX) or breach['limit'].startswith(ISSUER_NAV_PREFIX)
