@@ -172,7 +172,7 @@ def _concentration(section):
         if not isinstance(facts, dict) or not isinstance(limits, dict):
             return None
         largest, top4 = facts['largest_issuer'], facts['top4_issuers']
-        raw_id = largest['id'] if isinstance(largest['id'], str) else str(largest['id'])
+        raw_id = largest['id'] if isinstance(largest['id'], str) else 'Немає'
         issuer_id = raw_id.split(':', 1)[1] if raw_id.startswith('ib:') else raw_id
         over_limit = []
         for entry in facts.get('issuers_over_limit') or []:
@@ -581,6 +581,8 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             if assessment['available'] != assessment['expected']:
                 label += ' · Не всі сценарії доступні'
             if shown['status'] == 'provisional': label += ' · Попередньо'
+            if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
+                label += ' · Припущення v2: блок категорії авто недоступний'
             from analytics.car_resale_market import conclusion_note
             view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc,
                                                       progress_lines)

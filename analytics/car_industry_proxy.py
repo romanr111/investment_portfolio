@@ -41,7 +41,7 @@ def _stats(returns):
     wealth = (1 + r).cumprod()
     return dict(ann_return=wealth.iloc[-1] ** (12 / len(r)) - 1,
                 ann_vol=r.std() * math.sqrt(12),
-                max_drawdown=(wealth / wealth.cummax() - 1).min())
+                max_drawdown=(wealth / wealth.cummax().clip(lower=1.0) - 1).min())  # peak starts at the initial capital 1
 
 
 def _interval(r, n, z=1.645):  # 90% Fisher interval
