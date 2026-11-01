@@ -564,7 +564,12 @@ emerging markets, crypto and EUR high yield; Manheim history is revised (raw fil
 sha256 is recorded) and Cox is an interested party; the stress measure uses the
 same long-history sample in the 60 and 36-month scenarios, so the window
 sensitivity of the category scenarios is understated; US and EU data say nothing
-about Ukrainian customs, VAT, FX or war channels. The refresh is quarterly:
-rebuild the block after the quarter's last Manheim month (`just car-category
-build ...`), copy it to `data/car_category/block_latest.json`, then run the
-normal pipeline.
+about Ukrainian customs, VAT, FX or war channels. The refresh is monthly, not
+quarterly: a block is accepted only while its last month is at most one month
+behind the completed month of the snapshot (`max_index_lag_months` in
+`analytics/car_category.py`), so a block ending in September serves snapshots
+through 29 November and is rejected from 30 November. Rebuild the block each
+month after Manheim publishes (about a week into the next month; `just
+car-category build ...`), copy it to `data/car_category/block_latest.json`, then
+run the normal pipeline. A stale block gives the explicit `unavailable` v3
+record and the v2 assumption numbers with a warning (see Gates above).
