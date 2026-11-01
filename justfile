@@ -37,6 +37,10 @@ holy-grail *args:
 holy-grail-sheet *args:
     venv/bin/python -m analytics.holy_grail_sheet {{args}}
 
+# Car-business correlation bound from public drivers (bounded, unmeasured).
+car-bound *args:
+    venv/bin/python -m analytics.car_business_bound {{args}}
+
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:
     #!/usr/bin/env bash
