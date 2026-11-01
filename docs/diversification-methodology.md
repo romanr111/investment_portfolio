@@ -1,5 +1,19 @@
 # Portfolio diversification indicators
 
+> Reader's guide: the current base method is "Capital diversification v2", with
+> "Concentration safeguards beside the score" and "Offline what-if scenarios"
+> under it (near the end of this file). Two optional sibling records follow it:
+> "Capital diversification v3 (car-category pairs)" for the car-business pairs,
+> and, as the last sections, "Risk progress (`risk_progress_v1`)" with
+> "Car-business scenarios (`car_proxies_v1`)". Public car-market context and
+> the category evidence are in `docs/car-resale-market-context.md` and
+> `docs/car-flip-category-evidence.md`. "Historical capital-weighted score (v1)",
+> "Count and interpretation", "Ten-check policy", "Hypothetical stress policy"
+> and "Simple Holy Grail indicator (v1)" describe frozen historical records.
+> "Private evidence and collection" also covers the retired calculators' inputs,
+> but the `diversification.exposures` record format it defines is still read by
+> v2 for risk facts.
+
 ## Historical capital-weighted score (v1)
 
 The following v1 description applies only to existing historical records. New
@@ -574,3 +588,120 @@ month after Manheim publishes (about a week into the next month; `just
 car-category build ...`), copy it to `data/car_category/block_latest.json`, then
 run the normal pipeline. A stale block gives the explicit `unavailable` v3
 record and the v2 assumption numbers with a warning (see Gates above).
+
+## Risk progress (`risk_progress_v1`)
+
+A separate method that asks a different question from the capital score: how
+many independent, equal-risk return streams does the current mix behave like.
+It is a sibling derived from a saved, replayed `capital_diversification_v2`
+record (`analytics/holy_grail_risk_progress.py`) and is never mixed into v2/v3
+trends. It is saved beside v2 and v3 only when a frozen car proxy block is
+supplied (`car_proxies`, see "Car-business scenarios"): the dated worksheet
+then shows one extra summary row, "Ризиковий прогрес", after the scenario
+spread and a paragraph in the conclusion note. Without a block nothing is
+saved and every view is unchanged. It revives the formula of the retired
+`risk_equivalent_streams_v1` on a different basis (frozen v2 group histories
+instead of position series).
+
+```
+DR = sum(w_i * sigma_i) / sqrt(wᵀΣw)      N_DR = DR²      volatility reduction = 100 * (1 - 1/DR)
+progress = 100 * clip((N_DR - 1) / (15 - 1), 0, 1)
+```
+
+- Streams are the v2 groups that have a return history (one representative
+  series each); weights are the v2 invested weights, used as they are (DR does
+  not depend on a common scale). Σ is the sample covariance (ddof 1) of the
+  monthly returns on the common months only; missing months are never filled
+  with zeros. Raw Ledoit-Wolf is deliberately not used: on the 29 Oct 2026
+  data it inflated the 0-1 year Treasury volatility 13.7 times and made the
+  count depend on duplicating a stream (3.096 versus 3.130), which the sample
+  covariance does not (2.229 exactly).
+- Windows: 60 completed months (headline) and the latest 36 (comparison).
+  `modeled` needs every month of the window up to the last completed month;
+  36-59 common months are `provisional`; fewer than 36, a non-finite or
+  non-positive-semidefinite covariance, or zero volatility is an explicit
+  `unavailable` with a reason, never a number. A count above the number of
+  streams is flagged `hedge_driven_count` (negative correlations can exceed
+  the stream count).
+- The scale is a policy choice: the target of 15 streams maps linearly to 100
+  (15 equal-risk uncorrelated streams cut modeled volatility by 74.18%).
+  It is not a percentage of risk. The display is rounded down to one decimal
+  and reads 100.0 only when the target is reached. The CLI prints a
+  25-stream reference only as a sensitivity, outside the saved record.
+- Scope of the headline: only groups with a return history. `car_business` has
+  none and is excluded and reported (share of invested capital and NAV); it is
+  never replaced by a proxy in the headline, and appears only in the labeled
+  scenarios below. Cash is outside the metric. The record carries
+  `partial_scope_excluded_weight` while anything is excluded, so the headline
+  describes the covered part of the invested capital, not the whole portfolio.
+- What it does not say: it measures risk balance of today's weights over past
+  months (a retrospective view of the current mix), not the quality of the
+  holdings or an expected return after costs, and one ETF stands for each
+  group. Equal risk across streams does not make the return attractive, so a
+  high count is not an automatic "Holy Grail achieved".
+- The record stores per-window counts, the diversification ratio, variance
+  shares and annualized volatilities per group, coverage, the method and its
+  fingerprint, and the identifiers of the v2 record it was derived from.
+  `validate_saved_risk_progress_v1` replays the v2 record and recomputes the
+  whole result from its frozen histories (and the embedded proxy block).
+
+```bash
+just risk-progress --snapshot data/snapshots/combined_data_<date>_<timestamp>.json [--car-proxies PATH] [--json] [--out NEW_FILE]
+```
+
+The command validates the saved v2 record by replay before showing a number,
+changes no snapshot, fetches nothing and never writes Sheets. `--out` writes a
+new file only, outside the automatic snapshot directories. `--car-proxies`
+defaults to `data/car_category/proxies_latest.json` when that file exists.
+
+### Car-business scenarios (`car_proxies_v1`)
+
+Public data cannot measure the owner's own business. A scenario answers a
+narrower question: if the business behaved like this public series, would it
+correlate with the rest of the portfolio, and how would the count change. The
+answer is an assumption, shown as a range, never the headline.
+
+- Proxies (`analytics/car_risk_proxies.py`): Manheim Used Vehicle Value Index
+  (US wholesale), BLS CPI used cars and trucks, seasonally adjusted (US retail),
+  AUTO1 Group Price Index (EU wholesale; read from a web page, medium
+  confidence) and the equal-weight total return of CPRT, KMX and OPLN (listed
+  remarketers, priced like equities; all three names are required, other CSV
+  columns are ignored, and a CSV missing a name leaves the proxy out as
+  `missing_basket_names`; the names are part of the block method). A Eurostat
+  France series was dropped: it ends in 2025 and is smoothed.
+- Frozen block: `just car-proxies build --raw DIR --proxy-csv CSV --as-of DATE
+  --out data/car_category/proxies_<date>.json` converts each series to monthly
+  simple returns, trims it to the last completed month before the snapshot
+  date, keeps the latest 120 months and records the SHA-256 of every raw file.
+  It runs offline and refuses to overwrite. `validate_block` rejects a changed
+  value, method or series name, data after the cutoff (look-ahead), a series
+  more than one month stale and fewer than 36 months. Copy the block to
+  `data/car_category/proxies_latest.json` for `just run` (or pass
+  `--car-proxies PATH` to `just holy-grail`); the folder is git-ignored.
+  Rebuild the block monthly, after the series publish: every series must end
+  within one month of the completed month of the snapshot, so a block whose
+  oldest series ends in September serves snapshots through 29 November; from
+  30 November the record keeps the headline and shows the scenarios as
+  unavailable (`invalid_car_proxies_block`).
+- Scenario: the car business is added as one more stream carrying the proxy's
+  returns at its unchanged v2 weight, with the same common-month rule on the
+  60-month window. Each scenario reports the count, the points, the change of
+  the count against the covered part on the same months as the scenario (a
+  proxy shorter than the headline sample is compared with the covered-only
+  count on its own months, `baseline_streams`, so a change of sample is not
+  read as an effect), the correlation of the proxy with the
+  covered portfolio return and with US equities, its annual volatility, a
+  relation class by absolute correlation with the covered portfolio (below
+  0.25 not correlated, 0.25 to below 0.75 moderately, 0.75 and above
+  correlated) and the effect (adds or reduces diversification).
+- Reading the range: price indexes move far less than a leveraged inventory
+  business and barely correlate with the other groups, so they raise the count;
+  the listed basket moves like equities and lowers it. The range is wide on
+  purpose. Which one is closer to the real business needs the owner's own
+  monthly history (not available).
+- The record embeds a copy of the block. An invalid or missing block makes only
+  the scenarios unavailable (`invalid_car_proxies_block`); the headline stays.
+- Worksheet row: `<points> зі 100 · <count> з 15 потоків · покрито <share> ·
+  з автобізнесом <low>-<high> (припущення)`. The count is rounded down to one
+  decimal like the points. A record that does not replay shows "Недоступно" and
+  no number.

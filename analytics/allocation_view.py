@@ -77,6 +77,59 @@ def group_label(identifier, definitions):
     return definitions.get(identifier,{}).get('label','Непокриті позиції')
 
 
+_PROXY_LABELS = {'manheim_wholesale': 'Manheim (США, гурт)', 'bls_used_retail': 'BLS CPI вживані авто (США, роздріб)',
+                 'auto1_wholesale_eu': 'AUTO1 (Європа, гурт)', 'listed_remarketers': 'Акції CPRT/KMX/OPLN (кошик)'}
+_RELATIONS = {'not_correlated': 'не корелює', 'moderately_correlated': 'помірно корелює', 'correlated': 'корелює'}
+_EFFECTS = {'adds_diversification': 'додає диверсифікацію', 'reduces_diversification': 'знижує диверсифікацію',
+            'neutral': 'не змінює диверсифікацію'}
+
+
+def _floor1(value):
+    """One decimal, rounded down, so a displayed count never overstates the computed one."""
+    return f'{math.floor(value * 10 + 1e-9) / 10:.1f}'.replace('.', ',')
+
+
+def _risk_progress_text(record, definitions):
+    """Sheet row text and hover-note lines for a replayed risk_progress_v1 record (whitelisted fields)."""
+    if record['status'] == 'unavailable':
+        return 'Недоступно', []
+    main, coverage = record['windows']['m60'], record['coverage']
+    target = record['method']['target_streams']
+    points = f"{record['progress_display']:.1f}".replace('.', ',')
+    parts = [f'{points} зі 100', f"{_floor1(main['effective_streams'])} з {target} потоків",
+             f"покрито {_pct(coverage['covered_pct_invested'])}"]
+    if record['status'] == 'provisional':
+        parts.append('попередньо')
+    excluded = ', '.join(f"{group_label(row['id'], definitions)} {_pct(row['weight_pct_invested'])}"
+                         for row in coverage['excluded']) or 'немає'
+    lines = [f"Ризиковий прогрес: {points} зі 100 = {_floor1(main['effective_streams'])} ефективних незалежних потоків "
+             f"ризику з цільових {target} (лінійна шкала 0-100 за політикою, не відсоток ризику). Рахується за покритою "
+             f"частиною: {_pct(coverage['covered_pct_invested'])} інвестованого; поза нею: {excluded}; Cash поза оцінкою."]
+    scenarios = record.get('car_scenarios')
+    if scenarios is None:
+        return ' · '.join(parts), lines
+    if scenarios['status'] == 'unavailable':
+        parts.append('автобізнес не оцінено')
+        lines.append('Сценарії автобізнесу недоступні: ' + str(scenarios['reason']))
+        return ' · '.join(parts), lines
+    span = scenarios['range']
+    parts.append(f"з автобізнесом {span['low_display']:.1f}-{span['high_display']:.1f} (припущення"
+                 f"{', попередньо' if scenarios['status'] == 'provisional' else ''})".replace('.', ','))
+    lines.append(f"Автобізнес ({_pct(scenarios['car_weight_pct_invested'])} інвестованого) у сценаріях \"бізнес поводиться як "
+                 f"ряд\", а не вимірювання вашого бізнесу; потоки покритої частини {_floor1(main['effective_streams'])}:")
+    for name, item in scenarios['items'].items():
+        label = _PROXY_LABELS.get(name, item['label'])
+        if item['effective_streams'] is None:
+            lines.append(f"{label}: недоступно ({item['reason']})")
+            continue
+        lines.append((f"{label}: {item['progress_display']:.1f} зі 100, потоків {item['effective_streams']:.2f} "
+                      f"({item['delta_streams']:+.2f}); r з покритою частиною {item['correlation_covered']:+.2f} - "
+                      f"{_RELATIONS[item['relation']]}, {_EFFECTS[item['effect']]}").replace('.', ','))
+    lines.append('Ціновий індекс і біржовий кошик дають різний результат; хто з них ближчий до вашого бізнесу, '
+                 'публічні дані не кажуть. Заголовок рахує лише покриту частину.')
+    return ' · '.join(parts), lines
+
+
 def _num(value):
     return isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value)
 
@@ -481,6 +534,16 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             shown = dict(result, **{key: category_record[key] for key in (
                 'version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')},
                 warnings=category_record['warnings'])
+    # Risk progress lives beside v2 as well. Absent: the view is unchanged. Present: replayed against this
+    # very v2; one that does not replay shows "Недоступно" and never a number.
+    progress_row, progress_lines = None, []
+    progress_record = data['DIVERSIFICATION_DATA'].get('risk_progress_v1')
+    if valid and progress_record is not None:
+        from analytics.holy_grail_risk_progress import validate_saved_risk_progress_v1
+        if validate_saved_risk_progress_v1(progress_record, data, result, expected, v2_validated=True):
+            progress_row, progress_lines = _risk_progress_text(progress_record, result['configuration']['group_definitions'])
+        else:
+            progress_row = 'Недоступно'
     if not valid:
         view['rows'] = [('Статус', view['status'])]
     else:
@@ -521,7 +584,8 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
                 label += ' · Припущення v2: блок категорії авто недоступний'
             from analytics.car_resale_market import conclusion_note
-            view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc)
+            view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc,
+                                                      progress_lines)
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
             definitions = result['configuration']['group_definitions']
             largest = group_label(groups[0]['id'], definitions) + ': ' + _pct(groups[0]['weight'] * 100)
@@ -611,7 +675,8 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
                         model_status='Попередня оцінка' if shown['status'] == 'provisional' else 'Модельна оцінка')
     view['sheet_summary'] = [('Диверсифікація інвестованого капіталу', view['sheet_number']),
                              ('Висновок', view['status']), ('Найбільша група', view['largest_text']),
-                             ('Сценарний розкид', view['sensitivity_text']),
-                             ('Cash поза оцінкою', view.get('cash_cell') or '-')] + \
+                             ('Сценарний розкид', view['sensitivity_text'])] + \
+                            ([('Ризиковий прогрес', progress_row)] if progress_row is not None else []) + \
+                            [('Cash поза оцінкою', view.get('cash_cell') or '-')] + \
                             list(view.get('safeguard_summary') or [])
     return view

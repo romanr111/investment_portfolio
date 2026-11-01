@@ -8,6 +8,8 @@ The authoritative list lives in `justfile`. Key recipes:
 - `just run` - run the main portfolio sync pipeline (`python -m src.portfolio_sync`)
 - `just report` - generate the quarterly YIC portfolio report (Markdown + HTML) via `analyze_portfolio_reports.py` + `generate_quarterly_report.py`
 - `just fetch-snapshot` - fetch a fresh IB Flex portfolio snapshot (query 1188471) into `data/ib_flex_snapshots/`
+- `just risk-progress --snapshot data/snapshots/combined_data_<date>_<timestamp>.json [--car-proxies PATH]` - effective-independent-streams view (`risk_progress_v1`) with car-business scenarios when a proxy block exists; reads a saved snapshot, writes nothing unless `--out NEW_FILE` is given
+- `just car-proxies build --raw data/car_category/raw_<date> --proxy-csv <csv> --as-of <as_of_date> --out data/car_category/proxies_<date>.json` - freeze the public used-vehicle proxy series (offline, refuses to overwrite); copy to `data/car_category/proxies_latest.json` for `just run` to derive `risk_progress_v1`. `report --block PATH` prints the series.
 
 ### Car-category tracker (method v3)
 
