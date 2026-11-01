@@ -28,8 +28,10 @@ PROXIES = {
                                source='proxy_csv', confidence='market-priced'),
 }
 BLS_SERIES = 'CUSR0000SETA02'
+BASKET = ('CPRT', 'KMX', 'OPLN')
 METHOD = {'version': VERSION, 'proxies': {k: dict(v) for k, v in PROXIES.items()}, 'returns': 'monthly_simple',
-          'history_months': 120, 'minimum_months': 36, 'max_lag_months': 1, 'basket': 'equal_weight_all_names_required'}
+          'history_months': 120, 'minimum_months': 36, 'max_lag_months': 1, 'basket': 'equal_weight_all_names_required',
+          'basket_names': list(BASKET)}
 LIMITATIONS = [
     'Category proxies, not the return of any individual business.',
     'Price indexes move far less than a leveraged inventory business; the listed basket is priced like equities.',
@@ -49,6 +51,10 @@ def load_block(path=LATEST_BLOCK):
         return {'unreadable': True}
 
 
+class MissingBasketNames(ValueError):
+    """The proxy CSV lacks one of the named basket constituents."""
+
+
 def _returns(name, raw, proxy_csv):
     raw = Path(raw)
     if name == 'manheim_wholesale':
@@ -59,7 +65,13 @@ def _returns(name, raw, proxy_csv):
         return data.auto1_series(raw / 'auto1_index.html').pct_change(fill_method=None)
     frame = pd.read_csv(proxy_csv, index_col=0)
     frame.index = pd.to_datetime(frame.index).tz_localize(None).normalize()
-    return frame.mean(axis=1, skipna=False)
+    frame.columns = [c[3:] if c.startswith('yf:') else c for c in frame.columns]
+    if frame.columns.duplicated().any():
+        raise ValueError('duplicate basket columns in the proxy CSV')
+    missing = [name for name in BASKET if name not in frame.columns]
+    if missing:
+        raise MissingBasketNames(f'proxy CSV lacks {missing}')
+    return frame[list(BASKET)].mean(axis=1, skipna=False)  # only the named constituents; other columns are ignored
 
 
 def _clean(series):
@@ -78,6 +90,9 @@ def build_block(raw_dir, proxy_csv, as_of_date):
     for name, meta in PROXIES.items():
         try:
             returns = _returns(name, raw_dir, proxy_csv).dropna()
+        except MissingBasketNames:
+            excluded[name] = 'missing_basket_names'
+            continue
         except (KeyError, ValueError, OSError):
             excluded[name] = 'source_unreadable'
             continue

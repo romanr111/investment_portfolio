@@ -664,8 +664,10 @@ answer is an assumption, shown as a range, never the headline.
   (US wholesale), BLS CPI used cars and trucks, seasonally adjusted (US retail),
   AUTO1 Group Price Index (EU wholesale; read from a web page, medium
   confidence) and the equal-weight total return of CPRT, KMX and OPLN (listed
-  remarketers, priced like equities). A Eurostat France series was dropped:
-  it ends in 2025 and is smoothed.
+  remarketers, priced like equities; all three names are required, other CSV
+  columns are ignored, and a CSV missing a name leaves the proxy out as
+  `missing_basket_names`; the names are part of the block method). A Eurostat
+  France series was dropped: it ends in 2025 and is smoothed.
 - Frozen block: `just car-proxies build --raw DIR --proxy-csv CSV --as-of DATE
   --out data/car_category/proxies_<date>.json` converts each series to monthly
   simple returns, trims it to the last completed month before the snapshot
@@ -683,7 +685,10 @@ answer is an assumption, shown as a range, never the headline.
 - Scenario: the car business is added as one more stream carrying the proxy's
   returns at its unchanged v2 weight, with the same common-month rule on the
   60-month window. Each scenario reports the count, the points, the change of
-  the count against the covered part, the correlation of the proxy with the
+  the count against the covered part on the same months as the scenario (a
+  proxy shorter than the headline sample is compared with the covered-only
+  count on its own months, `baseline_streams`, so a change of sample is not
+  read as an effect), the correlation of the proxy with the
   covered portfolio return and with US equities, its annual volatility, a
   relation class by absolute correlation with the covered portfolio (below
   0.25 not correlated, 0.25 to below 0.75 moderately, 0.75 and above

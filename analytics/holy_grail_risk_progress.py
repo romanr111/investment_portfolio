@@ -38,7 +38,8 @@ METHOD = {
 CAR_ID = 'car_business'
 SCENARIO_METHOD = {
     'version': 'car_scenarios_v1', 'assumption': 'business_behaves_like_proxy', 'window': PRIMARY,
-    'weight': 'v2_car_business_weight', 'relation_basis': 'abs_pearson_with_covered_portfolio',
+    'weight': 'v2_car_business_weight', 'baseline': 'covered_only_on_scenario_common_months',
+    'relation_basis': 'abs_pearson_with_covered_portfolio',
     'not_correlated_below': .25, 'correlated_from': .75, 'range': 'min_max_of_displayed_points',
 }
 IGNORED = {'calculated_at', 'result_fingerprint'}
@@ -142,14 +143,18 @@ def _relation(r):
     return 'correlated' if size >= SCENARIO_METHOD['correlated_from'] else 'moderately_correlated'
 
 
-def _scenario(frame, weights, cutoff, meta, series, base):
-    """Primary-window result with the car business added as one more stream carrying this proxy's returns."""
+def _scenario(frame, weights, cutoff, meta, series):
+    """Primary-window result with the car business added as one more stream carrying this proxy's returns.
+
+    The change in the count is measured against the covered-only count on the same months as the scenario,
+    so a proxy that is shorter than the headline sample cannot turn a change of sample into an effect.
+    """
     merged = frame.assign(**{CAR_ID: series.reindex(frame.index)})
     window = _window(merged, weights, PRIMARY, cutoff)
     out = dict(label=meta['label'], channel=meta['channel'], confidence=meta['confidence'], last_month=meta['last_month'],
                status=window['status'], reason=window['reason'], observations=window['observations'],
                window_start=window['window_start'], window_end=window['window_end'], flags=window['flags'],
-               effective_streams=window['effective_streams'], delta_streams=None,
+               effective_streams=window['effective_streams'], baseline_streams=None, delta_streams=None,
                progress_points=window['progress_points'], progress_display=window['progress_display'],
                annual_volatility_pct=None, correlation_covered=None, correlation_equity_us=None,
                relation=None, effect=None)
@@ -164,8 +169,14 @@ def _scenario(frame, weights, cutoff, meta, series, base):
     if not math.isfinite(r) or (r_equity is not None and not math.isfinite(r_equity)):
         return dict(out, status='unavailable', reason='degenerate_correlation', effective_streams=None,
                     progress_points=None, progress_display=None)
-    delta = window['effective_streams'] - base['effective_streams']
-    return dict(out, delta_streams=float(delta), annual_volatility_pct=window['annual_volatility_pct'][CAR_ID],
+    same_months = _window(frame.loc[data.index], weights, PRIMARY, cutoff)
+    if same_months['effective_streams'] is None:
+        return dict(out, status='unavailable', reason='baseline_unavailable_on_common_months', effective_streams=None,
+                    progress_points=None, progress_display=None)
+    baseline = same_months['effective_streams']
+    delta = window['effective_streams'] - baseline
+    return dict(out, baseline_streams=float(baseline), delta_streams=float(delta),
+                annual_volatility_pct=window['annual_volatility_pct'][CAR_ID],
                 correlation_covered=r, correlation_equity_us=r_equity, relation=_relation(r),
                 effect='adds_diversification' if delta > EPS else 'reduces_diversification' if delta < -EPS else 'neutral')
 
@@ -185,7 +196,7 @@ def _car_scenarios(v2, frame, weights, cutoff, base, proxies):
                baseline={k: base[k] for k in ('status', 'observations', 'effective_streams', 'progress_points',
                                               'progress_display')})
     for name, series in series_map(proxies).items():
-        out['items'][name] = _scenario(frame, weights, cutoff, proxies['series'][name], series, base)
+        out['items'][name] = _scenario(frame, weights, cutoff, proxies['series'][name], series)
     usable = {name: item for name, item in out['items'].items() if item['effective_streams'] is not None}
     if not usable:
         return dict(out, reason='no_computable_scenario')

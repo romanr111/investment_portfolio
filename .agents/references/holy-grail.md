@@ -96,7 +96,7 @@ The group list and each group's representative ticker live in `analytics/allocat
 
 - Result: `status` (`modeled`, `provisional`, `unavailable`), `progress_points`, `progress_display`, `warnings` (for example `partial_scope_excluded_weight`).
 - `windows`: `m60` (headline) and `m36` (comparison), each with `status` and `effective_streams`. `coverage`: `covered` and `excluded` groups (excluded rows carry a `reason`), `covered_pct_invested`, `excluded_pct_invested`, cash share. `method` (including `target_streams`), `source_v2` (identifiers of the v2 it was derived from), `method_fingerprint`, `result_fingerprint`.
-- `car_scenarios` (only when a block was supplied): `status`, `reason` (`invalid_car_proxies_block` when the block fails), `range` (`low_display`, `high_display`), `car_weight_pct_invested`, and `items` by proxy (`manheim_wholesale`, `bls_used_retail`, `auto1_wholesale_eu`, `listed_remarketers`), each with `effective_streams`, `delta_streams`, `progress_display`, `correlation_covered`, `relation`, `effect`.
+- `car_scenarios` (only when a block was supplied): `status`, `reason` (`invalid_car_proxies_block` when the block fails), `range` (`low_display`, `high_display`), `car_weight_pct_invested`, and `items` by proxy (`manheim_wholesale`, `bls_used_retail`, `auto1_wholesale_eu`, `listed_remarketers`), each with `effective_streams`, `baseline_streams` (the covered-only count on the scenario's own months), `delta_streams` (their difference), `progress_display`, `correlation_covered`, `relation`, `effect`.
 
 ## 6. Evidence status and data sufficiency
 
