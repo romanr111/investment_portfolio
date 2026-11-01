@@ -55,3 +55,7 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py --output path
 ### `just fetch-snapshot`
 
 Downloads a portfolio snapshot XML from IB Flex query 1188471 and saves it to `data/ib_flex_snapshots/` as `stocks_count_trades_<toDate>_<timestamp>.xml`. Requires `IB_FLEX_TOKEN` and `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` env vars (see `data/ib_flex_env.sh`).
+
+### `just car-bound *args`
+
+Car-business correlation bound from public drivers (US used-vehicle CPI via the BLS flat file, USD/UAH, optional listed auto-remarketing block). Diagnostic only - the output is "bounded, unmeasured", changes no score, writes a sidecar JSON under `data/` when `--output PATH` is given. See `docs/diversification-methodology.md` and `docs/car-deal-ledger.md`.

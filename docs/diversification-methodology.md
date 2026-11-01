@@ -240,9 +240,28 @@ analytical percentages use the unrounded component sum; saved financial totals
 are preserved. Discrepancies beyond the allowed tolerance remain invalid.
 
 Do not infer returns from business carrying values. Car resale requires dated
-inventory/cost/proceeds/turnover records. HYG and used-car CPI are weak sensitivity
-proxies until substantive fit is established; defaults, redemption, depeg and
-Ukraine operating risks remain omitted. Do not manufacture residual returns.
+inventory/cost/proceeds/turnover records (see `docs/car-deal-ledger.md`).
+HYG and used-car CPI are weak sensitivity proxies until substantive fit is
+established; defaults, redemption, depeg and Ukraine operating risks remain
+omitted. Do not manufacture residual returns.
+
+### Car-business correlation bound (diagnostic, outside v2)
+
+`just car-bound --snapshot PATH [--offline] --output data/car_bound_<date>.json`
+bounds, per group, how strongly the car business can correlate with it from
+public drivers only (US used-vehicle CPI via the BLS flat file, USD/UAH, and an
+optional listed auto-remarketing block for the conservative high bound). It
+reports a multiple-correlation upper bound with a bootstrap 90th-percentile
+interval beside the saved 0.25/0.75 scenario scores, and recomputes the score
+with every car pair at 0, at the low bound and at the high bound.
+
+The output is **bounded, unmeasured**: the bound holds only if the driver list
+is complete, it never estimates business returns from the past resale, it does
+not touch `METHOD`, the scenarios or `DIVERSIFICATION_DATA`, and it is not fed
+back into scoring — feeding a bound into the score would be a new method
+version. With 60 months the diagnostic cannot show a correlation below about
+0.30. The deal ledger (about 15–20 closed deals) upgrades it to a measured fit
+later.
 Actual listing currency, quote units and historical FX are handled by the
 existing shared collector; do not add dividends again to adjusted histories.
 
