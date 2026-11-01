@@ -37,9 +37,17 @@ holy-grail *args:
 holy-grail-sheet *args:
     venv/bin/python -m analytics.holy_grail_sheet {{args}}
 
-# Car-business correlation bound from public drivers (bounded, unmeasured).
-car-bound *args:
-    venv/bin/python -m analytics.car_business_bound {{args}}
+# Car business vs a listed used-vehicle industry proxy (offline, retrospective).
+car-proxy *args:
+    venv/bin/python -m analytics.car_industry_proxy {{args}}
+
+# Car-category tracker (method v3): `build` freezes the index block, `report` prints per-group correlations and scores.
+car-category *args:
+    venv/bin/python -m analytics.car_category {{args}}
+
+# Used-vehicle price index vs portfolio groups in crises (H1-H3); --fetch-manheim-url downloads raw data first.
+car-crisis *args:
+    venv/bin/python -m analytics.car_crisis_test {{args}}
 
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:

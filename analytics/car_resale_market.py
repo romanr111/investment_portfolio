@@ -85,11 +85,17 @@ def validated_context(context, saved_at_utc):
 
 def conclusion_note(result, context, saved_at_utc=None):
     """Explain saved scenarios and optional verified context without changing the score."""
-    lines = ['Оцінка інвестованої частини. Бізнесова кореляція - припущення, не вимірювання.']
+    category_model = result.get('version') == 'capital_diversification_v3'
+    lines = ['Оцінка інвестованої частини. Кореляція автобізнесу - модель за цінами категорії вживаних авто (США), '
+             'верхня межа каналу цін, не вимірювання вашого бізнесу.' if category_model else
+             'Оцінка інвестованої частини. Бізнесова кореляція - припущення, не вимірювання.']
     scenarios = result.get('scenarios', {})
-    for key, label in [('m60_r025', 'Базовий: 60 міс., кореляція 0,25'),
-                       ('m60_r075', 'Стрес: 60 міс., кореляція 0,75'),
-                       ('m60', 'Базовий: 60 міс.')]:
+    for key, label in ([('m60_cat_point', 'Базовий: 60 міс., кореляція з індексом цін (точка)'),
+                        ('m60_cat_upper90', 'Обережний: 60 міс., верхня 90% межа кореляції'),
+                        ('m60_r075', 'Стрес: 60 міс., кореляція 0,75')] if category_model else
+                       [('m60_r025', 'Базовий: 60 міс., кореляція 0,25'),
+                        ('m60_r075', 'Стрес: 60 міс., кореляція 0,75'),
+                        ('m60', 'Базовий: 60 міс.')]):
         if key in scenarios:
             score = scenarios[key].get('display_score')
             category = {'concentrated': 'концентрований',

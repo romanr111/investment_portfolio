@@ -5,8 +5,9 @@ One row per deal. Log **open deals at purchase** (dropping unsold cars would
 hide the bad outcomes); set `sale_date` when the car leaves.
 
 Goal: once the closed-deal count reaches about **15–20**, the car-business
-correlation diagnostic (`analytics/car_business_bound.py`) can be upgraded
-from the public-driver bound to a measured fit against the driver mix. Back-
+correlation tracker (`analytics/car_category.py`) can be calibrated: the share of
+the category price index that your own deals actually capture (R in
+`rho(business, group) = R * rho(index, group)`), which is fixed at 1 until then. Back-
 filling deals from memory without dates adds noise, not data — log as they
 happen. The single past resale may be entered, but it is one point.
 
@@ -32,6 +33,6 @@ happen. The single past resale may be entered, but it is one point.
 Derived, never stored: all-in cost, `margin_pct = (sale − all-in cost) / all-in cost`, holding days.
 
 Phase 2 estimator (blocked until ~15 closed deals): regress `margin_pct` on
-the driver changes between each deal's purchase and sale months; the
-square root of adjusted R² is ρ(b,f), the business's correlation with the
-driver mix. Report it as indicative, with an interval, beside the bound.
+the category price-index change between each deal's purchase and sale months;
+the square root of adjusted R² estimates R, the share of your deal outcomes
+that the index explains. Report it as indicative, with an interval.

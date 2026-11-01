@@ -9,6 +9,14 @@ The authoritative list lives in `justfile`. Key recipes:
 - `just report` - generate the quarterly YIC portfolio report (Markdown + HTML) via `analyze_portfolio_reports.py` + `generate_quarterly_report.py`
 - `just fetch-snapshot` - fetch a fresh IB Flex portfolio snapshot (query 1188471) into `data/ib_flex_snapshots/`
 
+### Car-category tracker (method v3)
+
+- `just car-category build --raw data/car_category/raw_<date> --long-returns <csv> --as-of <as_of_date> --out data/car_category/block_<date>.json` - freeze the Manheim index and long group histories into one block (offline, refuses to overwrite). Copy it to `data/car_category/block_latest.json` for `just run` to derive `allocation_score_v3`; `just holy-grail --car-category PATH` does the same for a derived snapshot copy.
+- `just car-category report --snapshot PATH --block PATH [--append-history data/car_category/history.jsonl]` - per-group correlations with the used-vehicle price index, v2 vs v3 scores, and the equivalent uniform car correlation. Read-only apart from the optional append-only history.
+- `just car-crisis --raw ... --long-returns ... --out ... [--fetch-manheim-url URL --as-of DATE [--bls-contact CONTACT]]` - H1-H3 crisis test; the fetch variant downloads the raw files into a new directory first (BLS needs a contact you choose, otherwise its CPI file is skipped). See `docs/car-flip-category-evidence.md`.
+- `just car-proxy` - listed auto-remarketing equity basket vs the car business (equity beta, not a measurement; superseded by the price index above).
+- Data lives in ignored `data/car_category/`; method notes are in `docs/diversification-methodology.md` (v3 section).
+
 ### `just run` (portfolio sync pipeline)
 
 By default (`just run` with no flags):
@@ -55,7 +63,3 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py --output path
 ### `just fetch-snapshot`
 
 Downloads a portfolio snapshot XML from IB Flex query 1188471 and saves it to `data/ib_flex_snapshots/` as `stocks_count_trades_<toDate>_<timestamp>.xml`. Requires `IB_FLEX_TOKEN` and `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` env vars (see `data/ib_flex_env.sh`).
-
-### `just car-bound *args`
-
-Car-business correlation bound from public drivers (US used-vehicle CPI via the BLS flat file, USD/UAH, optional listed auto-remarketing block). Diagnostic only - the output is "bounded, unmeasured", changes no score, writes a sidecar JSON under `data/` when `--output PATH` is given. See `docs/diversification-methodology.md` and `docs/car-deal-ledger.md`.

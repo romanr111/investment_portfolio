@@ -333,8 +333,12 @@ def extract_exposures(data, as_of_date, config):
 
 def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=None,
                          allow_network=True, cache_dir=CACHE_DIR, source_provenance=None,
-                         previous_combined_data=None):
-    """Return an enriched copy. An analytics failure never changes financial values."""
+                         previous_combined_data=None, car_category=None):
+    """Return an enriched copy. An analytics failure never changes financial values.
+
+    `car_category` is an explicit frozen block (analytics.car_category): given, a v3 record is
+    derived beside v2; omitted, no v3 record is written (nothing is looked up implicitly).
+    """
     output = dict(data)
     as_of_date = _date(as_of_date or data.get("POSITION_DATA", {}).get("as_of_date")
                        or data.get("DATA_METADATA", {}).get("last_updated") or date.today().isoformat())
@@ -392,6 +396,13 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
             'status': 'unavailable', 'reason': 'previous_v2_invalid_or_absent'}
         _seal(saved)
     output['DIVERSIFICATION_DATA']['allocation_score_v2'] = saved
+    # v3 is derived from this very v2 record; a stale one from an earlier run can never match it.
+    output['DIVERSIFICATION_DATA'].pop('allocation_score_v3', None)
+    if car_category is not None:
+        from analytics.allocation_score_v3 import derive_allocation_score_v3
+        derived = derive_allocation_score_v3(saved, car_category)
+        if derived is not None:
+            output['DIVERSIFICATION_DATA']['allocation_score_v3'] = derived
     # Concentration facts measured beside the score on the same frozen inputs;
     # a failed build stays explicit instead of silently omitting the block.
     from analytics import concentration_v1
@@ -417,7 +428,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
 
 
 def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CACHE_DIR, allow_network=True,
-                         monthly_returns=None, source_provenance=None, previous_combined_data=None):
+                         monthly_returns=None, source_provenance=None, previous_combined_data=None,
+                         car_category=None):
     """Create a derived artifact without changing original snapshots or latest pointers."""
     source = Path(source_path).resolve()
     destination = Path(output_path).resolve()
@@ -434,7 +446,8 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
     as_of = _date(payload.get("as_of_date") or data.get("DATA_METADATA", {}).get("last_updated"))
     enriched = enrich_combined_data(data, as_of_date=as_of, config=config, cache_dir=cache_dir,
                                     allow_network=allow_network, monthly_returns=monthly_returns,
-                                    source_provenance=source_provenance, previous_combined_data=previous_combined_data)
+                                    source_provenance=source_provenance, previous_combined_data=previous_combined_data,
+                                    car_category=car_category)
     if (enriched.get('DIVERSIFICATION_DATA') is not data.get('DIVERSIFICATION_DATA')
             and 'allocation_score_v2' in enriched.get('DIVERSIFICATION_DATA', {})):
         from copy import deepcopy
@@ -442,6 +455,10 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
         target = result['data'] if 'data' in result else result
         target_dd = target.setdefault('DIVERSIFICATION_DATA', {})
         target_dd['allocation_score_v2'] = enriched['DIVERSIFICATION_DATA']['allocation_score_v2']
+        # The derived v3 belongs to this very v2; an older one in the source cannot match it.
+        target_dd.pop('allocation_score_v3', None)
+        if 'allocation_score_v3' in enriched['DIVERSIFICATION_DATA']:
+            target_dd['allocation_score_v3'] = deepcopy(enriched['DIVERSIFICATION_DATA']['allocation_score_v3'])
         if 'concentration_v1' in enriched['DIVERSIFICATION_DATA']:
             target_dd['concentration_v1'] = deepcopy(enriched['DIVERSIFICATION_DATA']['concentration_v1'])
         result['allocation_score_v2_enrichment'] = {
