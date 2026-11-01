@@ -1,5 +1,19 @@
 # Portfolio diversification indicators
 
+> Reader's guide: the current base method is "Capital diversification v2", with
+> "Concentration safeguards beside the score" and "Offline what-if scenarios"
+> under it (near the end of this file). Two optional sibling records follow it:
+> "Capital diversification v3 (car-category pairs)" for the car-business pairs,
+> and, as the last sections, "Risk progress (`risk_progress_v1`)" with
+> "Car-business scenarios (`car_proxies_v1`)". Public car-market context and
+> the category evidence are in `docs/car-resale-market-context.md` and
+> `docs/car-flip-category-evidence.md`. "Historical capital-weighted score (v1)",
+> "Count and interpretation", "Ten-check policy", "Hypothetical stress policy"
+> and "Simple Holy Grail indicator (v1)" describe frozen historical records.
+> "Private evidence and collection" also covers the retired calculators' inputs,
+> but the `diversification.exposures` record format it defines is still read by
+> v2 for risk facts.
+
 ## Historical capital-weighted score (v1)
 
 The following v1 description applies only to existing historical records. New
