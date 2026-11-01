@@ -21,6 +21,9 @@ WARNINGS = {
     'unreconciled_positions':'Частина фінансового підсумку не розкладена на позиції.',
     'invalid_valuation':'Некоректні вартості позицій.',
     'invalid_inputs':'Некоректні або неповні входи індикатора.',
+    'invalid_car_category_block':'Блок категорії авто відсутній, пошкоджений або не відповідає даті знімка: показано припущення кореляції 0,25 / 0,75.',
+    'category_index_lagged':'Індекс цін вживаних авто ще не опубліковано за останній місяць знімка: кореляції рахуються без нього.',
+    'category_pair_unmeasured':'Для частини груп кореляцію з індексом цін вживаних авто виміряти не вдалося: консервативно r=1.',
 }
 
 
@@ -451,7 +454,7 @@ def sheet_detail_rows(rows):
     return packed
 
 
-def allocation_view_v2(data, expected_date=None):
+def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
     """Present only whitelisted fields from a fully replayed v2 record."""
     from analytics.allocation_v2_inputs import validate_saved_allocation_v2
     from analytics.diversification_view import _empty
@@ -463,13 +466,28 @@ def allocation_view_v2(data, expected_date=None):
                 number_kind='allocation_points', number_format={'type': 'NUMBER', 'pattern': '0" зі 100"'},
                 sheet_number='Дані недоступні', drivers=[], coverage_summary='', largest_text='-',
                 sensitivity_text='-', rows=[], risk_facts=[])
-    if not validate_saved_allocation_v2(result, data, expected, replay=True):
+    valid = validate_saved_allocation_v2(result, data, expected, replay=True)
+    # v3 lives beside v2. A valid v3 supplies the scenarios; one that cannot be computed shows the
+    # v2 assumption numbers with an explicit warning; a present but invalid one never falls back.
+    shown, extra_warnings = result, []
+    category_record = data['DIVERSIFICATION_DATA'].get('allocation_score_v3')
+    if valid and category_record is not None:
+        from analytics.allocation_score_v3 import validate_saved_allocation_v3
+        if not validate_saved_allocation_v3(category_record, data, result, expected, v2_validated=True):
+            valid = False
+        elif category_record['status'] == 'unavailable':
+            extra_warnings = category_record['warnings']
+        else:
+            shown = dict(result, **{key: category_record[key] for key in (
+                'version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')},
+                warnings=category_record['warnings'])
+    if not valid:
         view['rows'] = [('Статус', view['status'])]
     else:
         stamp = '.'.join(reversed(result['as_of_date'].split('-')))
         cash = result['coverage'].get('cash_pct_nav')
         coverage = 'Cash поза оцінкою: ' + (_pct(cash) if cash is not None else '-') + ' повного портфеля.'
-        warnings = [WARNINGS.get(w, 'Некоректні або неповні входи індикатора.') for w in result['warnings']]
+        warnings = [WARNINGS.get(w, 'Некоректні або неповні входи індикатора.') for w in shown['warnings'] + extra_warnings]
         view.update(as_of=stamp, warnings=warnings, principal_constraint=' '.join(warnings), coverage_summary=coverage,
                     cash_cell=_pct(cash) if cash is not None else '-')
         if result['status'] in {'unavailable', 'not_applicable'}:
@@ -487,35 +505,30 @@ def allocation_view_v2(data, expected_date=None):
             view.update(headline=headline, sheet_number=headline, status=headline, rows=rows,
                         safeguard_summary=(safeguards or {}).get('summary') or [])
         else:
-            assessment = result['assessment']
-            if assessment['combined_dependent'] or (assessment['business_dependent'] and assessment['window_dependent']):
-                label = 'Оцінка залежить від припущень і періоду'
-            elif assessment['business_dependent']:
-                label = 'Оцінка залежить від припущень'
-            elif assessment['window_dependent']:
-                label = 'Оцінка залежить від періоду'
-            else:
-                label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
-                         'well_diversified': LABELS[2]}[result['category']]
-            if assessment['combined_dependent'] or assessment['business_dependent'] or assessment['window_dependent']:
-                scored = [(key, scenario) for key, scenario in result['scenarios'].items()
-                          if scenario.get('display_score') is not None]
-                if scored:
-                    worst_key, worst = min(scored, key=lambda item: (item[1]['display_score'], item[0]))
-                    when = ('при бізнесовій кореляції 0,75' if worst_key.endswith('_r075') else
-                            'при бізнесовій кореляції 0,25' if worst_key.endswith('_r025') else
-                            'за 36-місячним вікном' if worst_key.startswith('m36') else 'за 60-місячним вікном')
-                    worst_label = {'concentrated': LABELS[0], 'partly_diversified': LABELS[1],
-                                   'well_diversified': LABELS[2]}[worst['category']]
-                    label = worst_label + ' ' + when + ' · ' + label
-            if result['status'] == 'provisional': label += ' · Попередня оцінка'
+            assessment = shown['assessment']
+            label = {'concentrated': 'Концентрований',
+                     'partly_diversified': 'Часткова диверсифікація',
+                     'well_diversified': 'Добра диверсифікація'}[shown['category']]
+            if assessment['business_dependent']:
+                label += ' · Чутлива до автобізнесу'
+            if assessment['window_dependent']:
+                label += ' · Залежить від періоду'
+            if assessment['combined_dependent']:
+                label += ' · Залежить від сценарію'
+            if assessment['available'] != assessment['expected']:
+                label += ' · Не всі сценарії доступні'
+            if shown['status'] == 'provisional': label += ' · Попередньо'
+            if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
+                label += ' · Припущення v2: блок категорії авто недоступний'
+            from analytics.car_resale_market import conclusion_note
+            view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc)
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))
             definitions = result['configuration']['group_definitions']
             largest = group_label(groups[0]['id'], definitions) + ': ' + _pct(groups[0]['weight'] * 100)
             scenario_range = f"{assessment['min_display']}-{assessment['max_display']} зі 100"
             if assessment['available'] != assessment['expected']:
                 scenario_range += f" ({assessment['available']}/{assessment['expected']} доступні)"
-            rows = [('Метод', 'capital_diversification_v2'), ('Оцінка', str(result['display_score']) + ' зі 100'),
+            rows = [('Метод', shown['version']), ('Оцінка', str(shown['display_score']) + ' зі 100'),
                     ('Висновок', label), ('Сценарний розкид', scenario_range),
                     ('Cash від повного портфеля', _pct(cash)),
                     ('Непокрита інвестована частка', _pct(result['coverage']['unknown_pct_invested']))]
@@ -523,7 +536,7 @@ def allocation_view_v2(data, expected_date=None):
                 data, result, result['configuration'].get('concentration_decisions'))
             if safeguards:
                 rows.extend(safeguards['rows'])
-            for key, scenario in result['scenarios'].items():
+            for key, scenario in shown['scenarios'].items():
                 value = str(scenario['display_score']) + ' зі 100' if scenario['score'] is not None else 'Недоступно: ' + str(scenario['reason'])
                 rows.append(('Сценарій ' + key, value))
             rows.extend((group_label(group['id'], definitions), _pct(group['weight'] * 100)) for group in groups)
@@ -535,20 +548,33 @@ def allocation_view_v2(data, expected_date=None):
             for group, sectors in sorted(result['sectors'].items()):
                 rows.append(('Сектори: ' + group_label(group, definitions),
                              '; '.join(name + ': ' + _pct(share * 100) for name, share in sorted(sectors.items())) or 'Не підтверджено'))
-            main = result['scenarios']['m60_r025' if 'm60_r025' in result['scenarios'] else 'm60']
+            main = shown['scenarios'][shown['method']['headline_scenario'] if 'method' in shown else
+                                      'm60_r025' if 'm60_r025' in shown['scenarios'] else 'm60']
             for pair in main['pairs']:
                 names = group_label(pair['left'], definitions) + ' / ' + group_label(pair['right'], definitions)
                 if pair['kind'] == 'measured':
                     detail = f"{pair['observations']} місяців; останній {pair['last_month']}; r={pair['correlation']:.2f}".replace('.', ',')
                 elif pair['kind'] == 'modeled':
                     detail = 'Модельна кореляція ' + str(pair['correlation']).replace('.', ',')
+                elif pair['kind'] == 'category':
+                    sample = {'monthly': 'місячна, вікно', 'lagged_1m': 'ціна з лагом 1 міс., вікно',
+                              'stress_quintile': 'стрес-місяці акцій США з 1997'}.get(pair.get('sample'), 'вибірку не вказано')
+                    detail = (f"Індекс цін вживаних авто (США), ціновий канал, R=1; {pair['observations']} спостережень "
+                              f"({sample}); r={pair['correlation']:.2f}").replace('.', ',')
                 else:
                     detail = 'Немає придатної пари; консервативно r=1'
                 rows.append(('Історія пар', names + ': ' + detail))
-            rows.append(('Модель', '60 і 36 календарних місяців; бізнес: 0,25 / 0,75; невідомі пари: r=1.'))
+            if 'method' in shown:
+                rows.append(('Модель', 'Пари активів: 60 і 36 календарних місяців; автобізнес: кореляція з індексом цін '
+                                       'вживаних авто (категорія і ціновий канал R=1, не ваш бізнес). Точка - найбільша з трьох '
+                                       'оцінок (вікно, лаг ціни 1 міс., стрес-місяці акцій США з 1997; вибірки різні); обережний '
+                                       'сценарій - найбільша верхня межа Фішера 90% на кожну оцінку, не довірчий інтервал бала; '
+                                       'стрес 0,75; невідомі пари: r=1.'))
+            else:
+                rows.append(('Модель', '60 і 36 календарних місяців; бізнес: 0,25 / 0,75; невідомі пари: r=1.'))
             comparison = result['comparison']
             if comparison['status'] == 'available':
-                rows.append(('Порівняння', 'Ринки: {:+.2f}; позиції: {:+.2f}; разом: {:+.2f} пункту'.format(
+                rows.append(('Порівняння' + (' v2 (кореляція авто 0,25)' if 'method' in shown else ''), 'Ринки: {:+.2f}; позиції: {:+.2f}; разом: {:+.2f} пункту'.format(
                     comparison['market_relationship_change'], comparison['positions_and_profiles_change'], comparison['total_change']).replace('.', ',')))
                 rows.append(('Порівняння', 'Внески відтворено зі збережених входів; відбитки джерела не підтверджені без оригіналу.'))
             else:
@@ -576,13 +602,13 @@ def allocation_view_v2(data, expected_date=None):
             rows.extend(('Обмеження', warning) for warning in warnings)
             rows.append(('Метод', 'Історичні кореляції та модельні припущення не гарантують майбутньої стійкості або прибутку.'))
             # The Details group no longer renders in the tab (owner 2026-10-29)
-            view.update(headline=str(result['display_score']) + ' зі 100', score_cell=result['display_score'],
-                        sheet_number=result['display_score'], status=label, sheet_status=label,
+            view.update(headline=str(shown['display_score']) + ' зі 100', score_cell=shown['display_score'],
+                        sheet_number=shown['display_score'], status=label, sheet_status=label,
                         largest_text=largest, sensitivity_text=scenario_range, rows=rows,
                         drivers=['Найбільша група: ' + largest],
                         risk_facts=((safeguards or {}).get('breach_facts') or []) + public_facts[:3],
                         safeguard_summary=(safeguards or {}).get('summary') or [],
-                        model_status='Попередня оцінка' if result['status'] == 'provisional' else 'Модельна оцінка')
+                        model_status='Попередня оцінка' if shown['status'] == 'provisional' else 'Модельна оцінка')
     view['sheet_summary'] = [('Диверсифікація інвестованого капіталу', view['sheet_number']),
                              ('Висновок', view['status']), ('Найбільша група', view['largest_text']),
                              ('Сценарний розкид', view['sensitivity_text']),

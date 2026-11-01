@@ -240,9 +240,11 @@ analytical percentages use the unrounded component sum; saved financial totals
 are preserved. Discrepancies beyond the allowed tolerance remain invalid.
 
 Do not infer returns from business carrying values. Car resale requires dated
-inventory/cost/proceeds/turnover records. HYG and used-car CPI are weak sensitivity
-proxies until substantive fit is established; defaults, redemption, depeg and
-Ukraine operating risks remain omitted. Do not manufacture residual returns.
+inventory/cost/proceeds/turnover records (see `docs/car-deal-ledger.md`).
+HYG and used-car CPI are weak sensitivity proxies until substantive fit is
+established; defaults, redemption, depeg and Ukraine operating risks remain
+omitted. Do not manufacture residual returns.
+
 Actual listing currency, quote units and historical FX are handled by the
 existing shared collector; do not add dividends again to adjusted histories.
 
@@ -327,7 +329,8 @@ Unavailable new results retain the indicator layout and replace stale counts.
 
 ## Capital diversification v2
 
-`capital_diversification_v2` is the only method calculated for new snapshots.
+`capital_diversification_v2` is the base method calculated for every new snapshot
+(the optional v3 record below is derived from it, never a replacement of it).
 An `allocation` object enables it, and omitting `method_version` selects v2.
 Without the object, diversification enrichment is disabled. An explicit v1 or
 unknown method is unavailable; a present but invalid v2 result never falls
@@ -485,3 +488,89 @@ that copy, and prints per-limit value, breach and decision state plus the v2
 score for both states. It writes no files, fetches no data and places no
 orders. Unknown or unprofiled ids exit with status 2 before any mutation, and
 missing offline history degrades the after state to unavailable.
+
+## Capital diversification v3 (car-category pairs)
+
+`capital_diversification_v3` is the v2 formula with one change: the
+`car_business` pairs are no longer the fixed 0.25 assumption but come from a
+public category index. v2 stays sealed, is still calculated for every snapshot
+and remains the source record; v3 is a sibling record
+`DIVERSIFICATION_DATA.allocation_score_v3` derived from the saved v2 record plus
+a frozen `car_category_v2` block. Weights, sectors, all non-car pair
+correlations and the 0.75 stress scenario are copied from v2. `concentration_v1`
+and the offline what-if stay on v2 and are not migrated. No block supplied
+means no v3 record.
+
+**What the car pairs are.** The Manheim Used Vehicle Value Index (US wholesale
+prices, seasonally adjusted, monthly since 1997) is a public proxy for the price
+of the inventory of "buy damaged, repair, resell". For each group the pair is
+`R * rho(index, group)` with the index loading fixed at `R = 1`. `R = 1` is a
+conditional scenario assumption: the business inherits the standardized index's
+price channel (and its residual is uncorrelated with the group). It is not a
+bound on the business. Deal-level noise would lower the loading, which can be
+calibrated only from the owner's own dated deals (`docs/car-deal-ledger.md`),
+while financing, liquidity, repair, FX, customs, tax and war channels are not in
+the index and are not bounded. The pair kind is `category`: it is a category
+proxy, never a measurement of the business, and it never infers business
+returns from carrying values or the past resale.
+
+**Measures per group** (all on the frozen block). These are three different
+quantities with different samples, not repeated measurements of one: the
+same-window monthly correlation; the group against the index one month later
+(price lags); and the correlation inside the worst-quintile months of US
+equities over the full index history since 1997 (at least 20 months), whose
+sample ignores the window. `cat_point` is `R` times the largest of the three.
+`cat_upper90` is `R` times the largest of the three per-measure Fisher upper
+endpoints (z = 1.645, a nominal two-sided 90% or one-sided 95% endpoint for each
+single estimate). The two envelopes are chosen separately, so the upper endpoint
+can come from a different measure and sample than the point; the saved measures
+keep `selected`/`n` and `upper_selected`/`upper_n`, and each category pair keeps
+its `sample`. The endpoint is not a block bootstrap: it ignores serial
+dependence, overlapping months and the selection of the maximum, and ten groups
+are taken at once. It is therefore neither a calibrated confidence interval for
+the portfolio score nor a bound on the business, and the spread between
+scenarios is a sensitivity range, not an interval. A group with no usable
+measure gets a missing pair, r = 1, and the v2 rule that a missing-pair effect
+above five points makes the scenario unavailable.
+
+**Scenarios.** `m60`/`m36` x `cat_point`, `cat_upper90`, and `r075` (the v2
+assumption, unchanged). The headline is `m60_cat_point`
+(`HEADLINE` in `analytics/allocation_score_v3.py`, a judgment call: the wider
+`cat_upper90` and the stress stay visible in the scenario spread).
+
+**Gates.** The block must carry a matching fingerprint and method, a cutoff that
+is the completed month of `as_of_date` or the month before it (Manheim publishes
+about a week into the next month; the lag is flagged `category_index_lagged`),
+never later (no look-ahead), finite month-end series (the index series ending
+exactly at the cutoff, no series beyond it), and at least 120 index returns. A rejected or stale block yields an explicit
+`unavailable` v3 record (`invalid_car_category_block`) and the view then shows the
+v2 assumption numbers labelled as assumptions (the tab's conclusion cell ends with
+`Припущення v2: блок категорії авто недоступний`); a present v3 record that fails
+replay renders as unavailable and never falls back to v2 or v1. Replay
+recomputes everything offline from the saved v2 record and the embedded block.
+
+**Regression and first result.** With constant pairs 0.25 and 0.75 the v3 pair
+substitution reproduces the saved v2 scenario scores to 1e-8. On the 29 October
+2026 snapshot: v2 base 58.1, stress 31.8; v3 headline 60.2 (equivalent to a
+uniform car correlation of about 0.19), `cat_upper90` 51.4 (51.6 under the first
+selection rule, which took the endpoint of the measure with the largest point;
+the block method is now `car_category_v2` and a `car_category_v1` block is
+rejected as invalid), 36-month 67.9 and 57.9. Group correlations with the index are weak (below 0.30 at the selected
+measure), so for the price channel the 0.25 base is consistent with public data
+while 0.75 is far above anything this channel shows.
+
+**Limits.** One index, one channel; `R` unknown; the 60-month window holds
+essentially one rate-shock regime; 2008-era coverage is missing for China,
+emerging markets, crypto and EUR high yield; Manheim history is revised (raw file
+sha256 is recorded) and Cox is an interested party; the stress measure uses the
+same long-history sample in the 60 and 36-month scenarios, so the window
+sensitivity of the category scenarios is understated; US and EU data say nothing
+about Ukrainian customs, VAT, FX or war channels. The refresh is monthly, not
+quarterly: a block is accepted only while its last month is at most one month
+behind the completed month of the snapshot (`max_index_lag_months` in
+`analytics/car_category.py`), so a block ending in September serves snapshots
+through 29 November and is rejected from 30 November. Rebuild the block each
+month after Manheim publishes (about a week into the next month; `just
+car-category build ...`), copy it to `data/car_category/block_latest.json`, then
+run the normal pipeline. A stale block gives the explicit `unavailable` v3
+record and the v2 assumption numbers with a warning (see Gates above).

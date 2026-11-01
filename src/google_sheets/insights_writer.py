@@ -517,6 +517,7 @@ def _tab_requests(
     timeline_id: int,
     conditional_formats: list[dict[str, Any]],
     live_row_groups: dict = None,
+    live_annotations: dict = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int, int]:
     grid, typed_cells, block_ranges = render_blocks(tab.blocks)
     if not grid:
@@ -531,6 +532,19 @@ def _tab_requests(
 
     sheet_id = worksheet.id
     requests: list[dict[str, Any]] = []
+    from analytics.car_resale_market import NOTE_MARKER
+    annotations = live_annotations or {}
+    def owned_note(note):
+        return isinstance(note, str) and (note.startswith(NOTE_MARKER) or note.endswith(NOTE_MARKER))
+    target_notes = {(row, col): cell.note for (row, col), cell in typed_cells.items()
+                    if cell.note is not None}
+    for position in target_notes:
+        existing_note = annotations.get(position, {}).get('note')
+        if existing_note and not owned_note(existing_note):
+            raise SheetConflictError(f'Unowned note at row {position[0] + 1}, column {position[1] + 1}')
+    old_notes = {position for position, cell in annotations.items()
+                 if owned_note(cell.get('note'))
+                 and _inside(*position, old_metadata.get('ranges', []))}
     # Grow with headroom, but also shrink back after big layout removals: the
     # grid tracks the render with a small buffer instead of the largest frame
     # ever written (e.g. a pre-compact 1000-row tab keeps 980 empty rows).
@@ -603,6 +617,15 @@ def _tab_requests(
             }
         }
     )
+
+    for row, col in sorted(old_notes | set(target_notes)):
+        if row >= requested_rows or col >= requested_columns:
+            continue
+        requests.append({'updateCells': {
+            'start': {'sheetId': sheet_id, 'rowIndex': row, 'columnIndex': col},
+            'rows': [{'values': [{'note': target_notes.get((row, col), '')}]}],
+            'fields': 'note',
+        }})
 
     requests.append(
         {
@@ -1458,6 +1481,7 @@ def write_portfolio_snapshot(
     old_main = _preflight(
         main, "main", main_ranges, adoptions.get(main.id) if main else None
     )
+    live_annotations = _annotations(main, main_ranges + old_main.get('ranges', [])) if main else {}
     book_meta = spreadsheet.fetch_sheet_metadata(params={"includeGridData": False})
     next_id = max([s.id for s in by_title.values()] + [0]) + 1
     requests, created, updated = [], [], []
@@ -1514,6 +1538,7 @@ def write_portfolio_snapshot(
         timeline.id,
         conditional_formats,
         live_row_groups=_sheet_row_groups(main_entry),
+        live_annotations=live_annotations,
     )
     requests.extend(main_requests)
     # Preserve legacy charts, dimensions, formatting and adjacent formulas. Only

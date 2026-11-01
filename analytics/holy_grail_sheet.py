@@ -9,6 +9,7 @@ from analytics.holy_grail import fingerprint
 from analytics.diversification_view import saved_diversification_view
 from analytics.allocation_view import sheet_detail_rows
 from analytics.holy_grail_data import DATA_DIR
+from analytics.car_resale_market import NOTE_MARKER
 
 END_MARKER = 'Holy Grail - End'
 MARKERS = {'Holy Grail - Details','Диверсифікація - Details'}
@@ -39,7 +40,7 @@ def _write(sheet_id, start, values):
                            'fields':'userEnteredValue'}}
 
 
-def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
+def plan_requests(data, sheet_id, grid, groups, details_start, old_end, saved_at_utc=None):
     allowed_labels = [
         {'Диверсифікація інвестованої частини', 'Диверсифікація інвестованого капіталу',
          'Holy Grail: еквівалент джерел', 'Диверсифікація /100'},
@@ -48,7 +49,7 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         {'Модель бізнесу 0,75', 'Сценарний розкид', 'Прямі історії / моделі', 'Впевненість у даних'},
         {'Дата / Cash поза оцінкою', 'Статус', 'Прямі / проксі / без історії'},
     ]
-    view=saved_diversification_view(data)
+    view=saved_diversification_view(data, saved_at_utc=saved_at_utc)
     if not view.get('indicator'): raise ValueError('A valid new indicator is required')
     summary=view['sheet_summary'] if view.get('allocation') else [
         ['Holy Grail: еквівалент джерел',view['sheet_number']],['Орієнтир','15–20'],
@@ -73,13 +74,21 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         ownership = {index: set(labels) for index, labels in enumerate(allowed_labels, start=9)}
         for index in range(9 + len(summary), end_row):
             ownership[index] = {''}
+    note_row = next((9 + i for i, row in enumerate(summary) if row[0] == 'Висновок'), None)
+    old_notes = []
     for index, labels in ownership.items():
         left, right = grid[index][:2]
         label = left.get('userEnteredValue', {}).get('stringValue', '')
         if (label and label not in labels) or (not label and _occupied(right)):
             raise ValueError('Summary cells belong to another section')
-        for cell in (left, right):
-            if (cell.get('note') or cell.get('dataValidation') or cell.get('textFormatRuns') or
+        for col, cell in enumerate((left, right)):
+            note = cell.get('note', '')
+            owned_note = isinstance(note, str) and (note.startswith(NOTE_MARKER) or note.endswith(NOTE_MARKER))
+            if owned_note and col == 1 and label == 'Висновок':
+                old_notes.append(index)
+            elif note:
+                raise ValueError('Summary cells contain foreign metadata or formulas')
+            if (cell.get('dataValidation') or cell.get('textFormatRuns') or
                     'formulaValue' in cell.get('userEnteredValue', {})):
                 raise ValueError('Summary cells contain foreign metadata or formulas')
     # Summary-shrink retention (follow-up review 2026-10-30): when the render
@@ -117,6 +126,13 @@ def plan_requests(data, sheet_id, grid, groups, details_start, old_end):
         if any(_occupied(c) for c in row[:2]): raise ValueError('New details overlap existing cells')
     requests=[_write(sheet_id,9,summary),_write(sheet_id,details_start-1,[['Диверсифікація - Details','']]),
               _write(sheet_id,details_start,rows)]
+    target_note = view.get('conclusion_note') if note_row is not None else None
+    for index in sorted(set(old_notes) | ({note_row} if target_note else set())):
+        requests.append({'updateCells': {
+            'range': {'sheetId': sheet_id, 'startRowIndex': index, 'endRowIndex': index + 1,
+                      'startColumnIndex': 1, 'endColumnIndex': 2},
+            'rows': [{'values': [{'note': target_note if index == note_row and target_note else ''}]}],
+            'fields': 'note'}})
     # stale summary-tail rows collected above (shrunk render): clear them too
     for index in stale:
         requests.append(_write(sheet_id,index,[['',''],['','']]))
@@ -208,11 +224,11 @@ def outside_fingerprint(state, owned):
     return fingerprint(dict(grid=grid,groups=foreign,properties=state['properties'],row_metadata=row_metadata))
 
 
-def deliver(book, sheet_id, data, receipt_dir, *, apply=False, expected_title=None):
+def deliver(book, sheet_id, data, receipt_dir, *, apply=False, expected_title=None, saved_at_utc=None):
     before=read_state(book,sheet_id)
     if expected_title and before['properties']['title']!=expected_title: raise ValueError('Worksheet date does not match snapshot')
     start,old_end=_details(before)
-    requests,owned=plan_requests(data,sheet_id,before['grid'],before['groups'],start,old_end)
+    requests,owned=plan_requests(data,sheet_id,before['grid'],before['groups'],start,old_end,saved_at_utc)
     receipt_dir=Path(receipt_dir);receipt_dir.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     path=receipt_dir/f'{stamp}_{sheet_id}.json'
@@ -228,9 +244,13 @@ def deliver(book, sheet_id, data, receipt_dir, *, apply=False, expected_title=No
     for request in requests:
         if 'updateCells' in request:
             update=request['updateCells'];offset=update['range']['startRowIndex']
+            column=update['range'].get('startColumnIndex', 0)
             for i,row in enumerate(update['rows'],start=offset):
-                for j,c in enumerate(row['values']):
-                    expected[i][j]['userEnteredValue']=c['userEnteredValue']
+                for j,c in enumerate(row['values'], start=column):
+                    if update['fields'] == 'note':
+                        expected[i][j]['note'] = c.get('note', '')
+                    else:
+                        expected[i][j]['userEnteredValue']=c['userEnteredValue']
     for a,b in [owned['summary'],owned['details']]:
         for i in range(a,b):
             for j in range(2):
@@ -239,10 +259,12 @@ def deliver(book, sheet_id, data, receipt_dir, *, apply=False, expected_title=No
                 if got.get('stringValue')=='':got={}
                 if want.get('stringValue')=='':want={}
                 if got!=want: raise RuntimeError('Indicator value readback mismatch; backup retained')
+                if after['grid'][i][j].get('note', '') != expected[i][j].get('note', ''):
+                    raise RuntimeError('Indicator note readback mismatch; backup retained')
     if outside_fingerprint(before,owned)!=outside_fingerprint(after,owned):
         raise RuntimeError('Outside-scope state changed; backup retained')
     fmt=after['grid'][9][1].get('userEnteredFormat',{}).get('numberFormat',{})
-    view=saved_diversification_view(data)
+    view=saved_diversification_view(data, saved_at_utc=saved_at_utc)
     expected_format=view.get('number_format') or ({'type':'PERCENT','pattern':'0%'} if view.get('allocation') else {'type':'NUMBER','pattern':'0.0'})
     if fmt!=expected_format: raise RuntimeError('Number format readback mismatch')
     visibility={}
@@ -283,7 +305,7 @@ def main():
     from src.google_sheets.spreadsheet_structure import GoogleSheetsClient
     book=GoogleSheetsClient(str(args.credentials)).client.open_by_key(args.spreadsheet_id)
     expected=datetime.strptime(as_of,'%Y-%m-%d').strftime('%d %b %Y')
-    try: result=deliver(book,args.sheet_id,data,args.receipt_dir,apply=args.apply,expected_title=expected)
+    try: result=deliver(book,args.sheet_id,data,args.receipt_dir,apply=args.apply,expected_title=expected,saved_at_utc=payload.get('saved_at_utc'))
     except (ValueError,RuntimeError) as error: parser.exit(2,str(error)+'\n')
     print(json.dumps(result,ensure_ascii=False))
 

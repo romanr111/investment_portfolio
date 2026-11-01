@@ -131,6 +131,7 @@ def refresh_insights(
     snapshot_dir: str | Path = "data/snapshots",
     *,
     valuation_date: Optional[str] = None,
+    saved_at_utc: Optional[str] = None,
     adoptions: Optional[dict] = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
@@ -158,6 +159,7 @@ def refresh_insights(
         previous_snapshot=previous.data if previous else None,
         previous_date=previous.as_of_date if previous else None,
         current_date=current_date,
+        saved_at_utc=saved_at_utc,
     )
     return write_portfolio_snapshot(
         spreadsheet,
@@ -189,11 +191,13 @@ def refresh_from_snapshot(
             saved_at = datetime.fromisoformat(
                 snapshot.saved_at_utc.replace("Z", "+00:00")
             )
+            if saved_at.tzinfo is None or saved_at.utcoffset() is None:
+                raise ValueError("Snapshot save time must include a timezone")
             age = (
                 datetime.now(timezone.utc) - saved_at.astimezone(timezone.utc)
             ).total_seconds()
             metadata["age_seconds"] = max(age, 0.0)
-        except ValueError:
+        except (ValueError, TypeError, AttributeError, OverflowError):
             metadata.pop("age_seconds", None)
     combined_data["DATA_METADATA"] = metadata
     return refresh_insights(
@@ -202,6 +206,7 @@ def refresh_from_snapshot(
         config=load_insights_config(config_path),
         snapshot_dir=snapshot_dir,
         valuation_date=snapshot.as_of_date,
+        saved_at_utc=snapshot.saved_at_utc,
         adoptions=adoptions,
         dry_run=dry_run,
     )
