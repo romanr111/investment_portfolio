@@ -49,6 +49,14 @@ car-category *args:
 car-crisis *args:
     venv/bin/python -m analytics.car_crisis_test {{args}}
 
+# Offline risk progress (effective independent streams, DR squared) from a saved snapshot; never writes Sheets.
+risk-progress *args:
+    venv/bin/python -m analytics.holy_grail_risk_progress {{args}}
+
+# Frozen block of retrospective used-vehicle proxy series (price indexes, listed remarketers) for the risk-progress car scenarios.
+car-proxies *args:
+    venv/bin/python -m analytics.car_risk_proxies {{args}}
+
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:
     #!/usr/bin/env bash

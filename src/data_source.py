@@ -26,6 +26,7 @@ from src.portfolio_ledger.contract import (
 from src.portfolio_ledger.storage import PortfolioLedger
 from src.portfolio_ledger.sync import build_activity_sources, sync_crypto_sources
 from analytics.car_category import load_block as load_car_category_block
+from analytics.car_risk_proxies import load_block as load_car_proxies_block
 from analytics.holy_grail_data import enrich_combined_data
 from data.assets_data import OTHER_BETS
 
@@ -477,6 +478,7 @@ class DataSource:
             allow_network=getattr(self, "_refresh_holy_grail_history", False),
             previous_combined_data=previous,
             car_category=load_car_category_block(),
+            car_proxies=load_car_proxies_block(),
         )
         self._save_combined_data_to_json(data)
         return data

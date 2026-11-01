@@ -83,8 +83,11 @@ def validated_context(context, saved_at_utc):
         return None
 
 
-def conclusion_note(result, context, saved_at_utc=None):
-    """Explain saved scenarios and optional verified context without changing the score."""
+def conclusion_note(result, context, saved_at_utc=None, extra_lines=()):
+    """Explain saved scenarios and optional verified context without changing the score.
+
+    `extra_lines` (already formatted, e.g. the risk-progress paragraph) follow the scenario lines.
+    """
     category_model = result.get('version') == 'capital_diversification_v3'
     lines = ['Оцінка інвестованої частини. Кореляція автобізнесу - сценарій за ціновим каналом індексу вживаних авто '
              '(США) при R=1, а не вимірювання вашого бізнесу; фінансування, ліквідність, ремонт, курс і податки '
@@ -108,6 +111,7 @@ def conclusion_note(result, context, saved_at_utc=None):
             if score is not None and category:
                 text += ' - ' + category
             lines.append(label + ': ' + text)
+    lines.extend(extra_lines)
     lines.append('Історія та припущення не гарантують майбутній результат. Кеш поза балом.')
     valid = validated_context(context, saved_at_utc)
     if valid:
