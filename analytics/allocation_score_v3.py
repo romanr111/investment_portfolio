@@ -3,8 +3,9 @@
 Everything except the car_business pairs is the saved, replayed v2 record: weights, sectors,
 the other pair correlations and the 0.75 stress scenario. The car pairs come from the frozen
 `car_category` block (analytics.car_category): the correlation of a used-vehicle price index
-with each group, scaled by the index loading R = 1. R = 1 is an upper bound for the price
-channel, so the result is a category proxy and never a measurement of the owner's business.
+with each group, scaled by the index loading R = 1. R = 1 is a conditional scenario assumption
+(the business inherits the index's price channel), not a bound on the business, so the result is
+a category proxy and never a measurement of the owner's business.
 """
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -21,8 +22,10 @@ from analytics.holy_grail import completed_month_end, fingerprint
 VERSION = 'capital_diversification_v3'
 CAR = car_category.CAR
 WINDOWS = (60, 36)
-# Headline judgment call: the conservative envelope of three measurements of the same
-# price-channel correlation. The wider cat_upper90 and the 0.75 stress stay as scenarios.
+# Headline judgment call: per group the largest of three different correlation measures (window,
+# window with a one-month price lag, long-history equity-stress months). Their samples differ, so a
+# pair's observations count and measure are stored, not a common window. The wider cat_upper90
+# (largest per-measure Fisher endpoint, nominal per estimate) and the 0.75 stress stay as scenarios.
 HEADLINE = 'm60_cat_point'
 BASES = {'cat_point': 'point', 'cat_upper90': 'upper90'}
 METHOD_V3 = {
@@ -66,6 +69,8 @@ def _scenario(v2, months, assign, basis):
         else:
             pair.update(correlation=value['correlation'], kind=value['kind'],
                         observations=value['observations'], months=[], last_month=None)
+            if value.get('sample'):
+                pair['sample'] = value['sample']
     correlations = correlation_map(pairs)
     components = score_components_v2(weights, correlations, v2['sectors'])
     optimistic = dict(correlations)
@@ -153,7 +158,10 @@ def derive_allocation_score_v3(v2, block):
                     measure = by_group.get(group)
                     if not measure or measure[field] is None:
                         return None
-                    return dict(correlation=measure[field], kind='category', observations=measure['n'])
+                    upper = field == 'upper90'
+                    return dict(correlation=measure[field], kind='category',
+                                observations=measure['upper_n' if upper else 'n'],
+                                sample=measure['upper_selected' if upper else 'selected'])
                 scenarios[f'm{months}_{name}'] = _scenario(v2, months, assign, name)
             stress = deepcopy(v2['scenarios'][f'm{months}_r075'])
             stress['car_basis'] = 'assumption'

@@ -496,7 +496,7 @@ missing offline history degrades the after state to unavailable.
 public category index. v2 stays sealed, is still calculated for every snapshot
 and remains the source record; v3 is a sibling record
 `DIVERSIFICATION_DATA.allocation_score_v3` derived from the saved v2 record plus
-a frozen `car_category_v1` block. Weights, sectors, all non-car pair
+a frozen `car_category_v2` block. Weights, sectors, all non-car pair
 correlations and the 0.75 stress scenario are copied from v2. `concentration_v1`
 and the offline what-if stay on v2 and are not migrated. No block supplied
 means no v3 record.
@@ -504,23 +504,34 @@ means no v3 record.
 **What the car pairs are.** The Manheim Used Vehicle Value Index (US wholesale
 prices, seasonally adjusted, monthly since 1997) is a public proxy for the price
 of the inventory of "buy damaged, repair, resell". For each group the pair is
-`R * rho(index, group)` with the index loading fixed at `R = 1`. `R = 1` is an
-upper bound for the price channel only; deal-level noise lowers it, and it can
-be calibrated only from the owner's own deals (`docs/car-deal-ledger.md`). The
-pair kind is `category`: it is a category proxy, never a measurement of the
-business, and it never infers business returns from carrying values or the past
-resale. Financing, liquidity, FX, customs and war channels are not in the index.
+`R * rho(index, group)` with the index loading fixed at `R = 1`. `R = 1` is a
+conditional scenario assumption: the business inherits the standardized index's
+price channel (and its residual is uncorrelated with the group). It is not a
+bound on the business. Deal-level noise would lower the loading, which can be
+calibrated only from the owner's own dated deals (`docs/car-deal-ledger.md`),
+while financing, liquidity, repair, FX, customs, tax and war channels are not in
+the index and are not bounded. The pair kind is `category`: it is a category
+proxy, never a measurement of the business, and it never infers business
+returns from carrying values or the past resale.
 
-**Measures per group** (all on the frozen block; the highest available is
-selected, a deliberately conservative envelope): same-window monthly
-correlation; the group against the index one month later (price lags); and the
-correlation inside the worst-quintile months of US equities over the full index
-history (at least 20 months). `cat_point` is `R` times the selected value;
-`cat_upper90` applies a Fisher interval with the selected measure's `n` (it is
-not a block bootstrap and does not correct for overlap, so it is wide by
-construction). A group with no usable measure gets a missing pair, r = 1, and
-the v2 rule that a missing-pair effect above five points makes the scenario
-unavailable.
+**Measures per group** (all on the frozen block). These are three different
+quantities with different samples, not repeated measurements of one: the
+same-window monthly correlation; the group against the index one month later
+(price lags); and the correlation inside the worst-quintile months of US
+equities over the full index history since 1997 (at least 20 months), whose
+sample ignores the window. `cat_point` is `R` times the largest of the three.
+`cat_upper90` is `R` times the largest of the three per-measure Fisher upper
+endpoints (z = 1.645, a nominal two-sided 90% or one-sided 95% endpoint for each
+single estimate). The two envelopes are chosen separately, so the upper endpoint
+can come from a different measure and sample than the point; the saved measures
+keep `selected`/`n` and `upper_selected`/`upper_n`, and each category pair keeps
+its `sample`. The endpoint is not a block bootstrap: it ignores serial
+dependence, overlapping months and the selection of the maximum, and ten groups
+are taken at once. It is therefore neither a calibrated confidence interval for
+the portfolio score nor a bound on the business, and the spread between
+scenarios is a sensitivity range, not an interval. A group with no usable
+measure gets a missing pair, r = 1, and the v2 rule that a missing-pair effect
+above five points makes the scenario unavailable.
 
 **Scenarios.** `m60`/`m36` x `cat_point`, `cat_upper90`, and `r075` (the v2
 assumption, unchanged). The headline is `m60_cat_point`
@@ -540,15 +551,19 @@ recomputes everything offline from the saved v2 record and the embedded block.
 **Regression and first result.** With constant pairs 0.25 and 0.75 the v3 pair
 substitution reproduces the saved v2 scenario scores to 1e-8. On the 29 October
 2026 snapshot: v2 base 58.1, stress 31.8; v3 headline 60.2 (equivalent to a
-uniform car correlation of about 0.19), `cat_upper90` 51.6, 36-month 67.9 and
-57.9. Group correlations with the index are weak (below 0.30 at the selected
+uniform car correlation of about 0.19), `cat_upper90` 51.4 (51.6 under the first
+selection rule, which took the endpoint of the measure with the largest point;
+the block method is now `car_category_v2` and a `car_category_v1` block is
+rejected as invalid), 36-month 67.9 and 57.9. Group correlations with the index are weak (below 0.30 at the selected
 measure), so for the price channel the 0.25 base is consistent with public data
 while 0.75 is far above anything this channel shows.
 
 **Limits.** One index, one channel; `R` unknown; the 60-month window holds
 essentially one rate-shock regime; 2008-era coverage is missing for China,
 emerging markets, crypto and EUR high yield; Manheim history is revised (raw file
-sha256 is recorded) and Cox is an interested party; US and EU data say nothing
+sha256 is recorded) and Cox is an interested party; the stress measure uses the
+same long-history sample in the 60 and 36-month scenarios, so the window
+sensitivity of the category scenarios is understated; US and EU data say nothing
 about Ukrainian customs, VAT, FX or war channels. The refresh is quarterly:
 rebuild the block after the quarter's last Manheim month (`just car-category
 build ...`), copy it to `data/car_category/block_latest.json`, then run the

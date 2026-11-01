@@ -5,9 +5,12 @@ Manheim used-vehicle price index (US wholesale, seasonally adjusted). The block 
 that index plus long asset histories so the measures replay offline and deterministically.
 
 Every correlation is the index's correlation scaled by R (index loading, fixed at 1.0):
-rho(business, group) = R * rho(index, group). R = 1 is an upper bound for the price
-channel only; deal-level noise lowers it but needs the owner's own deals to calibrate
-(docs/car-deal-ledger.md). The result is a category proxy, never the owner's returns.
+rho(business, group) = R * rho(index, group). R = 1 is a conditional scenario assumption:
+the business inherits the standardized index's price channel, which is not a bound on the
+business. Deal-level noise would lower the loading but needs the owner's own deals to
+calibrate (docs/car-deal-ledger.md); financing, liquidity, repair, FX, tax and local
+channels are outside the index and unbounded here. The result is a category proxy, never
+the owner's returns.
 """
 import argparse
 import json
@@ -20,18 +23,19 @@ import pandas as pd
 from analytics import car_category_data as data
 from analytics.holy_grail import completed_month_end, fingerprint
 
-VERSION = 'car_category_v1'
+VERSION = 'car_category_v2'
 CAR = 'car_business'
 METHOD = {
     'version': VERSION, 'index': 'manheim_used_vehicle_value_index_sa',
     'measures': ['monthly', 'lagged_1m', 'stress_quintile'], 'selection': 'max',
+    'upper_selection': 'max_over_measures',
     'stress_group': 'equity_us', 'stress_quantile': 0.2, 'min_stress_observations': 20,
     'minimum_observations': 36, 'upper_confidence_z': 1.645, 'index_loading_R': 1.0,
     'max_index_lag_months': 1,
 }
 LIMITATIONS = [
     'Category price index (US wholesale), not the return of any individual business.',
-    'Index loading R is fixed at 1: an upper bound for the price channel, not a measurement.',
+    'Index loading R is fixed at 1: a conditional price-channel assumption, not a measurement or a bound on the business.',
     'Financing, liquidity, FX, customs and local-war channels are not in the index.',
     'Manheim history is revised; the sha256 of each raw file identifies the vintage used.',
     'Crisis coverage before 2011-2017 is incomplete for China, EM and crypto groups.',
@@ -132,7 +136,15 @@ def _fisher_upper(r, n, z):
 
 
 def group_measures(block, window_frame, group, months):
-    """Correlation of one group with the category index over the window, three ways, then the envelope."""
+    """Correlation of one group with the category index, three ways, then two separate envelopes.
+
+    The monthly and lagged measures use the window; the stress measure uses every month of the
+    long history in which US equities were in their worst quintile, so its `n` is not the window.
+    `point` is R times the largest correlation; `upper90` is R times the largest of the per-measure
+    Fisher upper endpoints (z=1.645: nominal per-estimate, one-sided 95%), which can come from a
+    different measure and sample than the point (`upper_selected`, `upper_n`). Neither is a
+    confidence statement about a score or about the business.
+    """
     method = METHOD
     price = index_series(block)
     series = window_frame[group]
@@ -149,13 +161,16 @@ def group_measures(block, window_frame, group, months):
                           method['min_stress_observations'])
     found['stress_quintile'] = stress
     available = {name: m for name, m in found.items() if m is not None}
-    out = dict(found, selected=None, point=None, upper90=None, n=None)
+    out = dict(found, selected=None, point=None, upper90=None, n=None, upper_selected=None, upper_n=None)
     if available:
         name = max(available, key=lambda key: (available[key]['r'], key))
         chosen, loading = available[name], method['index_loading_R']
-        upper = _fisher_upper(chosen['r'], chosen['n'], method['upper_confidence_z'])
-        out.update(selected=name, n=chosen['n'], point=loading * chosen['r'],
-                   upper90=None if upper is None else min(1., loading * upper))
+        out.update(selected=name, n=chosen['n'], point=loading * chosen['r'])
+        uppers = {key: _fisher_upper(m['r'], m['n'], method['upper_confidence_z']) for key, m in available.items()}
+        uppers = {key: value for key, value in uppers.items() if value is not None}
+        if uppers:
+            top = max(uppers, key=lambda key: (uppers[key], key))
+            out.update(upper_selected=top, upper_n=available[top]['n'], upper90=min(1., loading * uppers[top]))
     return out
 
 
@@ -185,16 +200,17 @@ def _report(snapshot_path, block_path, history_path=None):
         mid = (low + high) / 2
         low, high = (mid, high) if uniform_score(mid) > headline['score'] else (low, mid)
     measures = v3['measures']['m60']
-    lines = ['Category proxy (used-vehicle price index), not your business. R=1: upper bound for the price channel.', '',
-             '| Group | Weight | Monthly | Lag 1m | Stress | Selected | Point | Upper 90% | n |',
-             '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    lines = ['Category proxy (used-vehicle price index), not your business. R=1 is a price-channel scenario assumption, not a bound.',
+             'Stress n counts worst-quintile US-equity months since 1997, not the window. Upper 90% = largest per-measure Fisher endpoint (nominal, per estimate).', '',
+             '| Group | Weight | Monthly | Lag 1m | Stress | Point (measure, n) | Upper 90% (measure, n) |',
+             '| --- | --- | --- | --- | --- | --- | --- |']
     fmt = lambda m: '-' if not m else f"{m['r']:+.2f}"
     for group in sorted(measures, key=lambda g: -weights.get(g, 0)):
         m = measures[group]
         lines.append(f"| {group} | {weights[group] * 100:.1f}% | {fmt(m['monthly'])} | {fmt(m['lagged_1m'])} | "
-                     f"{fmt(m['stress_quintile'])} | {m['selected'] or '-'} | "
-                     f"{'-' if m['point'] is None else format(m['point'], '+.2f')} | "
-                     f"{'-' if m['upper90'] is None else format(m['upper90'], '+.2f')} | {m['n'] or '-'} |")
+                     f"{fmt(m['stress_quintile'])} | "
+                     f"{'-' if m['point'] is None else format(m['point'], '+.2f') + ' ' + m['selected'] + ' n=' + str(m['n'])} | "
+                     f"{'-' if m['upper90'] is None else format(m['upper90'], '+.2f') + ' ' + m['upper_selected'] + ' n=' + str(m['upper_n'])} |")
     scores = {key: s['score'] for key, s in v3['scenarios'].items()}
     lines += ['', 'Diversification score (invested part):',
               f"- v2 saved base (car correlation 0.25): {v2['scenarios']['m60_r025']['score']:.1f}",
