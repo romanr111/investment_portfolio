@@ -518,6 +518,8 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             if assessment['available'] != assessment['expected']:
                 label += ' · Не всі сценарії доступні'
             if shown['status'] == 'provisional': label += ' · Попередньо'
+            if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
+                label += ' · Припущення v2: блок категорії авто недоступний'
             from analytics.car_resale_market import conclusion_note
             view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc)
             groups = sorted(result['groups'], key=lambda item: (-item['weight'], item['id']))

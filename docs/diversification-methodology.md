@@ -544,7 +544,8 @@ about a week into the next month; the lag is flagged `category_index_lagged`),
 never later (no look-ahead), finite month-end series (the index series ending
 exactly at the cutoff, no series beyond it), and at least 120 index returns. A rejected or stale block yields an explicit
 `unavailable` v3 record (`invalid_car_category_block`) and the view then shows the
-v2 assumption numbers labelled as assumptions; a present v3 record that fails
+v2 assumption numbers labelled as assumptions (the tab's conclusion cell ends with
+`Припущення v2: блок категорії авто недоступний`); a present v3 record that fails
 replay renders as unavailable and never falls back to v2 or v1. Replay
 recomputes everything offline from the saved v2 record and the embedded block.
 
