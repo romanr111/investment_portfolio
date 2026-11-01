@@ -67,12 +67,20 @@ Prefer validated `DIVERSIFICATION_DATA.allocation_score_v2` for new snapshots.
 Show its 0-100 points, Cash separately, and the scenario range and constraints.
 The shared saved view reads historical v1 percentages, DR-squared counts and
 policy checks with their original labels and units. A present invalid v2 result
-must not fall back to a prior result. See `docs/diversification-methodology.md`.
+must not fall back to a prior result. A valid sibling `allocation_score_v3`
+supplies the headline and scenarios instead of v2's (v2 stays the source
+record; a v3 that fails replay renders unavailable), and a valid
+`risk_progress_v1` adds the summary row "Ризиковий прогрес" and a note
+paragraph (one that fails replay shows "Недоступно"). See
+`docs/diversification-methodology.md`.
 
 `DataSource.get_combined_data()` calculates v2 only when the `allocation`
-configuration is present. Render saved data through `saved_diversification_view()`;
-never fetch histories or calculate risk in the report. Preserve the four approved
-summary cards, financial figures, and privacy exclusions.
+configuration is present, derives v3 only when
+`data/car_category/block_latest.json` exists, and derives `risk_progress_v1`
+only when `data/car_category/proxies_latest.json` exists. Render saved data
+through `saved_diversification_view()`; never fetch histories or calculate risk
+in the report. Preserve the four approved summary cards, financial figures, and
+privacy exclusions.
 
 For historical replay, validate quarter-end holdings and use a new derived copy:
 
