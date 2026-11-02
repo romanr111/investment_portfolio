@@ -1,9 +1,10 @@
 """Risk progress v1: effective independent equal-risk streams (DR squared) for the covered groups.
 
 A sibling record derived offline from a saved, replayed capital_diversification_v2 record. It reads
-only the frozen group histories and weights, never prices or networks, and nothing else imports it,
-so v2/v3, the sheets and the reports are untouched. The scale is a policy choice (target 15 streams
-mapped linearly to 0-100), not a percentage of risk. Groups without a return history (car_business)
+only the frozen group histories and weights, never prices or networks. The enrichment
+(`holy_grail_data`) derives it and the view (`allocation_view`) replays it before display; v2/v3 and
+balances are never changed. The scale is a policy choice (target 15 streams mapped linearly to 0-100),
+not a percentage of risk. Groups without a return history (car_business)
 are excluded from the headline and reported. With a frozen `car_proxies_v1` block the record also holds
 labeled car-business scenarios ("the business behaves like this public series"); a scenario is an
 assumption shown as a range next to the headline, never the headline. Cash is outside the metric.
