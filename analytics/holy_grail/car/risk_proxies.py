@@ -47,6 +47,7 @@ METHODS = {METHOD_V1['version']: METHOD_V1, VERSION: METHOD}
 VERSION_V3 = 'car_proxies_v3'
 PROXIES_V3 = {k: dict(v) for k, v in PROXIES.items()}
 PROXIES_V3['listed_remarketers'] = dict(PROXIES['listed_remarketers'], source='yfinance_auto_adjust')
+# `history_months` (120) is inherited and applies to the imported series; the collected basket uses `basket_history_months`.
 METHOD_V3 = dict(METHOD, version=VERSION_V3, proxies=PROXIES_V3, basket_history_months=60,
                  basket_collection='yfinance_auto_adjusted_monthly_usd_total_return',
                  basket_aggregation='mean_skipna_false_on_same_month',

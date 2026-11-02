@@ -4,11 +4,12 @@ Every number and text comes from the replayed record (and the replayed v2 record
 from); nothing is fetched and no configuration is read. A record that does not replay shows
 "Недоступно" and never falls back to another method.
 """
+from analytics.holy_grail.risk_progress import EPS, TARGET
 from analytics.holy_grail.views.allocation import (WARNINGS, _PROXY_LABELS, _concentration_section_for, _floor1, _pct,
                                                     _risk_progress_text, group_label, risk_fact_rows)
 
 CAR_ID = 'car_business'
-SCALE = '100 = ефект 15 однакових незалежних потоків'
+SCALE = f'100 = ефект {TARGET} однакових незалежних потоків'
 ASSUMPTION = ('автобізнес через кошик CPRT/KMX/OPLN; фактична прибутковість бізнесу ще не перевірена, '
               'ризик оцінено через проксі')
 NO_CAR_ASSUMPTION = 'усі інвестовані групи оцінені за історіями їхніх представників; автобізнесу в портфелі немає'
@@ -110,9 +111,10 @@ def _v2_reason(code):
 
 
 def _streams(value):
-    """Equivalent count for the anchor: rounded to one decimal, never shown as 15 before the target is reached."""
+    """Equivalent streams: ONE rule everywhere, rounded to nearest at one decimal (points use the stored floor
+    display), never shown as the target before it is reached."""
     text = f'{value:.1f}'
-    if value < 15 - 1e-10 and float(text) >= 15:
+    if value < TARGET - EPS and float(text) >= TARGET:
         text = '14.9'
     return text.replace('.', ',')
 
@@ -188,7 +190,7 @@ def _scenario_text(item, with_vol_series=False):
     parts = []
     if with_vol_series:
         parts.append(f"волатильність ряду {_num(item['car_series_annual_volatility_pct'])}%")
-    parts.extend([f"бал {_floor1(item['progress_points'])} зі 100", f"еквівалент потоків {_floor1(item['effective_streams'])}",
+    parts.extend([f"бал {_disp(item['progress_display'])} зі 100", f"еквівалент потоків {_streams(item['effective_streams'])}",
                   f"внесок автобізнесу в ризик {_share(item['car_risk_share'])}",
                   f"волатильність портфеля {_num(item['annual_portfolio_volatility_pct'])}%"])
     return '; '.join(parts)
@@ -234,11 +236,12 @@ def _comparison_rows(sensitivity):
 def _window36_rows(record):
     window = (record.get('windows') or {}).get('m36') or {}
     if window.get('effective_streams') is None:
-        rows = [('Вікно 36 місяців (діагностика)', 'Недоступно')]
+        reason = _reason(window.get('reason')) if window.get('reason') else None
+        rows = [('Вікно 36 місяців (діагностика)', 'Недоступно' + (f': {reason}' if reason else ''))]
     else:
         rows = [('Вікно 36 місяців (діагностика)',
-                 f"{_stamp(window['window_start'])} - {_stamp(window['window_end'])}: бал {_floor1(window['progress_points'])} зі 100; "
-                 f"еквівалент потоків {_floor1(window['effective_streams'])}; "
+                 f"{_stamp(window['window_start'])} - {_stamp(window['window_end'])}: бал {_disp(window['progress_display'])} зі 100; "
+                 f"еквівалент потоків {_streams(window['effective_streams'])}; "
                  f"волатильність портфеля {_num(window['annual_portfolio_volatility_pct'])}%")]
     return rows + [('Про вікна', 'Різниця між вікнами - це зміна історії ринку, а не портфеля.')]
 

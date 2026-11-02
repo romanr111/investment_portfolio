@@ -8,6 +8,10 @@ not a percentage of risk. Groups without a return history (car_business)
 are excluded from the headline and reported. With a frozen `car_proxies` block (v1 or v2) the record also holds
 labeled car-business scenarios ("the business behaves like this public series"); a scenario is an
 assumption shown as a range next to the headline, never the headline. Cash is outside the metric.
+
+risk_progress_v2 (second half of this file) is the headline record for new snapshots: one 0-100 score over
+every positive invested weight, with the car business carried by the labelled CPRT/KMX/OPLN basket of a frozen
+car proxy block. v1 above keeps its own records and rules.
 """
 import argparse
 import copy
@@ -24,6 +28,7 @@ from analytics.holy_grail.correlation import monthly_window
 from analytics.holy_grail.allocation_score_v2 import TOLERANCE, same_value
 from analytics.holy_grail.allocation_v2_inputs import build_group_history, validate_saved_allocation_v2
 from analytics.holy_grail.car.risk_proxies import LATEST_BLOCK, inspect_block, load_block, series_map, validate_block
+from analytics.holy_grail.car import risk_proxies
 from analytics.holy_grail.fingerprint import completed_month_end, fingerprint
 
 VERSION = 'risk_progress_v1'
@@ -357,23 +362,22 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
-    raise SystemExit(main())
-
-
 # --------------------------------------------------------------------------------------------------------------
 # risk_progress_v2: one 0-100 score over every invested weight; the car business enters through the labelled
 # CPRT/KMX/OPLN basket of a frozen car proxy block. v1 above is untouched and still replays its own records.
 # --------------------------------------------------------------------------------------------------------------
 VERSION_V2 = 'risk_progress_v2'
-BASKET_ID = 'listed_remarketers'
-BASKET_NAMES = ['CPRT', 'KMX', 'OPLN']
+# Values owned by the proxy block code are read from it, so changing them there changes the method fingerprint.
+BASKET_ID = risk_proxies.MAIN_SERIES
+BASKET_NAMES = list(risk_proxies.BASKET)
 COMPARISON_IDS = [BASKET_ID, 'manheim_wholesale', 'bls_used_retail', 'auto1_wholesale_eu']
 MULTIPLIERS = [0.5, 1.0, 2.0]
 WORST_MONTHS = 6
 WRITEOFF_FRACTIONS = [0.5, 1.0]
-MAX_LAG = 1
+MAX_LAG = risk_proxies.METHOD['max_lag_months']
 WEIGHT_TOLERANCE = 1e-8
+HEDGE_TOLERANCE = 1e-9
+HEADLINE_CAP, DETAIL_CAP = 99, 99.9
 TARGET_BENEFIT = 1 - 1 / math.sqrt(TARGET)
 METHOD_V2 = {
     'version': VERSION_V2, 'scope': 'invested_assets', 'cash': 'excluded',
@@ -383,14 +387,16 @@ METHOD_V2 = {
     'weights': 'saved_v2_weights_every_positive_group_required', 'windows': list(WINDOWS), 'primary_window': PRIMARY,
     'minimum_observations': 36, 'max_lag_months': MAX_LAG,
     'car_business': {'series': BASKET_ID, 'names': BASKET_NAMES, 'aggregation': 'equal_weight_all_names_required',
-                     'blocks': ['car_proxies_v2', 'car_proxies_v3']},
+                     'blocks': sorted(risk_proxies.INSPECT_METHODS)},
     'risk_share': 'euler_w_i_times_cov_w_i_over_variance', 'annual_volatility': 'monthly_std_times_sqrt12',
     'proxy_comparison': {'ids': COMPARISON_IDS, 'sample': 'common_months_of_all_ids_and_other_groups'},
     'volatility': {'multipliers': MULTIPLIERS, 'sample': 'main_scenario_months'},
     'stress': {'worst_months': WORST_MONTHS, 'rule': 'lowest_portfolio_return_earlier_date_on_tie',
                'contribution': 'mean_of_w_i_times_r_i_over_selected_months', 'car_writeoff_fractions': WRITEOFF_FRACTIONS},
-    'display': {'headline': 'floor_capped_99_until_target', 'detail': 'one_decimal_floor_capped_99_9_until_target'},
-    'tolerances': {'weight_sum': WEIGHT_TOLERANCE, 'psd': 1e-12, 'variance_floor': 1e-12, 'integer_snap': EPS},
+    'display': {'headline': 'floor_capped_until_target', 'detail': 'one_decimal_floor_capped_until_target',
+                'headline_cap': HEADLINE_CAP, 'detail_cap': DETAIL_CAP},
+    'tolerances': {'weight_sum': WEIGHT_TOLERANCE, 'psd': METHOD['psd_tolerance'],
+                   'variance_floor': METHOD['variance_floor'], 'integer_snap': EPS, 'hedge_count': HEDGE_TOLERANCE},
 }
 IGNORED_V2 = {'calculated_at', 'result_fingerprint'}
 
@@ -409,8 +415,8 @@ def _display_v2(points, streams):
     """Integer for the compact headline, one decimal (rounded down) for details; 100 only at the target."""
     if streams >= TARGET - EPS:
         return {'headline': 100, 'detail': 100.0}
-    return {'headline': min(99, int(math.floor(points + EPS))),
-            'detail': min(99.9, math.floor(points * 10 + TOLERANCE) / 10)}
+    return {'headline': min(HEADLINE_CAP, int(math.floor(points + EPS))),
+            'detail': min(DETAIL_CAP, math.floor(points * 10 + TOLERANCE) / 10)}
 
 
 def _stats(data, weights):
@@ -443,12 +449,16 @@ def _stats(data, weights):
                 portfolio=float(math.sqrt(variance) * math.sqrt(12) * 100), min_eigenvalue=float(eigenvalues[0]))
 
 
+def _empty_window(months, cols, reason=None):
+    return dict(months=months, status='unavailable', reason=reason, observations=0, window_start=None, window_end=None,
+                streams=len(cols), effective_streams=None, diversification_ratio=None, volatility_reduction_pct=None,
+                progress_points=None, progress_display=None, flags=[], min_eigenvalue=None, capital_weights={},
+                risk_share={}, annual_volatility_pct={}, annual_portfolio_volatility_pct=None)
+
+
 def _window_v2(frame, cols, weights, months, cutoff):
     """DR window on the last `months` calendar rows; (record, complete-rows frame or None)."""
-    out = dict(months=months, status='unavailable', reason=None, observations=0, window_start=None, window_end=None,
-               streams=len(cols), effective_streams=None, diversification_ratio=None, volatility_reduction_pct=None,
-               progress_points=None, progress_display=None, flags=[], min_eigenvalue=None, capital_weights={},
-               risk_share={}, annual_volatility_pct={}, annual_portfolio_volatility_pct=None)
+    out = _empty_window(months, cols)
     if not cols:
         return dict(out, reason='no_streams'), None
     sub = frame[cols].iloc[-months:]
@@ -466,14 +476,11 @@ def _window_v2(frame, cols, weights, months, cutoff):
     stats = _stats(data, weights)
     if isinstance(stats, str):
         return dict(out, reason=stats), None
-    flags = []
-    if data.index[-1] < cutoff:
-        flags.append('lagged_one_month')
-    if len(data) < months:
-        flags.append('short_history')
-    if stats['streams'] > len(cols) + 1e-9:
+    lagged, short = data.index[-1] < cutoff, len(data) < months
+    flags = (['lagged_one_month'] if lagged else []) + (['short_history'] if short else [])
+    if stats['streams'] > len(cols) + HEDGE_TOLERANCE:
         flags.append('hedge_driven_count')
-    return dict(out, status='provisional' if len(data) < months or data.index[-1] < cutoff else 'modeled',
+    return dict(out, status='provisional' if lagged or short else 'modeled',
                 effective_streams=stats['streams'], diversification_ratio=stats['ratio'],
                 volatility_reduction_pct=float(100 * (1 - 1 / stats['ratio'])), progress_points=stats['points'],
                 progress_display=_display_v2(stats['points'], stats['streams']), flags=flags,
@@ -505,7 +512,7 @@ def _volatility(data, weights, status):
                 multipliers=list(MULTIPLIERS), items=items)
 
 
-def _comparison(base, other, weights, block, check, cutoff, main_data):
+def _comparison(base, other, weights, block, check, cutoff, main_data, parent_status):
     out = dict(status='unavailable', reason=None, members=list(COMPARISON_IDS), common_observations=0,
                window_start=None, window_end=None, same_sample_as_main=None, items={}, range=None)
     if not check['integrity']:
@@ -531,7 +538,8 @@ def _comparison(base, other, weights, block, check, cutoff, main_data):
         return dict(out, reason='insufficient_common_history')
     if sample.index[-1] < cutoff - pd.offsets.MonthEnd(MAX_LAG):
         return dict(out, reason='stale_common_history')
-    status = 'modeled' if len(sample) == PRIMARY and sample.index[-1] == cutoff else 'provisional'
+    complete = len(sample) == PRIMARY and sample.index[-1] == cutoff
+    status = 'modeled' if complete and parent_status == 'modeled' else 'provisional'
     items = {}
     for name in COMPARISON_IDS:
         data = sample[other].assign(**{CAR_ID: sample[name]})[sorted(weights)]
@@ -585,9 +593,8 @@ def _record_v2(v2, retrospective, **fields):
 
 
 def _derive_v2(v2, proxies, retrospective):
-    def fail(reason, **more):
-        return _record_v2(v2, more.pop('retrospective', retrospective), reason=reason,
-                          warnings=[reason.split(':')[0]], **more)
+    def fail(reason, **more):  # reads `retrospective` as it stands when called (raised once the block is known)
+        return _record_v2(v2, retrospective, reason=reason, warnings=[reason.split(':')[0]], **more)
     if v2.get('status') == 'not_applicable':
         return _record_v2(v2, retrospective, status='not_applicable', reason='no_invested_assets')
     if not _applicable(v2):
@@ -617,8 +624,10 @@ def _derive_v2(v2, proxies, retrospective):
             return fail('invalid_car_proxies_block', **keep)
         main_check = check['series'].get(BASKET_ID)
         if main_check is None or not main_check['ok']:
-            reason = 'missing' if main_check is None else main_check['reason'] or 'unusable'
-            return fail('car_basket_unavailable:' + reason, **keep)
+            excluded = proxies.get('excluded')
+            collected = excluded.get(BASKET_ID) if isinstance(excluded, dict) else None
+            reason = (main_check['reason'] or 'unusable') if main_check is not None else collected or 'missing'
+            return fail('car_basket_unavailable:' + str(reason), **keep)
         basket = series_map(proxies)[BASKET_ID]
         frame = base.assign(**{CAR_ID: basket.reindex(base.index)})
     missing = sorted(g for g in weights if g not in frame)
@@ -644,7 +653,7 @@ def _derive_v2(v2, proxies, retrospective):
     coverage = dict(invested_pct_nav=invested_pct_nav, cash_pct_nav=cash_pct_nav, groups=covered,
                     covered_pct_invested=sum(r['weight_pct_invested'] for r in covered), excluded=excluded,
                     excluded_pct_invested=sum(r['weight_pct_invested'] for r in excluded), car_proxy=car_proxy)
-    common = dict(retrospective=retrospective, data_vintage=vintage, coverage=coverage, **keep)
+    common = dict(data_vintage=vintage, coverage=coverage, **keep)
     if missing:
         return fail('no_history:' + ','.join(missing), **common)
     cols = sorted(weights)
@@ -656,22 +665,17 @@ def _derive_v2(v2, proxies, retrospective):
     warnings = ([] if car_proxy is None else ['car_proxy_assumption']) + parent
     if main['status'] == 'unavailable':
         stub = dict(status='unavailable', reason='main_unavailable')
-        windows[f'm{WINDOWS[1]}'] = dict(windows[f'm{WINDOWS[1]}'], status='unavailable', reason='main_unavailable',
-                                         observations=0, window_start=None, window_end=None, streams=len(cols),
-                                         effective_streams=None, diversification_ratio=None,
-                                         volatility_reduction_pct=None, progress_points=None, progress_display=None,
-                                         flags=[], min_eigenvalue=None, capital_weights={}, risk_share={},
-                                         annual_volatility_pct={}, annual_portfolio_volatility_pct=None)
+        windows[f'm{WINDOWS[1]}'] = _empty_window(WINDOWS[1], cols, 'main_unavailable')
         return _record_v2(v2, retrospective, status='unavailable', reason=main['reason'],
                           warnings=warnings + [main['reason'].split(':')[0]], windows=windows,
                           sensitivity=dict(proxy_comparison=dict(stub), volatility=dict(stub)), stress=dict(stub),
-                          **{k: v for k, v in common.items() if k != 'retrospective'})
+                          **common)
     status = 'provisional' if main['status'] == 'provisional' or parent else 'modeled'
     main_data = frames[PRIMARY]
     if car_weight > 0:
         other = [c for c in cols if c != CAR_ID]
-        sensitivity = dict(proxy_comparison=_comparison(base, other, weights, proxies, check, cutoff, main_data),
-                           volatility=_volatility(main_data, weights, main['status']))
+        sensitivity = dict(proxy_comparison=_comparison(base, other, weights, proxies, check, cutoff, main_data, status),
+                           volatility=_volatility(main_data, weights, status))
         writeoff = car_weight * invested_pct_nav
     else:
         na = dict(status='not_applicable', reason='no_car_business_weight')
@@ -679,8 +683,8 @@ def _derive_v2(v2, proxies, retrospective):
     return _record_v2(v2, retrospective, status=status, progress_points=main['progress_points'],
                       progress_display=main['progress_display'], warnings=warnings + main['flags'],
                       windows=windows, sensitivity=sensitivity,
-                      stress=_stress(main_data, weights, main['status'], None if writeoff is None else float(writeoff)),
-                      **{k: v for k, v in common.items() if k != 'retrospective'})
+                      stress=_stress(main_data, weights, status, None if writeoff is None else float(writeoff)),
+                      **common)
 
 
 def derive_risk_progress_v2(v2, proxies, *, retrospective=False):
@@ -689,6 +693,8 @@ def derive_risk_progress_v2(v2, proxies, *, retrospective=False):
     None only when `v2` carries no identity. Every other failure is an explicit unavailable record; the car
     business is never given another proxy, and a bad block is kept in the record so the failure replays.
     `retrospective` marks a recomputation made later than the snapshot (also set when the block postdates it).
+    The block-date rule is enforced on replay; a caller-asserted True cannot be proven or disproven there
+    (a re-sealed record can carry any recorded fact), so it is an assertion, not a guarantee.
     """
     if not _identity(v2):
         return None
@@ -699,7 +705,10 @@ def derive_risk_progress_v2(v2, proxies, *, retrospective=False):
 
 
 def _equal(a, b):
-    """Replay comparison: ints and strings exact, floats within 1e-8 absolute, containers recursive."""
+    """Replay comparison: ints and strings exact, floats within 1e-8 absolute, containers recursive.
+
+    Stricter than `same_value` on purpose: an int must stay an int (`observations`, counters).
+    """
     if isinstance(a, bool) or isinstance(b, bool):
         return a is b
     if isinstance(a, int) or isinstance(b, int):
@@ -741,3 +750,7 @@ def validate_saved_risk_progress_v2(result, data, v2, expected_date=None, *, v2_
                       {k: v for k, v in result.items() if k not in IGNORED_V2})
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return False
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

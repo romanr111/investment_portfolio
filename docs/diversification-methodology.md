@@ -746,7 +746,8 @@ the score.
 **Limits.** The basket is not calibrated to the business; the 60-month window
 holds essentially one rate-shock regime; one representative stands for each
 group; vintages of revised indexes are known only where recorded, so a
-historical recalculation is marked retrospective; the score says nothing about
+historical recalculation is marked retrospective (the block-date rule is enforced on replay, but a
+caller-asserted flag is an assertion that replay can neither prove nor disprove); the score says nothing about
 expected return, quality of the holdings, liquidity or protection in every
 environment. Definition of DR and its reading as equivalent independent streams:
 Choueifaty, Froidure and Reynier, "Properties of the most diversified

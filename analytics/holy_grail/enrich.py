@@ -11,7 +11,7 @@ from analytics.holy_grail.allocation_inputs import (allocation_history_requests,
                                                     seal_result, FATAL_FLAGS)
 from analytics.holy_grail.allocation_score_v3 import derive_allocation_score_v3
 from analytics.holy_grail.allocation_v2_inputs import calculate_allocation_score_v2, comparison_basis, compare_basis
-from analytics.holy_grail.car import proxy_collection
+from analytics.holy_grail.car import proxy_collection, risk_proxies
 from analytics.holy_grail.exposures import bound_exposure_record, extract_exposures, iso_date
 from analytics.holy_grail.paths import CACHE_DIR, CONFIG_PATH, DATA_DIR
 from analytics.holy_grail.risk_progress import derive_risk_progress_v1, derive_risk_progress_v2
@@ -123,9 +123,12 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
         try:
             headline_block = proxy_collection.collect_car_proxies_block(
                 as_of_date, car_proxies, cache_dir=cache_dir, allow_network=allow_network)
-        except Exception:
-            # No other proxy takes the place of a basket that could not be collected.
-            headline_block = None
+        except Exception as error:
+            # No other proxy takes the place of a basket that could not be collected; the record names the cause
+            # and keeps the imported price indexes.
+            headline_block = risk_proxies.build_block_v3(
+                as_of_date, basket_returns=None, basket_sources={}, basket_excluded='collection_error:' + type(error).__name__,
+                imported_block=car_proxies)
     headline = derive_risk_progress_v2(saved, headline_block, retrospective=retrospective)
     if headline is not None:
         output['DIVERSIFICATION_DATA']['risk_progress_v2'] = headline
