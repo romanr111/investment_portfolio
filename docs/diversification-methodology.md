@@ -3,10 +3,10 @@
 > Reader's guide: the current base method is "Capital diversification v2", with
 > "Concentration safeguards beside the score" and "Offline what-if scenarios"
 > under it (near the end of this file). Optional sibling records follow it:
-> "Capital diversification v3 (car-category pairs)" and "Capital diversification
-> v4 (car proxy composite)" for the car-business pairs, and, as the last
-> sections, "Risk progress (`risk_progress_v1`)" with "Car-business scenarios
-> (`car_proxies`)". Public car-market context and
+> "Capital diversification v3 (car-category pairs)" for the car-business pairs.
+> The headline for new snapshots is "Risk progress v2 (`risk_progress_v2`)"; the
+> older "Risk progress (`risk_progress_v1`)" and "Car-business scenarios
+> (`car_proxies`)" follow it as the last sections. Public car-market context and
 > the category evidence are in `docs/car-resale-market-context.md` and
 > `docs/car-flip-category-evidence.md`. "Historical capital-weighted score (v1)",
 > "Count and interpretation", "Ten-check policy", "Hypothetical stress policy"
@@ -564,15 +564,13 @@ v2 assumption numbers labelled as assumptions (the tab's conclusion cell ends wi
 replay renders as unavailable and never falls back to v2 or v1. Replay
 recomputes everything offline from the saved v2 record and the embedded block.
 
-**Regression and first result.** With constant pairs 0.25 and 0.75 the v3 pair
-substitution reproduces the saved v2 scenario scores to 1e-8. On the 29 October
-2026 snapshot: v2 base 58.1, stress 31.8; v3 headline 60.2 (equivalent to a
-uniform car correlation of about 0.19), `cat_upper90` 51.4 (51.6 under the first
-selection rule, which took the endpoint of the measure with the largest point;
-the block method is now `car_category_v2` and a `car_category_v1` block is
-rejected as invalid), 36-month 67.9 and 57.9. Group correlations with the index are weak (below 0.30 at the selected
-measure), so for the price channel the 0.25 base is consistent with public data
-while 0.75 is far above anything this channel shows.
+**Regression.** With constant pairs 0.25 and 0.75 the v3 pair substitution
+reproduces the saved v2 scenario scores to 1e-8. The price-channel group
+correlations with the index are weak in the data checked so far (below 0.30 at
+the selected measure), so for this channel the 0.25 base is consistent with
+public data while 0.75 is far above anything it shows. The block method is
+`car_category_v2`; a `car_category_v1` block is rejected as invalid. Concrete
+scores of a real snapshot belong in the ignored `data/`, not here.
 
 **Limits.** One index, one channel; `R` unknown; the 60-month window holds
 essentially one rate-shock regime; 2008-era coverage is missing for China,
@@ -590,60 +588,169 @@ car-category build ...`), copy it to `data/car_category/block_latest.json`, then
 run the normal pipeline. A stale block gives the explicit `unavailable` v3
 record and the v2 assumption numbers with a warning (see Gates above).
 
-## Capital diversification v4 (car proxy composite)
+## Risk progress v2 (`risk_progress_v2`)
 
-`capital_diversification_v4` is the v2 formula with the `car_business` pairs
-taken from a blend of public proxy channels. Like v3 it is a sibling record
-(`DIVERSIFICATION_DATA.allocation_score_v4`, `analytics/allocation_score_v4.py`)
-derived from the saved v2 record, here plus the frozen car proxy block of the
-risk-progress scenarios (see "Car-business scenarios"). Weights, sectors, all
-non-car pairs and the 0.75 stress scenario are copied from v2; v2 and v3 are
-unchanged. When both v3 and v4 are present, the views show v4.
+The headline for new snapshots: one score from 0 to 100 for the whole invested
+part of the portfolio, answering how much of the modelled diversification effect
+behind the Holy Grail idea the current mix shows. It is a sibling derived from a
+saved, replayed `capital_diversification_v2` record and a frozen car proxy block
+(`analytics/holy_grail/risk_progress.py`), saved as
+`DIVERSIFICATION_DATA.risk_progress_v2`. v2 and v3 stay calculated and are
+shown in the details. Cash is outside the score and shown separately.
 
-**What the car pairs are.** For each group and window (60 and 36 months) the
-same-month Pearson correlation of every proxy series with the group is taken on
-the common months of the v2 window, at least 36. Two channels:
+```
+standalone = sum(w_i * sigma_i)          sigma_p = sqrt(wᵀ Σ w)
+DR = standalone / sigma_p                N_effective = DR²
+benefit = 1 - 1/DR                       target_benefit = 1 - 1/sqrt(15)
+score = clip(100 * benefit / target_benefit, 0, 100)
+```
 
-- price channel: the arithmetic mean over the used-vehicle price indexes that
-  have a correlation (Manheim, BLS used cars, AUTO1, Ukrstat purchase of
-  vehicles);
-- equity channel: the listed remarketer basket (CPRT, KMX, OPLN).
+`w_i` is the weight of group `i` in the invested part, `sigma_i` the standard
+deviation of the monthly returns of its representative and `Σ` the sample
+covariance (ddof 1) of all groups on the same complete months. The weights of the
+current snapshot are applied to the whole window: the result is a conditional
+estimate of the risk structure of today's portfolio on the history of its
+representatives, not a reconstruction of past positions or returns. The base of
+the comparison is the same assets with the same weights and volatilities at full
+positive correlation; it is not the S&P 500, cash or the portfolio's actual risk
+on some date. Monthly versus annual volatility units do not change DR.
 
-The headline pair is `0.5 x price + 0.5 x equity`. Channels, not series, are
-weighted equally so that a channel with more published indexes cannot outvote
-the other (an owner decision). The two channels describe different things: a
-price index moves little and barely correlates with the groups, while the
-basket is priced like equities. Neither is the business: a leveraged inventory
-business, its financing, repair, FX, customs and war channels are not in any of
-them. The pair kind is `proxy_composite`; `observations` is the smallest common
-month count used. A one-month price lag was tested and left out because it
-barely changed the result.
+**Scale.** 100 means the effect of 15 equal-risk independent streams (about a
+74.18% volatility reduction in that model). It is a product policy, not a
+Dalio rating or an official scale, and not a promise of an 80% lower future
+risk; the text never says the Holy Grail is "achieved". Anchors:
 
-**Scenarios.** `m60`/`m36` x `composite` (headline `m60_composite`),
-`price_channel`, `equity_channel` and `r075` (the v2 assumption). A group with no
-usable series in a channel gets a missing pair (r = 1) and the v2 rule that a
-missing-pair effect above five points makes the scenario unavailable. A car
-pair on fewer months than the window makes the scenario provisional. Because
-the channels usually disagree, `assessment.business_dependent` is expected to
-stay true; read the scenario range, not only the headline.
+| Equivalent independent streams | Score |
+|---:|---:|
+| 1 | 0 |
+| 2 | 39.484063 |
+| 3 | 56.976152 |
+| 6 | 79.772287 |
+| 15 | 100 |
 
-**Gates.** The proxy block must pass `validate_block` in
-`analytics/holy_grail/car/risk_proxies.py` (both `car_proxies_v1` and
-`car_proxies_v2` are accepted) and contain at least one
-price-index series and the basket. Otherwise the record is explicitly
-`unavailable` (`invalid_car_proxies_block`, `car_channel_missing`) and the view
-shows v3, or the v2 assumption numbers, with a warning and a suffix in the
-conclusion cell. A present v4 record that fails replay renders as unavailable
-and never falls back. Replay recomputes everything offline from the saved v2
-record and the embedded block. `concentration_v1` and the offline what-if stay
-on v2.
+`N_effective` is the number of identical independent streams with the same
+modelled volatility effect, not a count of independent and profitable
+businesses. Covariance alone does not prove statistical independence or
+resilience in a crisis. A value above the number of groups is a hedge result
+(`hedge_driven_count`). A higher score does not necessarily mean a lower
+absolute volatility, so the annual modelled portfolio volatility
+(`100 * sqrt(12) * sigma_p`) is stored and shown beside it; a score raised only
+by changing the assumed volatility of the car business is not an investment
+improvement.
 
-**Limits.** Same-month correlations only; the 60-month window holds essentially
-one rate-shock regime; the Ukrstat index mixes new and used vehicles bought by
-households (no national car sub-item is published) and is converted to USD at
-the NBU monthly mean official rate, so it also carries the hryvnia; the basket
-history may be shorter than the window. Only the owner's own dated monthly
-history (`docs/car-deal-ledger.md`) could say which channel is closer.
+**Inputs and window.** Every group with a positive invested weight is included;
+weights must be finite, non-negative and sum to 1 (tolerance 1e-8). The main
+window is the last 60 calendar months up to the last completed month; the
+calendar index is built before gaps are dropped and older months are never
+borrowed to replace missing ones. The covariance matrix is computed on the
+common complete rows. 36-59 common observations make the result `provisional`,
+fewer than 36 make it `unavailable`. Every main series and the last common
+month must end no earlier than one month before the cutoff: a one-month lag is
+`provisional` with a warning, a larger lag is `unavailable` even if enough older
+months exist. A positive weight without a usable series (including `unknown`)
+makes the score `unavailable`; the group is never dropped silently and the
+remainder is never rescaled. A provisional parent v2 stays provisional: the
+quality of the inputs is shown beside the model, never hidden by a long
+history. The 36-month window is a diagnostic and never replaces the main one.
+
+**Car business.** There is no return series for the business. The score uses the
+monthly total return of the equal-weight basket CPRT, KMX and OPLN (all three
+required, adjusted prices converted to USD, no forward fill) as a labelled
+working assumption and an owner decision; it is not shown as a measurement of
+the business, nor as conservative or a lower bound. The basket is collected
+automatically in normal collection (existing price provider and cache) and
+frozen in the block `car_proxies_v3`; offline recalculation accepts a
+`car_proxies_v2` block. The score does not average the correlations of other
+channels into the covariance matrix.
+
+**Risk contribution.** For every positive group on the main window:
+`risk_share_i = w_i (Σ w)_i / sigma_p²`, the Euler share of the modelled
+portfolio volatility (equal to its share of the variance). It can be negative
+for a hedge and is never clipped; the shares sum to 1 (tolerance 1e-8). It is
+not a probability of loss, a share of a possible maximum loss or the full risk of
+a private business. Short Treasuries can have a small share and still lower the
+absolute volatility, so a small share does not make them useless.
+
+**Details stored beside the score.**
+
+- Worst modelled months of the available window: the six months with the lowest
+  modelled portfolio return `wᵀ r_t` (ties: earlier date first), their mean and
+  the mean contribution `w_i r_i,t` of every group over them. Six months are 10%
+  of a 60-month window; with 36-59 observations the rule stays six and the
+  result provisional. The score can rise when a crisis month leaves the window,
+  with no decision of the investor. The 36-month window differs by market
+  history, not by portfolio.
+- Car-business write-off: `weight_pct_nav x {0.5, 1.0}` as arithmetic of a
+  share of NAV, with the stated assumptions that all other assets are unchanged
+  and extra liabilities, collateral losses and taxes are not counted. It is not
+  a probability or forecast; business-failure statistics are not used. Not shown
+  when the car weight is zero.
+- Sensitivity to the volatility of the car series: the main series multiplied by
+  0.5, 1.0 and 2.0 with all weights, other series and the common months of the
+  main scenario unchanged; for each the series volatility, DR, score, car risk
+  share and portfolio volatility. It scales the whole series and keeps its
+  correlations, so it does not reproduce repair, liquidity or failure risk, and it
+  does not change the headline.
+- Sensitivity to the representative of the car business: the main basket
+  replaced by Manheim, BLS used cars or AUTO1 on a common sample with the other
+  groups, shown with the sample size. It is not a calibrated model of the
+  business (a low-volatility price index does not mean a low-risk reseller) and
+  is kept apart from the volatility sensitivity; the two are never merged into
+  one "honest range" or a confidence interval of the true score. An incomplete
+  comparison (a missing, stale or short auxiliary series) never changes or blocks
+  the headline.
+- The Ukrstat CPI stays in the proxy block as context; it mixes new and used
+  vehicles and is not part of the headline or of the four-scenario comparison.
+- A monthly change of a price ratio (for example the Ukrainian USD index over
+  Manheim) is, at most, an experimental indicator of price conditions. It is not
+  a margin, a return on invested capital or a business return, it is not in the
+  covariance, and no synthetic business return is built from it.
+- Qualitative environment map (reference only): for each group the growth and
+  inflation environments in which that class is usually favoured in an All
+  Weather style framework. It has no percentages, thresholds or sums of
+  contributions, and the text never speaks of "protection". Bridgewater describes
+  the reaction of assets to growth and inflation relative to expectations
+  ([The All Weather Story](https://www.bridgewater.com/research-and-insights/the-all-weather-story));
+  this map does not measure that reaction, only part of its cells follow the
+  text and the rest is common practice or an owner decision. Measuring
+  sensitivity to growth and inflation shocks needs measured data and is a later
+  step.
+
+**Statuses and gates.** `modeled`, `provisional`, `unavailable`,
+`not_applicable` (no invested part). Unavailable and not-applicable records carry
+null numbers, never 0. A missing basket, a corrupt block or a positive weight
+without a series gives `unavailable`; the record is still written. A stale or
+short auxiliary series only makes the comparison incomplete. The integrity of the
+whole block (version, method, fingerprint, calendar, no future months) is judged
+separately from the freshness of each series. Replay recomputes everything
+offline from the saved v2 and the embedded block (floats with an absolute
+tolerance of 1e-8, integers, strings and flags exactly); a record that does not
+replay renders as "Недоступно" and never falls back to v3, v2 or
+`risk_progress_v1`. A fingerprint proves the consistency of stored content, not
+the correctness of the external source. A valid headline is not blocked by a
+corrupt v3 or `risk_progress_v1` sibling, which is marked unavailable in its own
+detail row.
+
+**Display.** The compact headline is an integer with an approximation sign:
+`min(99, floor(score))` until the target of 15 streams is reached, then 100; the
+details use one decimal rounded down, capped at 99.9 before the target. The
+summary shows the score with the scale anchor in the same row, the two largest
+positive modelled risk contributions as "group: share of capital -> share of
+risk", and the car-business assumption; then the data line (date, retrospective
+flag, concrete quality reason) and cash outside the score. Model assumptions and
+data quality are explained separately. A score is compared only inside the same
+method; across methods the view says "Змінено методику" instead of a trend.
+Concentration warnings (`concentration_v1`) stay visible and are not replaced by
+the score.
+
+**Limits.** The basket is not calibrated to the business; the 60-month window
+holds essentially one rate-shock regime; one representative stands for each
+group; vintages of revised indexes are known only where recorded, so a
+historical recalculation is marked retrospective; the score says nothing about
+expected return, quality of the holdings, liquidity or protection in every
+environment. Definition of DR and its reading as equivalent independent streams:
+Choueifaty, Froidure and Reynier, "Properties of the most diversified
+portfolio" (2013); the 0-100 transformation is this product's policy.
 
 ## Risk progress (`risk_progress_v1`)
 
@@ -651,11 +758,13 @@ A separate method that asks a different question from the capital score: how
 many independent, equal-risk return streams does the current mix behave like.
 It is a sibling derived from a saved, replayed `capital_diversification_v2`
 record (`analytics/holy_grail/risk_progress.py`) and is never mixed into v2/v3
-trends. It is saved beside v2 and v3 only when a frozen car proxy block is
+or `risk_progress_v2` trends. It is the older sibling, superseded as the headline
+by `risk_progress_v2` and still readable in saved records and the details. It is saved beside v2 and v3 only when a frozen car proxy block is
 supplied (`car_proxies`, see "Car-business scenarios"): the dated worksheet
 then shows one extra summary row, "Ризиковий прогрес", after the scenario
-spread and a paragraph in the conclusion note. Without a block nothing is
-saved and every view is unchanged. It revives the formula of the retired
+spread and a paragraph in the conclusion note (when no `risk_progress_v2`
+record is present; otherwise it appears in the details of the headline view).
+Without a block nothing is saved and every view is unchanged. It revives the formula of the retired
 `risk_equivalent_streams_v1` on a different basis (frozen v2 group histories
 instead of position series).
 
@@ -668,10 +777,9 @@ progress = 100 * clip((N_DR - 1) / (15 - 1), 0, 1)
   series each); weights are the v2 invested weights, used as they are (DR does
   not depend on a common scale). Σ is the sample covariance (ddof 1) of the
   monthly returns on the common months only; missing months are never filled
-  with zeros. Raw Ledoit-Wolf is deliberately not used: on the 29 Oct 2026
-  data it inflated the 0-1 year Treasury volatility 13.7 times and made the
-  count depend on duplicating a stream (3.096 versus 3.130), which the sample
-  covariance does not (2.229 exactly).
+  with zeros. Raw Ledoit-Wolf is deliberately not used: on real data it
+  inflated the volatility of the shortest Treasury group many times and made the
+  count depend on duplicating a stream, which the sample covariance does not.
 - Windows: 60 completed months (headline) and the latest 36 (comparison).
   `modeled` needs every month of the window up to the last completed month;
   36-59 common months are `provisional`; fewer than 36, a non-finite or
@@ -768,7 +876,9 @@ answer is an assumption, shown as a range, never the headline.
   monthly history (not available).
 - The record embeds a copy of the block. An invalid or missing block makes only
   the scenarios unavailable (`invalid_car_proxies_block`); the headline stays.
-  The same block also derives the v4 record (see "Capital diversification v4").
+  The same kind of block feeds `risk_progress_v2` (offline as `car_proxies_v2`;
+  normal collection builds `car_proxies_v3` with the basket collected
+  automatically and these series imported as auxiliary, see "Risk progress v2").
 - Worksheet row: `<points> зі 100 · <count> з 15 потоків · покрито <share> ·
   з автобізнесом <low>-<high> (припущення)`. The count is rounded down to one
   decimal like the points. A record that does not replay shows "Недоступно" and

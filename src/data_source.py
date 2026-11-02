@@ -477,6 +477,7 @@ class DataSource:
             previous_combined_data=previous,
             car_category=load_car_category_block(),
             car_proxies=load_car_proxies_block(),
+            collect_car_basket=True,
         )
         self._save_combined_data_to_json(data)
         return data

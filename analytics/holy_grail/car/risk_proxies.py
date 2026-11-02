@@ -40,7 +40,20 @@ METHOD_V1 = {'version': 'car_proxies_v1', 'proxies': {k: dict(v) for k, v in PRO
 METHOD = dict(METHOD_V1, version=VERSION, proxies={k: dict(v) for k, v in PROXIES.items()},
               ukraine_usd='uah_index_times_previous_over_current_nbu_monthly_mean_rate')
 # Saved records embed the block they used, so every released method stays readable.
+# `validate_block` and risk_progress_v1 keep reading exactly these two versions.
 METHODS = {METHOD_V1['version']: METHOD_V1, VERSION: METHOD}
+# car_proxies_v3 (normal collection): the listed basket is collected automatically, the price indexes are
+# imported from an earlier v1/v2 block with their own dates. Read by `inspect_block` only.
+VERSION_V3 = 'car_proxies_v3'
+PROXIES_V3 = {k: dict(v) for k, v in PROXIES.items()}
+PROXIES_V3['listed_remarketers'] = dict(PROXIES['listed_remarketers'], source='yfinance_auto_adjust')
+METHOD_V3 = dict(METHOD, version=VERSION_V3, proxies=PROXIES_V3, basket_history_months=60,
+                 basket_collection='yfinance_auto_adjusted_monthly_usd_total_return',
+                 basket_aggregation='mean_skipna_false_on_same_month',
+                 provenance=['auto_collected', 'imported:<block_fingerprint>'])
+INSPECT_METHODS = {VERSION: METHOD, VERSION_V3: METHOD_V3}
+IMPORT_METHODS = dict(METHODS, **{VERSION_V3: METHOD_V3})
+MAIN_SERIES = 'listed_remarketers'
 LIMITATIONS = [
     'Category proxies, not the return of any individual business.',
     'Price indexes move far less than a leveraged inventory business; the listed basket is priced like equities.',
@@ -124,6 +137,107 @@ def build_block(raw_dir, proxy_csv, as_of_date):
     block = dict(version=VERSION, as_of_date=as_of_date, cutoff_month=completed.date().isoformat(), method=METHOD,
                  series=series, excluded=excluded,
                  sources=dict(raw=manifest, proxy_csv_sha256=data.sha256(proxy_csv)), limitations=LIMITATIONS)
+    block['fingerprint'] = fingerprint(block)
+    return block
+
+
+def _inspect(block, as_of_date, methods):
+    """Block integrity and per-series freshness, reported separately (a stale series never breaks integrity)."""
+    out = dict(integrity=False, reason=None, series={}, excluded={})
+    try:
+        method = methods.get(block.get('version')) if isinstance(block, dict) else None
+        if method is None:
+            return dict(out, reason='unknown_version')
+        if block.get('method') != method:
+            return dict(out, reason='method_mismatch')
+        if block.get('fingerprint') != fingerprint({k: v for k, v in block.items() if k != 'fingerprint'}):
+            return dict(out, reason='fingerprint_mismatch')
+        completed = completed_month_end(as_of_date)
+        if not isinstance(block['series'], dict) or set(block['series']) - set(method['proxies']):
+            return dict(out, reason='unknown_series')
+        if pd.Timestamp(block['cutoff_month']) > completed:
+            return dict(out, reason='future_cutoff')
+        floor = completed - pd.offsets.MonthEnd(method['max_lag_months'])
+        mapped = series_map(block)
+        series = {}
+        for name, item in block['series'].items():
+            values = mapped[name]
+            if (not len(values) or not values.index.is_month_end.all() or values.index.max() > completed
+                    or not all(math.isfinite(v) for v in values)
+                    or item['last_month'] != values.index.max().date().isoformat()):
+                return dict(out, reason='invalid_series:' + name)
+            if method['version'] == VERSION_V3 and (
+                    item['observations'] != len(values) or not isinstance(item['observations'], int)
+                    or not (item['provenance'] == 'auto_collected' or str(item['provenance']).startswith('imported:'))):
+                return dict(out, reason='invalid_series:' + name)
+            reason = ('insufficient_history' if len(values) < method['minimum_months']
+                      else 'stale' if values.index.max() < floor else None)
+            series[name] = dict(ok=reason is None, reason=reason, observations=len(values),
+                                last_month=values.index.max().date().isoformat())
+        excluded = block.get('excluded')
+        return dict(out, integrity=True, series=series, excluded=dict(excluded) if isinstance(excluded, dict) else {})
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return dict(out, integrity=False, reason='malformed_block', series={})
+
+
+def inspect_block(block, as_of_date):
+    """Narrow gate of risk_progress_v2 for car_proxies_v2/v3 blocks.
+
+    `integrity` covers version, method, fingerprint, calendar and finite month-end values; every series is then
+    judged on its own (>= 36 months, last month within one month of the cutoff). The main basket decides the
+    headline, an auxiliary series only the comparison. `validate_block` (v1/v2 replay) is left unchanged.
+    """
+    return _inspect(block, as_of_date, INSPECT_METHODS)
+
+
+def import_series(block, as_of_date):
+    """Auxiliary series of an earlier v1/v2/v3 block: (series, info). Months after the new cutoff are cut off."""
+    # Integrity is judged against the block's own date; the new cutoff only trims later months.
+    check = _inspect(block, block.get('as_of_date') if isinstance(block, dict) else None, IMPORT_METHODS)
+    if not check['integrity']:
+        return {}, dict(rejected=check['reason'])
+    completed = completed_month_end(as_of_date)
+    series, trimmed = {}, []
+    for name, values in series_map(block).items():
+        if name == MAIN_SERIES:
+            continue
+        kept = values[values.index <= completed]
+        if len(kept) < len(values):
+            trimmed.append(name)
+        if not len(kept):
+            continue
+        series[name] = dict(PROXIES_V3[name], returns=_clean(kept), last_month=kept.index[-1].date().isoformat(),
+                            observations=len(kept), provenance='imported:' + block['fingerprint'])
+    return series, dict(fingerprint=block['fingerprint'], version=block['version'], as_of_date=block['as_of_date'],
+                        trimmed_series=sorted(trimmed))
+
+
+def build_block_v3(as_of_date, *, basket_returns, basket_sources, basket_excluded=None, imported_block=None):
+    """Freeze the auto-collected basket plus imported auxiliary series (no network).
+
+    A basket that exists but is short or stale stays in `series` (inspect_block names the reason); one with
+    no usable months is left out and named in `excluded`. The block exists even without a main series.
+    """
+    completed = completed_month_end(as_of_date)
+    series, excluded = {}, {}
+    returns = basket_returns
+    if returns is not None:
+        # The window is the last N calendar months; a gap is dropped, never filled with an older month.
+        first = completed - pd.offsets.MonthEnd(METHOD_V3['basket_history_months'])
+        returns = returns[(returns.index > first) & (returns.index <= completed)].dropna()
+    if returns is not None and len(returns):
+        series[MAIN_SERIES] = dict(PROXIES_V3[MAIN_SERIES], returns=_clean(returns),
+                                   last_month=returns.index[-1].date().isoformat(), observations=len(returns),
+                                   provenance='auto_collected')
+    else:
+        excluded[MAIN_SERIES] = basket_excluded or 'no_common_months'
+    imported, info = import_series(imported_block, as_of_date) if imported_block is not None else ({}, None)
+    series.update(imported)
+    block = dict(version=VERSION_V3, as_of_date=pd.Timestamp(as_of_date).date().isoformat(),
+                 cutoff_month=completed.date().isoformat(), method=METHOD_V3, series=series, excluded=excluded,
+                 sources=dict(basket=dict(symbols=basket_sources), imported=info),
+                 limitations=LIMITATIONS + ['The listed basket is collected automatically (Yahoo Finance, '
+                                            'auto-adjusted closes, USD); imported price indexes keep their own dates.'])
     block['fingerprint'] = fingerprint(block)
     return block
 

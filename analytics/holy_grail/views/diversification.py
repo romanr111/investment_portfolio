@@ -40,7 +40,7 @@ def _saved_diversification_view(data,expected_date=None,saved_at_utc=None):
     data=data.get('data',data)
     if 'DIVERSIFICATION_DATA' not in data: return _legacy(data,expected_date)
     q=data['DIVERSIFICATION_DATA']
-    if isinstance(q,dict) and 'allocation_score_v2' in q:
+    if isinstance(q,dict) and ('allocation_score_v2' in q or 'risk_progress_v2' in q):
         return allocation_view_v2(data,expected_date,saved_at_utc)
     if isinstance(q,dict) and 'allocation_score' in q:
         view = allocation_view(data,expected_date)

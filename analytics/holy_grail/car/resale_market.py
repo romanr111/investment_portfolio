@@ -91,18 +91,15 @@ def validated_context(context, saved_at_utc):
 def conclusion_note(result, context, saved_at_utc=None, extra_lines=()):
     """Explain saved scenarios and optional verified context without changing the score.
 
-    `extra_lines` (already formatted, e.g. the risk-progress paragraph) follow the scenario lines.
+    `extra_lines` (already formatted, e.g. the headline lines or the old risk-progress paragraph) follow the scenario lines.
     """
     version = result.get('version')
-    if version == 'capital_diversification_v4':
-        intro = ('Оцінка інвестованої частини. Кореляція автобізнесу - замінник: порівну ціновий канал (середнє '
-                 'цінових індексів: вживані авто США і ЄС, купівля транспорту в Україні) і канал акцій (кошик '
-                 'CPRT/KMX/OPLN), а не вимірювання вашого бізнесу; фінансування, ліквідність, ремонт і податки '
-                 'поза замінниками.')
-        labels = [('m60_composite', 'Базовий: пари активів 60 міс.; авто - середнє каналів 50/50'),
-                  ('m60_price_channel', 'Ціновий канал: авто - середнє цінових індексів'),
-                  ('m60_equity_channel', 'Канал акцій: авто - кошик CPRT/KMX/OPLN'),
-                  ('m60_r075', 'Стрес: пари активів 60 міс.; кореляція авто 0,75 (припущення)')]
+    if version == 'risk_progress_v2':
+        intro = ('Одна оцінка ефекту диверсифікації інвестованої частини за ризиком (кошик CPRT/KMX/OPLN як припущення '
+                 'для автобізнесу, а не вимірювання вашого бізнесу): 100 = ефект 15 однакових незалежних потоків, '
+                 'за політикою продукту. Це не гарантія меншого майбутнього ризику; фінансування, ліквідність, ремонт і '
+                 'податки поза проксі.')
+        labels = []
     elif version == 'capital_diversification_v3':
         intro = ('Оцінка інвестованої частини. Кореляція автобізнесу - сценарій за ціновим каналом індексу вживаних авто '
                  '(США) при R=1, а не вимірювання вашого бізнесу; фінансування, ліквідність, ремонт, курс і податки '
