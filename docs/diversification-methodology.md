@@ -2,10 +2,11 @@
 
 > Reader's guide: the current base method is "Capital diversification v2", with
 > "Concentration safeguards beside the score" and "Offline what-if scenarios"
-> under it (near the end of this file). Two optional sibling records follow it:
-> "Capital diversification v3 (car-category pairs)" for the car-business pairs,
-> and, as the last sections, "Risk progress (`risk_progress_v1`)" with
-> "Car-business scenarios (`car_proxies_v1`)". Public car-market context and
+> under it (near the end of this file). Optional sibling records follow it:
+> "Capital diversification v3 (car-category pairs)" and "Capital diversification
+> v4 (car proxy composite)" for the car-business pairs, and, as the last
+> sections, "Risk progress (`risk_progress_v1`)" with "Car-business scenarios
+> (`car_proxies`)". Public car-market context and
 > the category evidence are in `docs/car-resale-market-context.md` and
 > `docs/car-flip-category-evidence.md`. "Historical capital-weighted score (v1)",
 > "Count and interpretation", "Ten-check policy", "Hypothetical stress policy"
@@ -589,6 +590,60 @@ car-category build ...`), copy it to `data/car_category/block_latest.json`, then
 run the normal pipeline. A stale block gives the explicit `unavailable` v3
 record and the v2 assumption numbers with a warning (see Gates above).
 
+## Capital diversification v4 (car proxy composite)
+
+`capital_diversification_v4` is the v2 formula with the `car_business` pairs
+taken from a blend of public proxy channels. Like v3 it is a sibling record
+(`DIVERSIFICATION_DATA.allocation_score_v4`, `analytics/allocation_score_v4.py`)
+derived from the saved v2 record, here plus the frozen car proxy block of the
+risk-progress scenarios (see "Car-business scenarios"). Weights, sectors, all
+non-car pairs and the 0.75 stress scenario are copied from v2; v2 and v3 are
+unchanged. When both v3 and v4 are present, the views show v4.
+
+**What the car pairs are.** For each group and window (60 and 36 months) the
+same-month Pearson correlation of every proxy series with the group is taken on
+the common months of the v2 window, at least 36. Two channels:
+
+- price channel: the arithmetic mean over the used-vehicle price indexes that
+  have a correlation (Manheim, BLS used cars, AUTO1, Ukrstat purchase of
+  vehicles);
+- equity channel: the listed remarketer basket (CPRT, KMX, OPLN).
+
+The headline pair is `0.5 x price + 0.5 x equity`. Channels, not series, are
+weighted equally so that a channel with more published indexes cannot outvote
+the other (an owner decision). The two channels describe different things: a
+price index moves little and barely correlates with the groups, while the
+basket is priced like equities. Neither is the business: a leveraged inventory
+business, its financing, repair, FX, customs and war channels are not in any of
+them. The pair kind is `proxy_composite`; `observations` is the smallest common
+month count used. A one-month price lag was tested and left out because it
+barely changed the result.
+
+**Scenarios.** `m60`/`m36` x `composite` (headline `m60_composite`),
+`price_channel`, `equity_channel` and `r075` (the v2 assumption). A group with no
+usable series in a channel gets a missing pair (r = 1) and the v2 rule that a
+missing-pair effect above five points makes the scenario unavailable. A car
+pair on fewer months than the window makes the scenario provisional. Because
+the channels usually disagree, `assessment.business_dependent` is expected to
+stay true; read the scenario range, not only the headline.
+
+**Gates.** The proxy block must pass `car_risk_proxies.validate_block` (both
+`car_proxies_v1` and `car_proxies_v2` are accepted) and contain at least one
+price-index series and the basket. Otherwise the record is explicitly
+`unavailable` (`invalid_car_proxies_block`, `car_channel_missing`) and the view
+shows v3, or the v2 assumption numbers, with a warning and a suffix in the
+conclusion cell. A present v4 record that fails replay renders as unavailable
+and never falls back. Replay recomputes everything offline from the saved v2
+record and the embedded block. `concentration_v1` and the offline what-if stay
+on v2.
+
+**Limits.** Same-month correlations only; the 60-month window holds essentially
+one rate-shock regime; the Ukrstat index mixes new and used vehicles bought by
+households (no national car sub-item is published) and is converted to USD at
+the NBU monthly mean official rate, so it also carries the hryvnia; the basket
+history may be shorter than the window. Only the owner's own dated monthly
+history (`docs/car-deal-ledger.md`) could say which channel is closer.
+
 ## Risk progress (`risk_progress_v1`)
 
 A separate method that asks a different question from the capital score: how
@@ -654,7 +709,7 @@ changes no snapshot, fetches nothing and never writes Sheets. `--out` writes a
 new file only, outside the automatic snapshot directories. `--car-proxies`
 defaults to `data/car_category/proxies_latest.json` when that file exists.
 
-### Car-business scenarios (`car_proxies_v1`)
+### Car-business scenarios (`car_proxies`)
 
 Public data cannot measure the owner's own business. A scenario answers a
 narrower question: if the business behaved like this public series, would it
@@ -669,6 +724,17 @@ answer is an assumption, shown as a range, never the headline.
   columns are ignored, and a CSV missing a name leaves the proxy out as
   `missing_basket_names`; the names are part of the block method). A Eurostat
   France series was dropped: it ends in 2025 and is smoothed.
+- Block `car_proxies_v2` adds the Ukrstat national CPI "Купівля транспортних
+  засобів" (COICOP 07.1, index to the previous month, SDMX dataflow
+  `DF_PRICE_CHANGE_CONSUMER_GOODS_SERVICE`; the car sub-items have codes but no
+  published national data), converted to USD as
+  `index / 100 x rate(t-1) / rate(t) - 1` with the NBU monthly mean of the
+  official daily UAH per USD rates. It mixes new and used vehicles bought by
+  households (medium confidence). `just car-proxies fetch-ukraine --raw DIR
+  --as-of DATE` downloads both raw files into the raw directory (network, never
+  overwrites); without them the series is left out of the block as
+  `source_unreadable`. `car_proxies_v1` blocks embedded in saved records still
+  validate.
 - Frozen block: `just car-proxies build --raw DIR --proxy-csv CSV --as-of DATE
   --out data/car_category/proxies_<date>.json` converts each series to monthly
   simple returns, trims it to the last completed month before the snapshot
@@ -701,6 +767,7 @@ answer is an assumption, shown as a range, never the headline.
   monthly history (not available).
 - The record embeds a copy of the block. An invalid or missing block makes only
   the scenarios unavailable (`invalid_car_proxies_block`); the headline stays.
+  The same block also derives the v4 record (see "Capital diversification v4").
 - Worksheet row: `<points> зі 100 · <count> з 15 потоків · покрито <share> ·
   з автобізнесом <low>-<high> (припущення)`. The count is rounded down to one
   decimal like the points. A record that does not replay shows "Недоступно" and

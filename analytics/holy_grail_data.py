@@ -339,7 +339,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     `car_category` is an explicit frozen block (analytics.car_category): given, a v3 record is
     derived beside v2; omitted, no v3 record is written (nothing is looked up implicitly).
     `car_proxies` is the same kind of explicit block (analytics.car_risk_proxies): given, a
-    risk_progress_v1 record with car-business scenarios is derived beside v2; omitted, none is written.
+    risk_progress_v1 record with car-business scenarios and a v4 record (channel-composite car pairs)
+    are derived beside v2; omitted, neither is written.
     """
     output = dict(data)
     as_of_date = _date(as_of_date or data.get("POSITION_DATA", {}).get("as_of_date")
@@ -405,13 +406,18 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
         derived = derive_allocation_score_v3(saved, car_category)
         if derived is not None:
             output['DIVERSIFICATION_DATA']['allocation_score_v3'] = derived
-    # Risk progress is derived from this very v2 record too; a stale one can never match it.
+    # Risk progress and v4 are derived from this very v2 record too; stale ones can never match it.
     output['DIVERSIFICATION_DATA'].pop('risk_progress_v1', None)
+    output['DIVERSIFICATION_DATA'].pop('allocation_score_v4', None)
     if car_proxies is not None:
         from analytics.holy_grail_risk_progress import derive_risk_progress_v1
         progress = derive_risk_progress_v1(saved, car_proxies)
         if progress is not None:
             output['DIVERSIFICATION_DATA']['risk_progress_v1'] = progress
+        from analytics.allocation_score_v4 import derive_allocation_score_v4
+        composite = derive_allocation_score_v4(saved, car_proxies)
+        if composite is not None:
+            output['DIVERSIFICATION_DATA']['allocation_score_v4'] = composite
     # Concentration facts measured beside the score on the same frozen inputs;
     # a failed build stays explicit instead of silently omitting the block.
     from analytics import concentration_v1
@@ -468,9 +474,10 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
         target_dd.pop('allocation_score_v3', None)
         if 'allocation_score_v3' in enriched['DIVERSIFICATION_DATA']:
             target_dd['allocation_score_v3'] = deepcopy(enriched['DIVERSIFICATION_DATA']['allocation_score_v3'])
-        target_dd.pop('risk_progress_v1', None)
-        if 'risk_progress_v1' in enriched['DIVERSIFICATION_DATA']:
-            target_dd['risk_progress_v1'] = deepcopy(enriched['DIVERSIFICATION_DATA']['risk_progress_v1'])
+        for key in ('risk_progress_v1', 'allocation_score_v4'):
+            target_dd.pop(key, None)
+            if key in enriched['DIVERSIFICATION_DATA']:
+                target_dd[key] = deepcopy(enriched['DIVERSIFICATION_DATA'][key])
         if 'concentration_v1' in enriched['DIVERSIFICATION_DATA']:
             target_dd['concentration_v1'] = deepcopy(enriched['DIVERSIFICATION_DATA']['concentration_v1'])
         result['allocation_score_v2_enrichment'] = {

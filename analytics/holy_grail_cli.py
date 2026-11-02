@@ -21,7 +21,8 @@ def main():
     parser.add_argument("--car-category", type=Path,
                         help="Frozen car-category block (just car-category build): also derives the v3 record")
     parser.add_argument("--car-proxies", type=Path,
-                        help="Frozen car proxy block (just car-proxies build): also derives risk_progress_v1 with car scenarios")
+                        help="Frozen car proxy block (just car-proxies build): also derives risk_progress_v1 with car "
+                             "scenarios and the v4 record")
     parser.add_argument("--what-if", action="append", default=[], metavar="ID=VALUE",
                         help="Offline before/after on a copied snapshot; repeatable, e.g. --what-if ib:VOO=+20000")
     args = parser.parse_args()
@@ -50,6 +51,7 @@ def main():
     quality = data.get("DIVERSIFICATION_DATA") or {}
     v2 = quality.get("allocation_score_v2") or {}
     v3 = quality.get("allocation_score_v3") or {}
+    v4 = quality.get("allocation_score_v4") or {}
     progress = quality.get("risk_progress_v1") or {}
     scenarios = progress.get("car_scenarios") or {}
     print(json.dumps({"output": str(args.output.resolve()),
@@ -61,6 +63,8 @@ def main():
                       "allocation_score_v2": quality.get("allocation_score_v2"),
                       "allocation_score_v3": {key: v3.get(key) for key in (
                           "status", "score", "display_score", "category", "warnings")} if v3 else None,
+                      "allocation_score_v4": {key: v4.get(key) for key in (
+                          "status", "score", "display_score", "category", "warnings")} if v4 else None,
                       "risk_progress_v1": {"status": progress.get("status"), "progress_display": progress.get("progress_display"),
                                            "car_scenarios_status": scenarios.get("status"),
                                            "car_scenarios_range": scenarios.get("range")} if progress else None,

@@ -24,6 +24,12 @@ BEA_URL = 'https://api.db.nomics.world/v22/series/BEA/NIUnderlyingDetail-U70205S
 BEA_SERIES = ('SAART-M', 'TEMF-M', 'TEMG-M', 'NSAT-M', 'T2-M', 'T3-M')
 BLS_SERIES = ('CUSR0000SETA02', 'CUUR0000SETA02', 'CUUR0000SETC', 'CUUR0000SETD01',
               'CUSR0000SETD03', 'CUUR0000SETD03')
+UKRSTAT_CPI_URL = ('https://stat.gov.ua/sdmx/workspaces/default:integration/registry/sdmx/3.0/data/dataflow/SSSU/'
+                   'DF_PRICE_CHANGE_CONSUMER_GOODS_SERVICE/~/INDEX_CONSUMPRICE.PREV_MONTH.UA00000000000000000.07_1.M')
+UKRSTAT_CSV = 'application/vnd.sdmx.data+csv;version=2.0.0;labels=id'
+UKRSTAT_CPI_ITEM = '07_1'  # Купівля транспортних засобів; the 07_1_1 car sub-items carry no national data
+NBU_URL = ('https://bank.gov.ua/NBU_Exchange/exchange_site?start={start}&end={end}&valcode=usd'
+           '&sort=exchangedate&order=asc&json')
 USER_AGENT = 'investment-portfolio-car-category/1.0'
 _NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 
@@ -124,6 +130,28 @@ def auto1_series(path):
                      name='auto1')
 
 
+def ukrstat_cpi_series(path):
+    """Ukrstat national CPI 'purchase of vehicles' (UAH), index to the previous month (101.2 = +1.2%)."""
+    frame = pd.read_csv(path, dtype=str)
+    rows = frame[(frame['GOODS_SERVICES_TYPE'] == UKRSTAT_CPI_ITEM) & (frame['BASE_PERIOD'] == 'PREV_MONTH')
+                 & (frame['REGION'] == 'UA00000000000000000') & (frame['FREQ'] == 'M')]
+    if rows.empty or rows['TIME_PERIOD'].duplicated().any():
+        raise ValueError('Ukrstat file has no unique national monthly vehicle-purchase rows')
+    index = _month_end(pd.to_datetime(rows['TIME_PERIOD'].str.replace('-M', '-'), format='%Y-%m'))
+    return pd.Series(rows['OBS_VALUE'].astype(float).to_numpy(), index=index, name='ukrstat_cpi_07_1').sort_index()
+
+
+def nbu_monthly_rate(path):
+    """Mean of the NBU official daily UAH per USD rates in each calendar month."""
+    rows = json.loads(Path(path).read_text(encoding='utf-8'))
+    daily = pd.Series({pd.to_datetime(r['exchangedate'], format='%d.%m.%Y'): float(r['rate_per_unit'])
+                       for r in rows if r.get('cc') == 'USD'}).sort_index()
+    if daily.empty:
+        raise ValueError('NBU file has no USD rates')
+    monthly = daily.groupby(daily.index.to_period('M')).mean()
+    return pd.Series(monthly.to_numpy(), index=_month_end(monthly.index.to_timestamp()), name='nbu_usd_uah')
+
+
 def eurostat_series(path):
     doc = json.loads(Path(path).read_text(encoding='utf-8'))
     position = {v: k for k, v in doc['dimension']['time']['category']['index'].items()}
@@ -131,9 +159,10 @@ def eurostat_series(path):
     return pd.Series(values).sort_index().rename('eurostat_fr').pipe(lambda s: s.set_axis(_month_end(s.index)))
 
 
-def _curl(url, target, agent=USER_AGENT):
+def _curl(url, target, agent=USER_AGENT, accept=None):
+    headers = ['-H', f'Accept: {accept}'] if accept else []
     result = subprocess.run(['curl', '-sSL', '--proto', '=https', '--proto-redir', '=https', '--max-time', '120', '-A', agent,
-                            '-o', str(target), url],
+                            *headers, '-o', str(target), url],
                             capture_output=True, text=True)
     if result.returncode or not Path(target).stat().st_size:
         raise ValueError(f'download failed: {url}')
@@ -155,6 +184,22 @@ def fetch_raw(raw_dir, manheim_url, bls_contact=None):
     for code in BEA_SERIES:
         _curl(BEA_URL.format(code), raw / f'bea_{code}.json')
     return manifest(raw)
+
+
+def fetch_ukraine(raw_dir, as_of_date):
+    """Download the Ukrstat vehicle CPI and the NBU USD rates into an existing raw directory (network).
+
+    Refuses to overwrite: a raw file is a dated vintage named by its SHA-256 in the block.
+    """
+    from analytics.holy_grail import completed_month_end
+    raw = Path(raw_dir)
+    targets = (raw / 'ukrstat_cpi_07_1.csv', raw / 'nbu_usd_uah_daily.json')
+    if any(path.exists() for path in targets):
+        raise ValueError('Ukraine raw files already exist; use a new raw directory')
+    end = completed_month_end(as_of_date)
+    _curl(UKRSTAT_CPI_URL, targets[0], accept=UKRSTAT_CSV)
+    _curl(NBU_URL.format(start=f'{end.year - 11}0101', end=end.strftime('%Y%m%d')), targets[1])
+    return {path.name: dict(bytes=path.stat().st_size, sha256=sha256(path)) for path in targets}
 
 
 def long_group_returns(as_of_date, symbols):

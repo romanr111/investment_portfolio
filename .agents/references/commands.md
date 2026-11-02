@@ -9,7 +9,7 @@ The authoritative list lives in `justfile`. Key recipes:
 - `just report` - generate the quarterly YIC portfolio report (Markdown + HTML) via `analyze_portfolio_reports.py` + `generate_quarterly_report.py`
 - `just fetch-snapshots` - download the Flex snapshot artifacts of the last 4 CI runs into `data/ib_flex_snapshots/` (needs an authenticated `gh`)
 - `just risk-progress --snapshot data/snapshots/combined_data_<date>_<timestamp>.json [--car-proxies PATH]` - effective-independent-streams view (`risk_progress_v1`) with car-business scenarios when a proxy block exists; reads a saved snapshot, writes nothing unless `--out NEW_FILE` is given
-- `just car-proxies build --raw data/car_category/raw_<date> --proxy-csv <csv> --as-of <as_of_date> --out data/car_category/proxies_<date>.json` - freeze the public used-vehicle proxy series (offline, refuses to overwrite); copy to `data/car_category/proxies_latest.json` for `just run` to derive `risk_progress_v1`. `report --block PATH` prints the series.
+- `just car-proxies build --raw data/car_category/raw_<date> --proxy-csv <csv> --as-of <as_of_date> --out data/car_category/proxies_<date>.json` - freeze the public used-vehicle proxy series (offline, refuses to overwrite); copy to `data/car_category/proxies_latest.json` for `just run` to derive `risk_progress_v1` and `allocation_score_v4`. `report --block PATH` prints the series. `fetch-ukraine --raw data/car_category/raw_<date> --as-of <as_of_date>` first downloads the Ukrstat vehicle CPI and the NBU USD rates into the raw directory (network, never overwrites); without them the Ukrainian series is left out of the block.
 
 ### Car-category tracker (method v3)
 

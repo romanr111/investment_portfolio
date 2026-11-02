@@ -1,8 +1,8 @@
 """Frozen block of retrospective used-vehicle proxy series for the risk-progress car scenarios.
 
 The owner's car business has no return series, so risk progress tests it with public series
-that stand in for "the business behaves like X": wholesale and retail price indexes (US, EU)
-and a basket of listed remarketers. Each series becomes monthly simple returns. The block
+that stand in for "the business behaves like X": wholesale and retail price indexes (US, EU,
+Ukraine) and a basket of listed remarketers. Each series becomes monthly simple returns. The block
 freezes them with the SHA-256 of the raw files, so a run replays offline and proves its data
 vintage. These are category proxies, never the return of any individual business.
 """
@@ -16,8 +16,8 @@ import pandas as pd
 from analytics import car_category_data as data
 from analytics.holy_grail import completed_month_end, fingerprint
 
-VERSION = 'car_proxies_v1'
-PROXIES = {
+VERSION = 'car_proxies_v2'
+PROXIES_V1 = {
     'manheim_wholesale': dict(label='Manheim Used Vehicle Value Index (US wholesale, SA)', channel='wholesale_price',
                               source='manheim.xlsx', confidence='high'),
     'bls_used_retail': dict(label='BLS CPI used cars and trucks (US retail, SA)', channel='retail_price',
@@ -27,15 +27,24 @@ PROXIES = {
     'listed_remarketers': dict(label='Equal-weight CPRT/KMX/OPLN total return (listed remarketers)', channel='equity',
                                source='proxy_csv', confidence='market-priced'),
 }
+PROXIES = dict(PROXIES_V1, ukraine_vehicle_cpi=dict(
+    label='Ukrstat CPI purchase of vehicles (Ukraine retail, USD at NBU monthly mean rate)', channel='retail_price',
+    source='ukrstat_cpi_07_1.csv', fx_source='nbu_usd_uah_daily.json',
+    confidence='medium (official CPI, new and used vehicles mixed)'))
 BLS_SERIES = 'CUSR0000SETA02'
 BASKET = ('CPRT', 'KMX', 'OPLN')
-METHOD = {'version': VERSION, 'proxies': {k: dict(v) for k, v in PROXIES.items()}, 'returns': 'monthly_simple',
-          'history_months': 120, 'minimum_months': 36, 'max_lag_months': 1, 'basket': 'equal_weight_all_names_required',
-          'basket_names': list(BASKET)}
+METHOD_V1 = {'version': 'car_proxies_v1', 'proxies': {k: dict(v) for k, v in PROXIES_V1.items()},
+             'returns': 'monthly_simple', 'history_months': 120, 'minimum_months': 36, 'max_lag_months': 1,
+             'basket': 'equal_weight_all_names_required', 'basket_names': list(BASKET)}
+METHOD = dict(METHOD_V1, version=VERSION, proxies={k: dict(v) for k, v in PROXIES.items()},
+              ukraine_usd='uah_index_times_previous_over_current_nbu_monthly_mean_rate')
+# Saved records embed the block they used, so every released method stays readable.
+METHODS = {METHOD_V1['version']: METHOD_V1, VERSION: METHOD}
 LIMITATIONS = [
     'Category proxies, not the return of any individual business.',
     'Price indexes move far less than a leveraged inventory business; the listed basket is priced like equities.',
     'Manheim history is revised; AUTO1 is scraped from a web page; the sha256 of each raw file names the vintage.',
+    'The Ukrstat index mixes new and used vehicles bought by households (no national car sub-item is published).',
 ]
 LATEST_BLOCK = Path(__file__).resolve().parents[1] / 'data' / 'car_category' / 'proxies_latest.json'
 
@@ -63,6 +72,11 @@ def _returns(name, raw, proxy_csv):
         return data.bls_frame(raw / 'bls_cu_transport.txt')[BLS_SERIES].pct_change(fill_method=None)
     if name == 'auto1_wholesale_eu':
         return data.auto1_series(raw / 'auto1_index.html').pct_change(fill_method=None)
+    if name == 'ukraine_vehicle_cpi':
+        cpi = data.ukrstat_cpi_series(raw / PROXIES[name]['source'])
+        rate = data.nbu_monthly_rate(raw / PROXIES[name]['fx_source'])
+        # A UAH price relative times the USD value of a hryvnia this month versus last month.
+        return cpi / 100 * (rate.shift(1) / rate).reindex(cpi.index) - 1
     frame = pd.read_csv(proxy_csv, index_col=0)
     frame.index = pd.to_datetime(frame.index).tz_localize(None).normalize()
     frame.columns = [c[3:] if c.startswith('yf:') else c for c in frame.columns]
@@ -105,7 +119,7 @@ def build_block(raw_dir, proxy_csv, as_of_date):
             series[name] = dict(meta, returns=_clean(returns), last_month=returns.index[-1].date().isoformat())
     if not series:
         raise ValueError('No usable proxy series')
-    used = {meta['source'] for meta in PROXIES.values()}
+    used = {meta[key] for meta in PROXIES.values() for key in ('source', 'fx_source') if key in meta}
     manifest = {k: v for k, v in data.manifest(raw_dir).items() if k in used}
     block = dict(version=VERSION, as_of_date=as_of_date, cutoff_month=completed.date().isoformat(), method=METHOD,
                  series=series, excluded=excluded,
@@ -117,19 +131,20 @@ def build_block(raw_dir, proxy_csv, as_of_date):
 def validate_block(block, as_of_date):
     """Integrity and look-ahead gate for a frozen block."""
     try:
-        if not isinstance(block, dict) or block.get('version') != VERSION or block.get('method') != METHOD:
+        method = METHODS.get(block.get('version')) if isinstance(block, dict) else None
+        if method is None or block.get('method') != method:
             return False
         if block.get('fingerprint') != fingerprint({k: v for k, v in block.items() if k != 'fingerprint'}):
             return False
         completed = completed_month_end(as_of_date)
-        if not block['series'] or set(block['series']) - set(PROXIES) or pd.Timestamp(block['cutoff_month']) > completed:
+        if not block['series'] or set(block['series']) - set(method['proxies']) or pd.Timestamp(block['cutoff_month']) > completed:
             return False
         mapped = series_map(block)
         for name, item in block['series'].items():
             values = mapped[name]
-            if len(values) < METHOD['minimum_months'] or not values.index.is_month_end.all() or values.index.max() > completed:
+            if len(values) < method['minimum_months'] or not values.index.is_month_end.all() or values.index.max() > completed:
                 return False
-            if values.index.max() < completed - pd.offsets.MonthEnd(METHOD['max_lag_months']):
+            if values.index.max() < completed - pd.offsets.MonthEnd(method['max_lag_months']):
                 return False
             if not all(math.isfinite(v) for v in values) or item['last_month'] != values.index.max().date().isoformat():
                 return False
@@ -140,7 +155,7 @@ def validate_block(block, as_of_date):
 
 def _report(block_path):
     block = json.loads(Path(block_path).read_text(encoding='utf-8'))
-    print(f"car_proxies_v1 as of {block['as_of_date']} cutoff {block['cutoff_month']} fingerprint {block['fingerprint'][:12]}")
+    print(f"{block['version']} as of {block['as_of_date']} cutoff {block['cutoff_month']} fingerprint {block['fingerprint'][:12]}")
     for name, values in series_map(block).items():
         print(f"  {name}: {len(values)} months {values.index[0].date()}..{values.index[-1].date()} "
               f"annual vol {values.std() * math.sqrt(12) * 100:.1f}% ({block['series'][name]['channel']}, "
@@ -153,14 +168,25 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     build = sub.add_parser('build', help='freeze the proxy series into one block file (offline, never overwrites)')
-    build.add_argument('--raw', required=True, help='directory with manheim.xlsx, bls_cu_transport.txt, auto1_index.html')
+    build.add_argument('--raw', required=True, help='directory with manheim.xlsx, bls_cu_transport.txt, auto1_index.html, '
+                                                    'ukrstat_cpi_07_1.csv, nbu_usd_uah_daily.json')
     build.add_argument('--proxy-csv', required=True, help='monthly returns of the listed names (yf:CPRT, ...)')
     build.add_argument('--as-of', required=True)
     build.add_argument('--out', required=True)
     report = sub.add_parser('report', help='print the series in a block file')
     report.add_argument('--block', required=True)
+    ukraine = sub.add_parser('fetch-ukraine', help='download the Ukrstat vehicle CPI and NBU USD rates into a raw '
+                                                   'directory (network, never overwrites)')
+    ukraine.add_argument('--raw', required=True)
+    ukraine.add_argument('--as-of', required=True)
     args = parser.parse_args()
-    if args.command == 'build':
+    if args.command == 'fetch-ukraine':
+        try:
+            for name, item in data.fetch_ukraine(args.raw, args.as_of).items():
+                print(f"{name}: {item['bytes']} bytes sha256 {item['sha256'][:12]}")
+        except (ValueError, OSError) as error:
+            raise SystemExit(f'Not fetched: {error}')
+    elif args.command == 'build':
         target = Path(args.out)
         if target.exists():
             raise SystemExit('Output exists; choose a new path.')

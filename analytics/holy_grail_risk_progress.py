@@ -5,7 +5,7 @@ only the frozen group histories and weights, never prices or networks. The enric
 (`holy_grail_data`) derives it and the view (`allocation_view`) replays it before display; v2/v3 and
 balances are never changed. The scale is a policy choice (target 15 streams mapped linearly to 0-100),
 not a percentage of risk. Groups without a return history (car_business)
-are excluded from the headline and reported. With a frozen `car_proxies_v1` block the record also holds
+are excluded from the headline and reported. With a frozen `car_proxies` block (v1 or v2) the record also holds
 labeled car-business scenarios ("the business behaves like this public series"); a scenario is an
 assumption shown as a range next to the headline, never the headline. Cash is outside the metric.
 """
@@ -212,7 +212,7 @@ def derive_risk_progress_v1(v2, proxies=None):
     """Build the record from a saved v2 record; None when v2 is not usable.
 
     The primary window (60) sets the status and the headline; the 36-month window is a comparison.
-    `proxies` (a car_proxies_v1 block, or any non-None value that fails validation) adds `car_scenarios`;
+    `proxies` (a car_proxies block, or any non-None value that fails validation) adds `car_scenarios`;
     without it the record has no such key. A failure to compute is an explicit unavailable record,
     never a silent fallback.
     """
@@ -322,7 +322,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--snapshot', type=Path, required=True, help='Dated combined-data snapshot with a saved v2 record')
     parser.add_argument('--out', type=Path, help='Write the record to a new file (never overwrites; not in snapshot dirs)')
-    parser.add_argument('--car-proxies', type=Path, help=f'car_proxies_v1 block for the car-business scenarios '
+    parser.add_argument('--car-proxies', type=Path, help=f'car_proxies block for the car-business scenarios '
                         f'(default: {LATEST_BLOCK.name} in data/car_category when present)')
     parser.add_argument('--json', action='store_true', help='Print the record as JSON instead of a table')
     args = parser.parse_args()

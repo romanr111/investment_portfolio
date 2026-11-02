@@ -24,6 +24,10 @@ WARNINGS = {
     'invalid_car_category_block':'Блок категорії авто відсутній, пошкоджений або не відповідає даті знімка: показано припущення кореляції 0,25 / 0,75.',
     'category_index_lagged':'Індекс цін вживаних авто ще не опубліковано за останній місяць знімка: кореляції рахуються без нього.',
     'category_pair_unmeasured':'Для частини груп кореляцію з індексом цін вживаних авто виміряти не вдалося: консервативно r=1.',
+    'invalid_car_proxies_block':'Блок автоіндикаторів відсутній, пошкоджений або застарілий: середнє автоіндикаторів недоступне.',
+    'car_channel_missing':'У блоці автоіндикаторів немає цінового каналу або кошика акцій: середнє автоіндикаторів недоступне.',
+    'car_proxies_lagged':'Автоіндикатори ще не опубліковано за останній місяць знімка: кореляції рахуються без нього.',
+    'car_proxy_pair_unmeasured':'Для частини груп кореляцію з автоіндикаторами виміряти не вдалося: консервативно r=1.',
 }
 
 
@@ -78,7 +82,8 @@ def group_label(identifier, definitions):
 
 
 _PROXY_LABELS = {'manheim_wholesale': 'Manheim (США, гурт)', 'bls_used_retail': 'BLS CPI вживані авто (США, роздріб)',
-                 'auto1_wholesale_eu': 'AUTO1 (Європа, гурт)', 'listed_remarketers': 'Акції CPRT/KMX/OPLN (кошик)'}
+                 'auto1_wholesale_eu': 'AUTO1 (Європа, гурт)', 'listed_remarketers': 'Акції CPRT/KMX/OPLN (кошик)',
+                 'ukraine_vehicle_cpi': 'Держстат ІСЦ купівля транспорту (Україна, роздріб, USD)'}
 _RELATIONS = {'not_correlated': 'не корелює', 'moderately_correlated': 'помірно корелює', 'correlated': 'корелює'}
 _EFFECTS = {'adds_diversification': 'додає диверсифікацію', 'reduces_diversification': 'знижує диверсифікацію',
             'neutral': 'не змінює диверсифікацію'}
@@ -520,20 +525,37 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
                 sheet_number='Дані недоступні', drivers=[], coverage_summary='', largest_text='-',
                 sensitivity_text='-', rows=[], risk_facts=[])
     valid = validate_saved_allocation_v2(result, data, expected, replay=True)
-    # v3 lives beside v2. A valid v3 supplies the scenarios; one that cannot be computed shows the
-    # v2 assumption numbers with an explicit warning; a present but invalid one never falls back.
-    shown, extra_warnings = result, []
+    # v4 and v3 live beside v2; v4 takes precedence. A valid record supplies the scenarios; one that
+    # cannot be computed passes to the next method with an explicit warning; a present but invalid one
+    # never falls back.
+    shown, extra_warnings, fallback_label = result, [], ''
+    shown_keys = ('version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')
+    composite_record = data['DIVERSIFICATION_DATA'].get('allocation_score_v4')
+    if valid and composite_record is not None:
+        from analytics.allocation_score_v4 import validate_saved_allocation_v4
+        if not validate_saved_allocation_v4(composite_record, data, result, expected, v2_validated=True):
+            valid = False
+        elif composite_record['status'] == 'unavailable':
+            extra_warnings = list(composite_record['warnings'])
+            fallback_label = ' · Припущення v2: середнє автоіндикаторів недоступне'
+        else:
+            shown = dict(result, **{key: composite_record[key] for key in shown_keys},
+                         warnings=composite_record['warnings'])
     category_record = data['DIVERSIFICATION_DATA'].get('allocation_score_v3')
     if valid and category_record is not None:
         from analytics.allocation_score_v3 import validate_saved_allocation_v3
         if not validate_saved_allocation_v3(category_record, data, result, expected, v2_validated=True):
             valid = False
+        elif shown is not result:
+            pass  # a valid v4 is shown; v3 is still replayed so a corrupt record is never ignored
         elif category_record['status'] == 'unavailable':
-            extra_warnings = category_record['warnings']
+            extra_warnings += category_record['warnings']
+            fallback_label = fallback_label or ' · Припущення v2: блок категорії авто недоступний'
         else:
-            shown = dict(result, **{key: category_record[key] for key in (
-                'version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')},
-                warnings=category_record['warnings'])
+            shown = dict(result, **{key: category_record[key] for key in shown_keys},
+                         warnings=category_record['warnings'])
+            if fallback_label:
+                fallback_label = ' · Показано v3: середнє автоіндикаторів недоступне'
     # Risk progress lives beside v2 as well. Absent: the view is unchanged. Present: replayed against this
     # very v2; one that does not replay shows "Недоступно" and never a number.
     progress_row, progress_lines = None, []
@@ -581,8 +603,7 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             if assessment['available'] != assessment['expected']:
                 label += ' · Не всі сценарії доступні'
             if shown['status'] == 'provisional': label += ' · Попередньо'
-            if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
-                label += ' · Припущення v2: блок категорії авто недоступний'
+            label += fallback_label  # the tab shows this label and note only, so a fallback must be named here
             from analytics.car_resale_market import conclusion_note
             view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc,
                                                       progress_lines)
@@ -625,10 +646,21 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
                               'stress_quintile': 'стрес-місяці акцій США з 1997'}.get(pair.get('sample'), 'вибірку не вказано')
                     detail = (f"Індекс цін вживаних авто (США), ціновий канал, R=1; {pair['observations']} спостережень "
                               f"({sample}); r={pair['correlation']:.2f}").replace('.', ',')
+                elif pair['kind'] == 'proxy_composite':
+                    basis = {'composite': 'середнє каналів 50/50', 'price': 'цінові індекси авто',
+                             'equity': 'кошик акцій CPRT/KMX/OPLN'}.get(pair.get('sample'), 'основу не вказано')
+                    detail = (f"Замінник автобізнесу ({basis}), не ваш бізнес; {pair['observations']} спостережень; "
+                              f"r={pair['correlation']:.2f}").replace('.', ',')
                 else:
                     detail = 'Немає придатної пари; консервативно r=1'
                 rows.append(('Історія пар', names + ': ' + detail))
-            if 'method' in shown:
+            if shown['version'] == 'capital_diversification_v4':
+                rows.append(('Модель', 'Пари активів: 60 і 36 календарних місяців; автобізнес: 0,5 × середня кореляція '
+                                       'цінових індексів (вживані авто США і ЄС, купівля транспорту в Україні) + 0,5 × '
+                                       'кореляція кошика акцій '
+                                       'CPRT/KMX/OPLN, той самий місяць (замінник, не ваш бізнес); окремі сценарії цінового '
+                                       'каналу, каналу акцій і стрес 0,75; невідомі пари: r=1.'))
+            elif 'method' in shown:
                 rows.append(('Модель', 'Пари активів: 60 і 36 календарних місяців; автобізнес: кореляція з індексом цін '
                                        'вживаних авто (категорія і ціновий канал R=1, не ваш бізнес). Точка - найбільша з трьох '
                                        'оцінок (вікно, лаг ціни 1 міс., стрес-місяці акцій США з 1997; вибірки різні); обережний '
