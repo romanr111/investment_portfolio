@@ -56,8 +56,8 @@ Outside code imports only `api.py`. Everything else is internal and may move.
 | `allocation_inputs.py` | Economic `GROUPS` (label and representative ticker), `allocation_settings`, `profile_for` (dated profile lookup and category defaults), history requests, `seal_result`. |
 | `allocation_v2_inputs.py` | `METHOD`, `calculate_allocation_score_v2`, risk facts, replay validation (`validate_saved_allocation_v2`), previous-record attribution. |
 | `allocation_score_v2.py` | Pure math: `score_components_v2`, `evaluate_scenarios`, `category`, `same_value` (bounded equality for replay). |
-| `allocation_score_v3.py` | `derive_allocation_score_v3` (sibling record from the saved v2 plus a frozen block), `validate_saved_allocation_v3` (full replay from the saved v2 and the embedded block), `HEADLINE`, `METHOD_V3`. |
-| `allocation_score_v4.py` | `derive_allocation_score_v4` (sibling record from the saved v2 plus a frozen proxy block; reuses the v3 pair substitution), `validate_saved_allocation_v4`, `HEADLINE`, `CHANNELS`, `METHOD_V4`. |
+| `allocation_score_v3.py` | `derive_allocation_score_v3` (sibling record from the saved v2 plus a frozen block), `validate_saved_allocation_v3` (full replay from the saved v2 and the embedded block), `HEADLINE`, `METHOD_V3`, and `group_weights` / `scenario_with_car_pairs` (car pairs substituted into the saved base scenario; shared with v4). |
+| `allocation_score_v4.py` | `derive_allocation_score_v4` (sibling record from the saved v2 plus a frozen proxy block; reuses `scenario_with_car_pairs` from v3), `validate_saved_allocation_v4`, `HEADLINE`, `CHANNELS`, `METHOD_V4`. |
 | `concentration_v1.py` | Issuer, thesis, core and country facts, limits, decision matching, saved-block validation. |
 | `what_if.py` | Offline before/after on a copied snapshot (`run`). |
 | `risk_progress.py` | `derive_risk_progress_v1` (sibling record from the saved v2, optional proxy block), `validate_saved_risk_progress_v1` (full replay), and the offline CLI (`just risk-progress`). Imported by `enrich` and `views/allocation`. |

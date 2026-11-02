@@ -15,7 +15,7 @@ import pandas as pd
 
 from analytics.holy_grail.allocation_inputs import seal_result
 from analytics.holy_grail.allocation_score_v2 import same_value
-from analytics.holy_grail.allocation_score_v3 import CAR, WINDOWS, _scenario, _weights
+from analytics.holy_grail.allocation_score_v3 import CAR, WINDOWS, group_weights, scenario_with_car_pairs
 from analytics.holy_grail.allocation_v2_inputs import build_group_history, validate_saved_allocation_v2
 from analytics.holy_grail.car.risk_proxies import series_map, validate_block
 from analytics.holy_grail.correlation import monthly_window
@@ -48,7 +48,7 @@ def _correlation(left, right):
 
 def _measures(v2, block):
     """Per window and group: each proxy's correlation, the two channel means and the composite."""
-    weights = _weights(v2)
+    weights = group_weights(v2)
     frame = monthly_window(build_group_history(v2['histories'], weights, v2['configuration']['group_definitions']),
                            v2['as_of_date'])
     proxies = series_map(block)
@@ -112,7 +112,7 @@ def _unavailable(v2, warning, **fields):
 def _applicable(v2):
     return (isinstance(v2, dict) and v2.get('status') in {'modeled', 'provisional'}
             and all(f'm{w}_{s}' in v2.get('scenarios', {}) for w in WINDOWS for s in ('r025', 'r075'))
-            and _weights(v2).get(CAR, 0) > 0)
+            and group_weights(v2).get(CAR, 0) > 0)
 
 
 def _composite_scenario(v2, months, by_group, field):
@@ -122,7 +122,7 @@ def _composite_scenario(v2, months, by_group, field):
             return None
         return dict(correlation=measure['r'], kind=METHOD_V4['pair_kind'], observations=measure['n'], sample=field)
 
-    scenario = _scenario(v2, months, assign, field)
+    scenario = scenario_with_car_pairs(v2, months, assign, field)
     # A car pair on fewer months than the window is partial history, as for a measured pair.
     if scenario['status'] == 'modeled' and any(
             p['kind'] == METHOD_V4['pair_kind'] and p['observations'] < months for p in scenario['pairs']):

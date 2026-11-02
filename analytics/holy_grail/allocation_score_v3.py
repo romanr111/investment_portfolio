@@ -37,12 +37,12 @@ METHOD_V3 = {
 IGNORED = {'calculated_at', 'result_fingerprint'}
 
 
-def _weights(v2):
+def group_weights(v2):
     return {group['id']: group['weight'] for group in v2['groups']}
 
 
 def _measures(v2, block):
-    weights = _weights(v2)
+    weights = group_weights(v2)
     frame = monthly_window(build_group_history(v2['histories'], weights, v2['configuration']['group_definitions']),
                            v2['as_of_date'])
     out = {}
@@ -53,9 +53,9 @@ def _measures(v2, block):
     return out
 
 
-def _scenario(v2, months, assign, basis):
+def scenario_with_car_pairs(v2, months, assign, basis):
     """Template pairs of the saved base scenario with the car pairs replaced by `assign(group)`."""
-    weights = _weights(v2)
+    weights = group_weights(v2)
     pairs = deepcopy(v2['scenarios'][f'm{months}_r025']['pairs'])
     for pair in pairs:
         if CAR not in (pair['left'], pair['right']):
@@ -135,7 +135,7 @@ def _unavailable(v2, warning):
 def _applicable(v2):
     return (isinstance(v2, dict) and v2.get('status') in {'modeled', 'provisional'}
             and all(f'm{w}_{s}' in v2.get('scenarios', {}) for w in WINDOWS for s in ('r025', 'r075'))
-            and _weights(v2).get(CAR, 0) > 0)
+            and group_weights(v2).get(CAR, 0) > 0)
 
 
 def derive_allocation_score_v3(v2, block):
@@ -162,7 +162,7 @@ def derive_allocation_score_v3(v2, block):
                     return dict(correlation=measure[field], kind='category',
                                 observations=measure['upper_n' if upper else 'n'],
                                 sample=measure['upper_selected' if upper else 'selected'])
-                scenarios[f'm{months}_{name}'] = _scenario(v2, months, assign, name)
+                scenarios[f'm{months}_{name}'] = scenario_with_car_pairs(v2, months, assign, name)
             stress = deepcopy(v2['scenarios'][f'm{months}_r075'])
             stress['car_basis'] = 'assumption'
             scenarios[f'm{months}_r075'] = stress
