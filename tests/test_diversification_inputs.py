@@ -8,7 +8,7 @@ from test_holy_grail_data import snapshot_fixture
 
 class QualityInputTests(unittest.TestCase):
     def test_borrowing_cannot_be_hidden_by_positive_cash_elsewhere(self):
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         for source in ('broker', 'breakdown'):
             with self.subTest(source=source):
                 data = snapshot_fixture()
@@ -48,18 +48,18 @@ class QualityInputTests(unittest.TestCase):
                                        for index, (key, record) in enumerate(records.items())},
                           'qualifications': {key: dict(source_identity=record['source_identity'], status='reviewed')
                                              for key, record in records.items()}}
-                from analytics.holy_grail_data import bound_exposure_record
+                from analytics.holy_grail.exposures import bound_exposure_record
                 self.assertEqual(bound_exposure_record(records, f'{group}:0', None, identities[0]), records[f'{group}:0'])
                 data['POSITION_DATA'][group].reverse()
                 self.assertEqual(bound_exposure_record(records, f'{group}:0', None, identities[1]), {})
-                from analytics.holy_grail_data import extract_exposures
+                from analytics.holy_grail.exposures import extract_exposures
                 rows, _, _ = extract_exposures(data, '2026-09-30', config)
                 self.assertTrue(all(row['weak_proxy'] for row in rows))
                 self.assertTrue(all(row['qualification']['status'] == 'draft' for row in rows))
                 self.assertFalse(any(row['symbol'].startswith('SOURCE_') for row in rows))
 
     def test_quality_fingerprint_survives_decimal_roundtrip_and_rejects_changed_metadata(self):
-        from analytics.diversification_inputs import quality_inputs_fingerprint
+        from analytics.holy_grail.evidence import quality_inputs_fingerprint
         data=snapshot_fixture();data['CASH_DATA']={'Total':Decimal('10'),'Cash_Equivalents':{}};data['TOTAL_ASSETS']+=10
         expected=quality_inputs_fingerprint(data)
         for default in (str,float):

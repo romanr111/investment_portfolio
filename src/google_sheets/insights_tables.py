@@ -5,7 +5,7 @@ from datetime import date
 from typing import Any, Optional
 
 from src.google_sheets.insights_cells import CellBlock, CellValue, render_blocks
-from analytics.diversification_view import saved_diversification_view
+from analytics.holy_grail.api import saved_diversification_view
 from src.google_sheets.insights_finance import (
     category_rows,
     fire_progress,

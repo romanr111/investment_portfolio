@@ -9,7 +9,7 @@ from typing import Optional
 
 import pandas as pd
 
-from analytics.dalio_holy_grail import (
+from analytics.dalio.dalio_holy_grail import (
     DalioHolyGrailAnalyzer,
     format_holy_grail_cli_lines,
 )

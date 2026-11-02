@@ -30,7 +30,7 @@ class HolyGrailOutputTests(unittest.TestCase):
     def test_legacy_sheets_and_html_use_the_same_saved_count_offline(self):
         saved = self.saved()
         del saved["DIVERSIFICATION_DATA"]
-        with patch("analytics.holy_grail_data.collect_return_history", side_effect=AssertionError("Outputs must not collect data")):
+        with patch("analytics.holy_grail.market_history.collect_return_history", side_effect=AssertionError("Outputs must not collect data")):
             table = sheet_table(saved)
             self.assertTrue(any(row[:2] == ["Диверсифікація /100", "Нова оцінка відсутня"] for row in table),
                             "The current spreadsheet does not display saved Holy Grail progress")
@@ -42,7 +42,7 @@ class HolyGrailOutputTests(unittest.TestCase):
             self.assertIn("30.09.2026", document)
 
     def test_unreviewed_hundred_percent_is_not_an_achievement_headline(self):
-        from analytics.holy_grail import saved_progress_view
+        from analytics.holy_grail.legacy.progress_view import saved_progress_view
         data = self.saved()
         data["HOLY_GRAIL_DATA"].update(target_achieved=False, constraints=["qualification_pending"])
         view = saved_progress_view(data)
@@ -50,7 +50,7 @@ class HolyGrailOutputTests(unittest.TestCase):
         self.assertIsNone(view["fraction"])
 
     def test_changed_holdings_and_wrong_quarter_reject_a_saved_score(self):
-        from analytics.holy_grail import saved_progress_view
+        from analytics.holy_grail.legacy.progress_view import saved_progress_view
         data = self.saved()
         data["IB_DATA"]["Stocks"]["asset_0"] = 200
         self.assertIsNone(saved_progress_view(data)["fraction"])
@@ -62,7 +62,7 @@ class HolyGrailOutputTests(unittest.TestCase):
         self.assertNotIn("PRIVATE-BALANCE", self.html(data))
 
     def test_changed_input_quality_rejects_an_earlier_achievement(self):
-        from analytics.holy_grail import saved_progress_view
+        from analytics.holy_grail.legacy.progress_view import saved_progress_view
         data = self.saved()
         self.assertEqual(saved_progress_view(data)["fraction"], 1)
         data["DATA_QUALITY"] = {"crypto": {"freshness": "stale"}}

@@ -13,66 +13,84 @@ This is a map, not the methodology. Formulas, thresholds and policy live in `doc
 | `risk_progress_v1` (`DIVERSIFICATION_DATA.risk_progress_v1`) | Optional sibling of v2, written only when a frozen `car_proxies_v1` block is supplied. Not part of the capital score. | How many independent equal-risk streams (DR-squared, target 15) the covered part of the portfolio behaves like, as points out of 100. Progress, not a grade. Revives the retired risk-equivalent formula on a different basis (frozen v2 group histories). |
 | `concentration_v1` (`DIVERSIFICATION_DATA.concentration_v1`; the `version` field inside is `concentration_v2`) | Current. Rendered beside the score. | Issuer, thesis, country and core-bucket limits, which v2 cannot see. |
 | v1 capital score, risk-equivalent count and DR-squared, ten-check policy, simple indicator | Frozen. Rendered only from records that already contain them. | Historical comparisons. Never trend them against v2. |
-| `analytics/dalio_holy_grail.py` | Separate standalone analyzer (`main.py --run-dalio-analysis`, `python3 -m analytics.dalio_holy_grail --help`). Not part of the saved score. | Independent risk sources (README "Dalio Holy Grail Analyzer"). |
+| `analytics/dalio/dalio_holy_grail.py` | Separate standalone analyzer (`main.py --run-dalio-analysis`, `python3 -m analytics.dalio.dalio_holy_grail --help`). Not part of the saved score. | Independent risk sources (README "Dalio Holy Grail Analyzer"). |
 
 "How correlated are my assets with each other" is answered by the `pairs` inside the v2 scenarios (the v3 scenarios copy every non-car pair from v2). Those are correlations between economic groups, not between individual holdings.
 
 ## 2. Data flow
 
-1. `DataSource.get_combined_data` (`src/data_source.py`) builds the combined data and calls `holy_grail_data.enrich_combined_data`.
-2. `extract_exposures` turns positions into exposures; `allocation_inputs.allocation_history_requests` lists the group representatives needed.
-3. `collect_return_history` fetches daily prices (yfinance), cached under `data/holy_grail_history`; `monthly_usd_returns` converts them to monthly USD returns.
+Module names are relative to `analytics/holy_grail/` (see section 3). Code outside the package imports only `analytics.holy_grail.api`.
+
+1. `DataSource.get_combined_data` (`src/data_source.py`) builds the combined data and calls `enrich.enrich_combined_data`.
+2. `exposures.extract_exposures` turns positions into exposures; `allocation_inputs.allocation_history_requests` lists the group representatives needed.
+3. `market_history.collect_return_history` fetches daily prices (yfinance), cached under `data/holy_grail_history`; `market_history.monthly_usd_returns` converts them to monthly USD returns.
 4. `allocation_v2_inputs.calculate_allocation_score_v2` maps positions to groups with `allocation_inputs.profile_for`, then calls `allocation_score_v2.evaluate_scenarios` and `score_components_v2`.
-5. When a frozen car-category block is passed, `allocation_score_v3.derive_allocation_score_v3(v2, block)` builds the sibling record from the saved v2. The argument is `car_category=` on `enrich_combined_data` and `enrich_snapshot_file`, and `--car-category` on the CLI; `DataSource` passes `car_category.load_block()`, which reads `data/car_category/block_latest.json` and returns None when the file is absent. Omitted means no v3 record.
-6. When a frozen proxy block is passed, `holy_grail_risk_progress.derive_risk_progress_v1(v2, proxies)` derives `risk_progress_v1` from the saved v2. The argument is `car_proxies=` (same two functions) and `--car-proxies` on the CLI; `DataSource` passes `car_risk_proxies.load_block()`, which reads `data/car_category/proxies_latest.json` and returns None when absent. Omitted means no record.
+5. When a frozen car-category block is passed, `allocation_score_v3.derive_allocation_score_v3(v2, block)` builds the sibling record from the saved v2. The argument is `car_category=` on `enrich_combined_data` and `enrich_snapshot_file`, and `--car-category` on the CLI; `DataSource` passes `car.category.load_block()`, which reads `data/car_category/block_latest.json` and returns None when the file is absent. Omitted means no v3 record.
+6. When a frozen proxy block is passed, `risk_progress.derive_risk_progress_v1(v2, proxies)` derives `risk_progress_v1` from the saved v2. The argument is `car_proxies=` (same two functions) and `--car-proxies` on the CLI; `DataSource` passes `car.risk_proxies.load_block()`, which reads `data/car_category/proxies_latest.json` and returns None when absent. Omitted means no record.
 7. `concentration_v1.build_block` and `match_decisions` build the concentration block from the same frozen inputs (it stays on v2).
 8. All results are saved under `DIVERSIFICATION_DATA` in the combined-data snapshot (`data/snapshots/combined_data_*.json`).
-9. `diversification_view.saved_diversification_view` selects the public view. A saved v2 record always goes through `allocation_view.allocation_view_v2(data, expected_date, saved_at_utc)` (older records use their own views), which replay-validates the v2 record, and a v3 or risk-progress record when present, against their own frozen inputs. The view never fetches data or reads today's config.
+9. `views.diversification.saved_diversification_view` selects the public view. A saved v2 record always goes through `views.allocation.allocation_view_v2(data, expected_date, saved_at_utc)` (older records use their own views), which replay-validates the v2 record, and a v3 or risk-progress record when present, against their own frozen inputs. The view never fetches data or reads today's config.
    - v3: valid, it supplies the headline and scenarios; unavailable, the v2 numbers show with a warning; failing replay, it renders unavailable.
-   - Risk progress (`holy_grail_risk_progress.validate_saved_risk_progress_v1`): valid, it adds the summary row "Ризиковий прогрес" (after "Сценарний розкид") and a paragraph in the conclusion note; failing replay, the row shows "Недоступно" instead of a number and the rest of the view is unaffected; absent, the view is unchanged.
-   - The note under the conclusion comes from `car_resale_market.conclusion_note` (frozen `CAR_RESALE_MARKET_CONTEXT`).
-10. The view feeds Google Sheets (`src/google_sheets/insights_tables.py`; the scoped writer is `analytics/holy_grail_sheet.py`) and the quarterly HTML (`portfolio_yic_reports/generate_quarterly_report.py`). Both Sheets writers deliver the conclusion note as an owned cell note (marker `car_resale_market.NOTE_MARKER`) and treat a foreign note as a conflict.
+   - Risk progress (`risk_progress.validate_saved_risk_progress_v1`): valid, it adds the summary row "Ризиковий прогрес" (after "Сценарний розкид") and a paragraph in the conclusion note; failing replay, the row shows "Недоступно" instead of a number and the rest of the view is unaffected; absent, the view is unchanged.
+   - The note under the conclusion comes from `car.resale_market.conclusion_note` (frozen `CAR_RESALE_MARKET_CONTEXT`).
+10. The view feeds Google Sheets (`src/google_sheets/insights_tables.py`; the scoped writer is `analytics/holy_grail/delivery/sheet.py`) and the quarterly HTML (`portfolio_yic_reports/generate_quarterly_report.py`). Both Sheets writers deliver the conclusion note as an owned cell note (marker `car.resale_market.NOTE_MARKER`, tested with `car.resale_market.is_owned_note`) and treat a foreign note as a conflict.
 
-Historical snapshots take a different entry: `holy_grail_data.enrich_snapshot_file` (via `just holy-grail`) enriches a copy and writes a new derived file.
+Historical snapshots take a different entry: `enrich.enrich_snapshot_file` (via `just holy-grail`) enriches a copy and writes a new derived file.
 
-## 3. Module map (`analytics/`)
+## 3. Module map (`analytics/holy_grail/`)
+
+Outside code imports only `api.py`. Everything else is internal and may move.
 
 | Module | Role |
 |---|---|
-| `holy_grail_cli.py` | CLI: enrich a copy of a dated snapshot (optional `--car-category` and `--car-proxies`), or run `--what-if`. Never fetches positions or writes Sheets. |
-| `holy_grail_data.py` | `enrich_combined_data`, `enrich_snapshot_file`, exposure extraction, return-history collection and cache, `load_config`. |
-| `allocation_inputs.py` | Economic `GROUPS` (label and representative ticker), `allocation_settings`, `profile_for` (dated profile lookup and category defaults), history requests, result sealing. |
+| `api.py` | The import surface for outside code: `enrich_combined_data`, `saved_diversification_view`, `saved_progress_view`, `load_car_category_block`, `load_car_proxies_block`, `is_owned_note`. |
+| `paths.py` | `REPO_ROOT`, `DATA_DIR`, `CONFIG_PATH`, `CACHE_DIR`, the two car block paths and `PROFILE_PATH`. Modules take locations from here instead of computing them from `__file__`. |
+| `fingerprint.py` | `fingerprint`, `holdings_fingerprint`, `completed_month_end`: used by every saved record. |
+| `cli.py` | CLI (`just holy-grail`): enrich a copy of a dated snapshot (optional `--car-category` and `--car-proxies`), or run `--what-if`. Never fetches positions or writes Sheets. |
+| `enrich.py` | Orchestration only: `enrich_combined_data`, `enrich_snapshot_file`, `load_config`. |
+| `exposures.py` | `extract_exposures`, `bound_exposure_record`, `iso_date`: positions to dated economic exposures. No network, no scoring. |
+| `market_history.py` | `collect_return_history`, `monthly_usd_returns`, `fetch_yfinance_history`, price cache. The only code that fetches prices. |
+| `correlation.py` | Monthly windows and pairwise correlations shared by every method version (`monthly_window`, `pair_correlations`, `correlation_map`, `history_frame`, `history_payload`). |
+| `evidence.py` | `quality_inputs_fingerprint` (fingerprint of the saved inputs) and `reviewed_record` (dated risk-evidence validation). |
+| `allocation_inputs.py` | Economic `GROUPS` (label and representative ticker), `allocation_settings`, `profile_for` (dated profile lookup and category defaults), history requests, `seal_result`. |
 | `allocation_v2_inputs.py` | `METHOD`, `calculate_allocation_score_v2`, risk facts, replay validation (`validate_saved_allocation_v2`), previous-record attribution. |
-| `allocation_score_v2.py` | Pure math: `score_components_v2`, `evaluate_scenarios`, `category`. |
+| `allocation_score_v2.py` | Pure math: `score_components_v2`, `evaluate_scenarios`, `category`, `same_value` (bounded equality for replay). |
 | `allocation_score_v3.py` | `derive_allocation_score_v3` (sibling record from the saved v2 plus a frozen block), `validate_saved_allocation_v3` (full replay from the saved v2 and the embedded block), `HEADLINE`, `METHOD_V3`. |
-| `allocation_score.py` | v1 score plus helpers v2 still imports (`monthly_window`, `pair_correlations`, `correlation_map`, `history_frame`, `history_payload`). Do not remove. |
-| `holy_grail.py` | `fingerprint`, `holdings_fingerprint`, `completed_month_end` (used by v2) and `saved_progress_view` for legacy records. |
 | `concentration_v1.py` | Issuer, thesis, core and country facts, limits, decision matching, saved-block validation. |
 | `what_if.py` | Offline before/after on a copied snapshot (`run`). |
-| `diversification_view.py` | `saved_diversification_view`: dispatch to the public view of a saved record. |
-| `allocation_view.py` | Public whitelist views (`allocation_view_v2` for v2, v3 and the risk-progress row, `allocation_view` for v1 records) and the concentration section. |
-| `holy_grail_sheet.py` | Scoped, readback-verified Sheets writer for the saved view. |
-| `car_category.py` | `build_block`, `validate_block`, `load_block`, `METHOD`, `group_measures` (three correlation measures per group), and the tracker CLI `build` / `report` (`just car-category`). |
-| `car_category_data.py` | Offline parsers and sha256 manifest for the public used-vehicle datasets. `fetch_raw` and `long_group_returns` are the only network entry points and are called explicitly. |
-| `car_crisis_test.py` | H1-H3 crisis test of the index against the groups (`just car-crisis`); write-up in `docs/car-flip-category-evidence.md`. |
-| `car_industry_proxy.py` | One retrospective check of the car business against a listed industry basket (`just car-proxy`). Equity beta, not a measurement of the business. |
-| `car_resale_market.py` | `build_context`, `validated_context`, `conclusion_note`, `NOTE_MARKER`: frozen public market context shown beside the score, not part of it. |
-| `holy_grail_risk_progress.py` | `derive_risk_progress_v1` (sibling record from the saved v2, optional proxy block), `validate_saved_risk_progress_v1` (full replay), and the offline CLI (`just risk-progress`). Imported by `holy_grail_data` and `allocation_view`. |
-| `car_risk_proxies.py` | `build_block`, `validate_block`, `load_block`, `METHOD`: the frozen `car_proxies_v1` block of public used-vehicle proxy series (`just car-proxies build` / `report`). |
-| `diversification_inputs.py` | `quality_inputs_fingerprint`. |
-| `diversification_quality.py` | `reviewed_record` (dated risk-evidence validation) and legacy check summaries. |
-| `holy_grail_indicator.py`, `holy_grail_indicator_view.py` | Validation and public view of the frozen simple indicator. |
-| `dalio_holy_grail.py` | Standalone Dalio analyzer (section 1). |
-| `risk_analyzer.py` | Standalone heuristic 1-10 per-asset risk scorer (`PortfolioRiskAnalyzer`); not imported by the pipeline. |
+| `risk_progress.py` | `derive_risk_progress_v1` (sibling record from the saved v2, optional proxy block), `validate_saved_risk_progress_v1` (full replay), and the offline CLI (`just risk-progress`). Imported by `enrich` and `views/allocation`. |
+| `views/diversification.py` | `saved_diversification_view`: dispatch to the public view of a saved record. |
+| `views/allocation.py` | Public whitelist views (`allocation_view_v2` for v2, v3 and the risk-progress row, `allocation_view` for v1 records) and the concentration section. |
+| `views/common.py` | `empty_view`: the unavailable view every renderer falls back to. |
+| `delivery/sheet.py` | Scoped, readback-verified Sheets writer for the saved view (`just holy-grail-sheet`). |
+| `car/category.py` | `build_block`, `validate_block`, `load_block`, `METHOD`, `group_measures` (three correlation measures per group). A leaf: imports no score module. |
+| `car/tracker_cli.py` | Tracker CLI `build` / `report` (`just car-category`); the only car module that imports the v2 and v3 scores. |
+| `car/category_data.py` | Offline parsers and sha256 manifest for the public used-vehicle datasets. `fetch_raw` and `long_group_returns` are the only network entry points and are called explicitly. |
+| `car/crisis_test.py` | H1-H3 crisis test of the index against the groups (`just car-crisis`); write-up in `docs/car-flip-category-evidence.md`. |
+| `car/industry_proxy.py` | One retrospective check of the car business against a listed industry basket (`just car-proxy`). Equity beta, not a measurement of the business. |
+| `car/resale_market.py` | `build_context`, `validated_context`, `conclusion_note`, `NOTE_MARKER`, `is_owned_note`: frozen public market context shown beside the score, not part of it. |
+| `car/risk_proxies.py` | `build_block`, `validate_block`, `load_block`, `METHOD`: the frozen `car_proxies_v1` block of public used-vehicle proxy series (`just car-proxies build` / `report`). |
+| `legacy/allocation_v1.py` | Frozen `capital_diversification_v1`: score, calibration, `validate_saved_allocation`. |
+| `legacy/quality.py` | Frozen ten-check summary: `COUNT_VERSION`, `POLICY_VERSION`, `CHECK_IDS`, `summarize_checks`. |
+| `legacy/progress_view.py` | `saved_progress_view` and `CONSTRAINT_LABELS` for the retired `holy_grail_progress_v1` record. |
+| `legacy/indicator.py`, `legacy/indicator_view.py` | Validation and public view of the frozen simple indicator. |
 
-The group list and each group's representative ticker live in `analytics/allocation_inputs.py` (`GROUPS`). Read them there instead of copying them into prose.
+Rules, checked by reading imports (a scan of the package finds no cycle, even through function-level imports):
+
+- Nothing outside `views/`, `api.py` and `legacy/` imports `legacy/`.
+- Leaf modules (`fingerprint`, `paths`, `correlation`, `exposures`, `market_history`, `evidence`, `views/common`, `car/category`) import none of their consumers. Do not add a function-level import to dodge a cycle: move the shared piece into a leaf.
+- A name used by another module is public: no leading underscore.
+
+Outside the package: `analytics/dalio/dalio_holy_grail.py` (standalone Dalio analyzer, section 1), `analytics/risk_analyzer.py` (standalone heuristic 1-10 per-asset risk scorer, `PortfolioRiskAnalyzer`; not imported by the pipeline) and `analytics/models/economic_profiles_v1.json` (profiles, section 4).
+
+The group list and each group's representative ticker live in `analytics/holy_grail/allocation_inputs.py` (`GROUPS`). Read them there instead of copying them into prose.
 
 ## 4. Inputs and local artifacts
 
 - Public profiles: `analytics/models/economic_profiles_v1.json` (dated economic profiles, sector shares, optional fund `holdings`). Its `core: true` flag is also used by the quarterly report's core/satellite split.
 - Private config: `data/holy_grail_config.json`. Top-level keys: `schema_version`, `mappings`, `qualifications`, `indicator`, `allocation` (`profiles`, `method_version`, optional `concentration_limits`, `linked_theses`, `concentration_decisions`), and optional `diversification`. Of that block the current code reads only `diversification.exposures` (v2 risk facts); `policy` and `cash_components` belong to the retired ten-check calculators. See "Private evidence and collection" in the methodology doc.
 - Ignored local artifacts: `data/holy_grail_history/` (price cache), `data/derived_snapshots/` (derived enrichments), `data/snapshots/combined_data_*.json` (saved records), `data/car_category/` (the car-category block `block_latest.json`, the proxy block `proxies_latest.json`, raw dataset files, `history.jsonl`).
-- Optional context: a derived snapshot may carry `CAR_RESALE_MARKET_CONTEXT`, a manually collected one-time public dataset frozen with `car_resale_market.build_context`. Related docs: `docs/car-resale-market-context.md` (note rules), `docs/car-flip-category-evidence.md` (crisis test), `docs/car-deal-ledger.md` (deal record schema).
+- Optional context: a derived snapshot may carry `CAR_RESALE_MARKET_CONTEXT`, a manually collected one-time public dataset frozen with `car.resale_market.build_context`. Related docs: `docs/car-resale-market-context.md` (note rules), `docs/car-flip-category-evidence.md` (crisis test), `docs/car-deal-ledger.md` (deal record schema).
 - Snapshot envelope: `{as_of_date, saved_at_utc, source, data}`. The record is under `data`.
 
 ## 5. Saved record map
@@ -192,9 +210,9 @@ Report rendering from a derived snapshot: `generate_quarterly_report.py --after 
 - `--offline` uses cached public history only. A series missing from the cache sets `history_collection_incomplete` and its pairs become `missing`, which leaves scenarios provisional or unavailable.
 - Never fall back from an invalid v2 record to v1 or a previous result, or from an invalid v3 record to v2.
 - Two optional frozen blocks switch the sibling records on: `data/car_category/block_latest.json` (v3) and `data/car_category/proxies_latest.json` (risk progress). With no block there is no record, and that is not an error, so merging the code enables neither. `just car-category build` and `just car-proxies build` refuse to overwrite an existing output path.
-- Rebuild both blocks every month, after the new month's source data is published. A block is accepted only while its newest month (every series, for the proxy block) is at most one month behind the snapshot's completed month (`max_index_lag_months` in `car_category.METHOD`, `max_lag_months` in `car_risk_proxies.METHOD`). A stale or invalid v3 block (including a `car_category_v1` block) gives an `unavailable` v3 record and the view shows the v2 numbers with a warning. A stale or invalid proxy block keeps the risk-progress headline and shows the car scenarios as `unavailable` (`invalid_car_proxies_block`).
+- Rebuild both blocks every month, after the new month's source data is published. A block is accepted only while its newest month (every series, for the proxy block) is at most one month behind the snapshot's completed month (`max_index_lag_months` in `car.category.METHOD`, `max_lag_months` in `car.risk_proxies.METHOD`). A stale or invalid v3 block (including a `car_category_v1` block) gives an `unavailable` v3 record and the view shows the v2 numbers with a warning. A stale or invalid proxy block keeps the risk-progress headline and shows the car scenarios as `unavailable` (`invalid_car_proxies_block`).
 - `just risk-progress` validates the saved v2 by replay, changes no snapshot, fetches nothing and never writes Sheets; `--out` writes a new file only, outside the automatic snapshot directories.
-- `what_if.py` and `concentration_v1.py` stay on v2.
+- `what_if.py` and `concentration_v1.py` (in `analytics/holy_grail/`) stay on v2.
 - The market-context note needs the snapshot's timezone-aware `saved_at_utc`; without it the note is unavailable while the score still renders. A foreign cell note at the target is a conflict (`SheetConflictError` in the full writer, `ValueError` in the scoped one).
 - The Sheets writer edits only its owned region and refuses on conflict or insufficient grid space. After a write error, read back before any retry.
 - Frozen-record validation replays from saved histories and the saved configuration, never from today's config. Changing a profile does not change an old record.

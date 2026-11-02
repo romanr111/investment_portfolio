@@ -532,18 +532,16 @@ def _tab_requests(
 
     sheet_id = worksheet.id
     requests: list[dict[str, Any]] = []
-    from analytics.car_resale_market import NOTE_MARKER
+    from analytics.holy_grail.api import is_owned_note
     annotations = live_annotations or {}
-    def owned_note(note):
-        return isinstance(note, str) and (note.startswith(NOTE_MARKER) or note.endswith(NOTE_MARKER))
     target_notes = {(row, col): cell.note for (row, col), cell in typed_cells.items()
                     if cell.note is not None}
     for position in target_notes:
         existing_note = annotations.get(position, {}).get('note')
-        if existing_note and not owned_note(existing_note):
+        if existing_note and not is_owned_note(existing_note):
             raise SheetConflictError(f'Unowned note at row {position[0] + 1}, column {position[1] + 1}')
     old_notes = {position for position, cell in annotations.items()
-                 if owned_note(cell.get('note'))
+                 if is_owned_note(cell.get('note'))
                  and _inside(*position, old_metadata.get('ranges', []))}
     # Grow with headroom, but also shrink back after big layout removals: the
     # grid tracks the render with a small buffer instead of the largest frame

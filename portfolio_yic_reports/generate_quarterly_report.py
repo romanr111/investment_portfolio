@@ -35,8 +35,7 @@ from analyze_portfolio_reports import (
     load_portfolios,
 )
 from src.portfolio_ledger.contract import reclassify_cash_equivalents, STABLECOINS
-from analytics.holy_grail import saved_progress_view
-from analytics.diversification_view import saved_diversification_view
+from analytics.holy_grail.api import saved_diversification_view, saved_progress_view
 
 from quarterly_report_html import (
     MINUS,
