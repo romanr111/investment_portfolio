@@ -7,9 +7,9 @@ import pandas as pd
 
 class AllocationScoreTests(unittest.TestCase):
     def test_one_sector_has_zero_but_one_broad_market_has_at_most_25(self):
-        self.assertIsNotNone(importlib.util.find_spec('analytics.allocation_score'),
+        self.assertIsNotNone(importlib.util.find_spec('analytics.holy_grail.legacy.allocation_v1'),
                              'The approved capital-weighted indicator is missing')
-        from analytics.allocation_score import score_components
+        from analytics.holy_grail.legacy.allocation_v1 import score_components
         narrow = score_components({'equity_us': 1.0}, {}, {'equity_us': {'IT': 1}}, 155)
         broad = score_components({'equity_us': 1.0}, {},
                                  {'equity_us': {str(i): 1/11 for i in range(11)}}, 155)
@@ -17,7 +17,7 @@ class AllocationScoreTests(unittest.TestCase):
         self.assertAlmostEqual(broad['score'], 25)
 
     def test_90_10_is_concentrated_and_correlations_cannot_improve_score(self):
-        from analytics.allocation_score import score_components, MAX_CALIBRATION
+        from analytics.holy_grail.legacy.allocation_v1 import score_components, MAX_CALIBRATION
         weights = {'equity_us': .9, 'treasury_short': .1}
         sectors = {'equity_us': {str(i): 1/11 for i in range(11)}}
         scores = [score_components(weights, {('equity_us','treasury_short'): r}, sectors,
@@ -27,13 +27,13 @@ class AllocationScoreTests(unittest.TestCase):
         self.assertEqual(sorted(scores, reverse=True), scores)
 
     def test_missing_sectors_and_correlations_never_manufacture_diversity(self):
-        from analytics.allocation_score import score_components
+        from analytics.holy_grail.legacy.allocation_v1 import score_components
         unknown = score_components({'equity_us': 1}, {}, {'equity_us': {'Financials': .5}},155)
         self.assertEqual(unknown['score'], 0)
         self.assertEqual(score_components({'a': .5, 'b': .5},{},{},155)['score'], 0)
 
     def test_pairs_keep_their_own_calendar_window(self):
-        from analytics.allocation_score import pair_correlations
+        from analytics.holy_grail.correlation import pair_correlations
         rng=np.random.default_rng(42)
         frame=pd.DataFrame(rng.normal(size=(60,3)),index=pd.date_range('2021-10-31',periods=60,freq=pd.offsets.MonthEnd()),columns=['a','b','tiny'])
         frame.loc[frame.index[:24],'tiny']=np.nan
@@ -44,13 +44,13 @@ class AllocationScoreTests(unittest.TestCase):
         self.assertEqual(next(p for p in pairs if p['right']=='tiny')['observations'],36)
 
     def test_display_floor_handles_float_noise_but_does_not_round_up(self):
-        from analytics.allocation_score import display_score
+        from analytics.holy_grail.legacy.allocation_v1 import display_score
         self.assertEqual(display_score(49.999999999),50)
         self.assertEqual(display_score(49.99),49)
         self.assertEqual(display_score(99.6),99)
 
     def test_reference_calibration_is_frozen_and_reproducible(self):
-        from analytics.allocation_score import freeze_calibration, validate_calibration
+        from analytics.holy_grail.legacy.allocation_v1 import freeze_calibration, validate_calibration
         rng=np.random.default_rng(72)
         samples=rng.normal(size=(60,3));samples-=samples.mean(axis=0)
         orthogonal=np.linalg.qr(samples)[0]
@@ -64,7 +64,7 @@ class AllocationScoreTests(unittest.TestCase):
 
 
 def allocation_fixture():
-    from analytics.allocation_score import freeze_calibration
+    from analytics.holy_grail.legacy.allocation_v1 import freeze_calibration
     rng=np.random.default_rng(125)
     dates=pd.date_range('2021-10-31',periods=60,freq=pd.offsets.MonthEnd())
     samples=rng.normal(size=(60,4));samples-=samples.mean(axis=0)
@@ -90,8 +90,8 @@ class AllocationIntegrationTests(unittest.TestCase):
         return saved_legacy_fixture(name)
 
     def test_saved_result_replays_and_stale_or_corrupt_data_never_falls_back(self):
-        from analytics.allocation_inputs import validate_saved_allocation
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.legacy.allocation_v1 import validate_saved_allocation
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         saved=self.saved();q=saved['DIVERSIFICATION_DATA']['allocation_score']
         self.assertTrue(validate_saved_allocation(q,saved,'2026-09-30'))
         view=saved_diversification_view(saved)
@@ -102,7 +102,7 @@ class AllocationIntegrationTests(unittest.TestCase):
 
 
     def test_expired_and_reassigned_profiles_are_uncovered(self):
-        from analytics.allocation_inputs import profile_for
+        from analytics.holy_grail.allocation_inputs import profile_for
         _,config,_=allocation_fixture();p=dict(id='ib:SPY',category='Stocks')
         config['profiles']['ib:SPY']['valid_until']='2026-09-29'
         self.assertIsNone(profile_for(p,config,'2026-09-30'))
@@ -113,8 +113,8 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_full_replay_rejects_incorrect_business_sensitivity_even_with_valid_seal(self):
         from copy import deepcopy
-        from analytics.allocation_inputs import validate_saved_allocation
-        from analytics.holy_grail import fingerprint
+        from analytics.holy_grail.legacy.allocation_v1 import validate_saved_allocation
+        from analytics.holy_grail.fingerprint import fingerprint
         saved=self.saved('business')
         self.assertTrue(validate_saved_allocation(saved['DIVERSIFICATION_DATA']['allocation_score'],saved))
         for field in ['sensitivity_score','sensitivity_display_score']:
@@ -128,7 +128,7 @@ class AllocationIntegrationTests(unittest.TestCase):
     def test_html_sheet_and_scoped_writer_share_one_percent_not_the_old_count(self):
         from test_holy_grail_outputs import HolyGrailOutputTests
         from test_holy_grail_outputs import sheet_table
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.delivery.sheet import plan_requests
         saved=self.saved();q=saved['DIVERSIFICATION_DATA']['allocation_score']
         html=HolyGrailOutputTests().html(saved)
         self.assertIn('Диверсифікація інвестованої частини',html)
@@ -145,7 +145,7 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_private_sources_and_usd_values_are_not_published(self):
         from test_holy_grail_outputs import HolyGrailOutputTests
-        from analytics.holy_grail import fingerprint
+        from analytics.holy_grail.fingerprint import fingerprint
         saved=self.saved()
         q=saved['DIVERSIFICATION_DATA']['allocation_score']
         q['source_provenance']={'private': 'SECRET-CONFIRMATION'}
@@ -154,7 +154,7 @@ class AllocationIntegrationTests(unittest.TestCase):
         self.assertNotIn('SECRET-CONFIRMATION',html)
 
     def test_cash_only_liability_and_accounting_adjustment_are_outside_score_but_margin_blocks(self):
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data,settings,history=allocation_fixture()
         data['CASH_DATA']['Breakdown']={'ib_cash':20,'debt':-1,'manual_reconciliation':-9}
         q=enrich_combined_data(data,config={'allocation':settings},monthly_returns=history,
@@ -170,7 +170,7 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_maturity_groups_use_distinct_representatives(self):
         import json
-        from analytics.allocation_inputs import PROFILE_PATH,GROUPS
+        from analytics.holy_grail.allocation_inputs import PROFILE_PATH,GROUPS
         profiles=json.loads(PROFILE_PATH.read_text())
         self.assertNotEqual(profiles['ib:SHV']['components'][0]['group'],profiles['ib:TLT']['components'][0]['group'])
         self.assertEqual(GROUPS['credit_hy_usd'][1],'HYG')
@@ -178,7 +178,7 @@ class AllocationIntegrationTests(unittest.TestCase):
     def test_derived_snapshot_adds_score_without_rewriting_existing_analytics(self):
         import json,tempfile
         from pathlib import Path
-        from analytics.holy_grail_data import enrich_snapshot_file
+        from analytics.holy_grail.enrich import enrich_snapshot_file
         data,settings,history=allocation_fixture()
         data['HOLY_GRAIL_DATA']={'original':'preserve me'}
         data['DIVERSIFICATION_DATA']={'indicator':{'original':'preserve me too'}}
@@ -187,7 +187,7 @@ class AllocationIntegrationTests(unittest.TestCase):
             source=Path(directory)/'input.json';target=Path(directory)/'derived'/'output.json'
             source.write_text(json.dumps(dict(as_of_date='2026-09-30',data=data)))
             raw=source.read_bytes()
-            with patch('analytics.holy_grail_data.collect_return_history',return_value=(history,{},set())):
+            with patch('analytics.holy_grail.market_history.collect_return_history',return_value=(history,{},set())):
                 result=enrich_snapshot_file(source,target,config={'allocation':settings},allow_network=False)['data']
             self.assertEqual(source.read_bytes(),raw)
             self.assertEqual(result['HOLY_GRAIL_DATA'],data['HOLY_GRAIL_DATA'])
@@ -195,7 +195,7 @@ class AllocationIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(result['DIVERSIFICATION_DATA']['allocation_score_v2']['score'])
 
     def test_signed_quantities_and_nonlinear_risk_cannot_hide_behind_positive_values(self):
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data,settings,history=allocation_fixture()
         data['POSITION_DATA']['crypto']=[{'asset':'BTC','quantity':-1,'value_usd':10}]
         data['TOTAL_ASSETS']+=10
@@ -207,13 +207,13 @@ class AllocationIntegrationTests(unittest.TestCase):
 
 
     def test_sector_count_cannot_exceed_eleven_or_create_more_than_25_points(self):
-        from analytics.allocation_score import score_components
+        from analytics.holy_grail.legacy.allocation_v1 import score_components
         with self.assertRaises(ValueError):
             score_components({'equity_us':1},{},{'equity_us':{str(i):1/12 for i in range(12)}},155)
 
     def test_main_histories_are_collected_once_before_legacy_individual_tickers(self):
         import tempfile
-        from analytics.holy_grail_data import collect_return_history
+        from analytics.holy_grail.market_history import collect_return_history
         calls=[]
         def fetch(symbol,start,end):
             calls.append(symbol)
@@ -229,11 +229,11 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_broken_new_configuration_does_not_destroy_usable_legacy_analytics(self):
         from unittest.mock import patch
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data,_,history=allocation_fixture()
         from test_holy_grail_data import saved_legacy_fixture
         data = saved_legacy_fixture('allocation')
-        with patch('analytics.holy_grail_data.collect_return_history',return_value=(history,{},set())):
+        with patch('analytics.holy_grail.market_history.collect_return_history',return_value=(history,{},set())):
             saved=enrich_combined_data(data,config={'allocation':[]},allow_network=False)
         self.assertIsNotNone(saved['HOLY_GRAIL_DATA']['effective_streams'])
         self.assertEqual(saved['DIVERSIFICATION_DATA']['allocation_score_v2']['status'],'unavailable')
@@ -242,7 +242,7 @@ class AllocationIntegrationTests(unittest.TestCase):
         import contextlib,io,json,tempfile
         from pathlib import Path
         from unittest.mock import patch
-        from analytics.holy_grail_sheet import main
+        from analytics.holy_grail.delivery.sheet import main
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'bad_date.json'
             path.write_text(json.dumps(dict(as_of_date='2026-10-31',data=self.saved())))
@@ -253,9 +253,9 @@ class AllocationIntegrationTests(unittest.TestCase):
 
     def test_historical_display_uses_its_saved_group_models_not_todays_registry(self):
         from unittest.mock import patch
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();before=saved_diversification_view(data)
-        with patch.dict('analytics.allocation_inputs.GROUPS',{'equity_us':('CHANGED LABEL','QQQ')}):
+        with patch.dict('analytics.holy_grail.allocation_inputs.GROUPS',{'equity_us':('CHANGED LABEL','QQQ')}):
             after=saved_diversification_view(data)
         self.assertEqual(after['rows'],before['rows'])
         self.assertEqual(after['drivers'],before['drivers'])

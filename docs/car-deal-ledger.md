@@ -6,7 +6,7 @@ hide the bad outcomes); set `sale_date` when the car leaves.
 
 Goal: collect complete, dated deal records so that the owner's own outcomes can
 later be compared with the category price index used by the correlation tracker
-(`analytics/car_category.py`, where the index loading R in
+(`analytics/holy_grail/car/category.py`, where the index loading R in
 `rho(business, group) = R * rho(index, group)` is fixed at 1 as a scenario
 assumption). No deal count unlocks calibration automatically: it needs dated
 evidence that includes unsold cars and failed deals, and an independent

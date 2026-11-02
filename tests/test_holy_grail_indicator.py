@@ -12,7 +12,7 @@ class IndicatorTests(unittest.TestCase):
 
 
     def test_frozen_saved_result_rejects_changed_holdings_and_models(self):
-        from analytics.holy_grail_indicator import validate_saved_indicator
+        from analytics.holy_grail.legacy.indicator import validate_saved_indicator
         saved=self.enrich();result=saved['DIVERSIFICATION_DATA']['indicator']
         self.assertTrue(validate_saved_indicator(result,saved,'2026-09-30'))
         changed=deepcopy(saved);changed['TOTAL_ASSETS']+=1
@@ -22,7 +22,7 @@ class IndicatorTests(unittest.TestCase):
 
 
     def test_count_headline_ignores_legacy_policy_and_invalid_new_does_not_fallback(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         saved=self.enrich();saved['DIVERSIFICATION_DATA']['checks']=[]
         view=saved_diversification_view(saved)
         self.assertEqual(view['headline'],'15,0')
@@ -32,7 +32,7 @@ class IndicatorTests(unittest.TestCase):
         self.assertEqual(saved_diversification_view(saved)['effective'],'-')
 
     def test_html_and_sheet_render_same_count_without_policy_and_protect_provenance(self):
-        from analytics.holy_grail import fingerprint
+        from analytics.holy_grail.fingerprint import fingerprint
         from test_holy_grail_outputs import HolyGrailOutputTests
         from test_holy_grail_outputs import sheet_table
         saved=self.enrich()

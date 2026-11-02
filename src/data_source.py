@@ -25,9 +25,7 @@ from src.portfolio_ledger.contract import (
 )
 from src.portfolio_ledger.storage import PortfolioLedger
 from src.portfolio_ledger.sync import build_activity_sources, sync_crypto_sources
-from analytics.car_category import load_block as load_car_category_block
-from analytics.car_risk_proxies import load_block as load_car_proxies_block
-from analytics.holy_grail_data import enrich_combined_data
+from analytics.holy_grail.api import enrich_combined_data, load_car_category_block, load_car_proxies_block
 from data.assets_data import OTHER_BETS
 
 # Set up logging

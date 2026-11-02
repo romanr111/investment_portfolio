@@ -32,13 +32,18 @@ def saved_legacy_fixture(name="plain"):
 
 class HolyGrailDataTests(unittest.TestCase):
     def module(self):
-        self.assertIsNotNone(importlib.util.find_spec("analytics.holy_grail_data"),
+        self.assertIsNotNone(importlib.util.find_spec("analytics.holy_grail.enrich"),
                              "The saved portfolio enrichment path is not implemented")
-        return importlib.import_module("analytics.holy_grail_data")
+        return importlib.import_module("analytics.holy_grail.enrich")
+
+    def market_module(self):
+        self.assertIsNotNone(importlib.util.find_spec("analytics.holy_grail.market_history"),
+                             "The return-history collector is not implemented")
+        return importlib.import_module("analytics.holy_grail.market_history")
 
 
     def test_adjusted_prices_convert_fx_without_filling_missing_months(self):
-        module = self.module()
+        module = self.market_module()
         self.assertTrue(hasattr(module, "monthly_usd_returns"), "The adjusted-price return collector is not implemented")
         prices = pd.Series([100, 110, 121, 133.1], index=pd.to_datetime(["2025-12-31", "2026-01-31", "2026-03-31", "2026-04-30"]))
         fx = pd.Series([1.1, 1.2, 1.3, 1.4], index=prices.index)
@@ -49,7 +54,8 @@ class HolyGrailDataTests(unittest.TestCase):
 
 
     def test_fingerprint_survives_both_existing_decimal_serializers(self):
-        from analytics.holy_grail import holdings_fingerprint, saved_progress_view
+        from analytics.holy_grail.fingerprint import holdings_fingerprint
+        from analytics.holy_grail.legacy.progress_view import saved_progress_view
         original = snapshot_fixture()
         original["CASH_DATA"] = {"Total": Decimal("10.00"), "Breakdown": {"USD": Decimal("10.00")}}
         original["TOTAL_ASSETS"] = 1510
@@ -62,7 +68,7 @@ class HolyGrailDataTests(unittest.TestCase):
             self.assertEqual(saved_progress_view(saved)["as_of"], "30.09.2026")
 
     def test_successful_history_is_reused_offline_and_future_returns_are_removed(self):
-        module = self.module()
+        module = self.market_module()
         self.assertTrue(hasattr(module, "collect_return_history"), "Persistent history collection is not implemented")
         prices = pd.Series(range(100, 164), index=pd.date_range(end="2026-12-31", periods=64, freq=pd.offsets.MonthEnd()))
         calls = []
@@ -106,7 +112,7 @@ class HolyGrailDataTests(unittest.TestCase):
                 module.enrich_snapshot_file(source, latest, allow_network=False)
 
     def test_incomplete_final_month_is_refreshed(self):
-        module = self.module()
+        module = self.market_module()
         calls = []
         def fetch(symbol, start, end):
             calls.append(symbol)

@@ -550,7 +550,7 @@ above five points makes the scenario unavailable.
 
 **Scenarios.** `m60`/`m36` x `cat_point`, `cat_upper90`, and `r075` (the v2
 assumption, unchanged). The headline is `m60_cat_point`
-(`HEADLINE` in `analytics/allocation_score_v3.py`, a judgment call: the wider
+(`HEADLINE` in `analytics/holy_grail/allocation_score_v3.py`, a judgment call: the wider
 `cat_upper90` and the stress stay visible in the scenario spread).
 
 **Gates.** The block must carry a matching fingerprint and method, a cutoff that
@@ -583,7 +583,7 @@ sensitivity of the category scenarios is understated; US and EU data say nothing
 about Ukrainian customs, VAT, FX or war channels. The refresh is monthly, not
 quarterly: a block is accepted only while its last month is at most one month
 behind the completed month of the snapshot (`max_index_lag_months` in
-`analytics/car_category.py`), so a block ending in September serves snapshots
+`analytics/holy_grail/car/category.py`), so a block ending in September serves snapshots
 through 29 November and is rejected from 30 November. Rebuild the block each
 month after Manheim publishes (about a week into the next month; `just
 car-category build ...`), copy it to `data/car_category/block_latest.json`, then
@@ -627,8 +627,9 @@ pair on fewer months than the window makes the scenario provisional. Because
 the channels usually disagree, `assessment.business_dependent` is expected to
 stay true; read the scenario range, not only the headline.
 
-**Gates.** The proxy block must pass `car_risk_proxies.validate_block` (both
-`car_proxies_v1` and `car_proxies_v2` are accepted) and contain at least one
+**Gates.** The proxy block must pass `validate_block` in
+`analytics/holy_grail/car/risk_proxies.py` (both `car_proxies_v1` and
+`car_proxies_v2` are accepted) and contain at least one
 price-index series and the basket. Otherwise the record is explicitly
 `unavailable` (`invalid_car_proxies_block`, `car_channel_missing`) and the view
 shows v3, or the v2 assumption numbers, with a warning and a suffix in the
@@ -649,7 +650,7 @@ history (`docs/car-deal-ledger.md`) could say which channel is closer.
 A separate method that asks a different question from the capital score: how
 many independent, equal-risk return streams does the current mix behave like.
 It is a sibling derived from a saved, replayed `capital_diversification_v2`
-record (`analytics/holy_grail_risk_progress.py`) and is never mixed into v2/v3
+record (`analytics/holy_grail/risk_progress.py`) and is never mixed into v2/v3
 trends. It is saved beside v2 and v3 only when a frozen car proxy block is
 supplied (`car_proxies`, see "Car-business scenarios"): the dated worksheet
 then shows one extra summary row, "Ризиковий прогрес", after the scenario
@@ -716,7 +717,7 @@ narrower question: if the business behaved like this public series, would it
 correlate with the rest of the portfolio, and how would the count change. The
 answer is an assumption, shown as a range, never the headline.
 
-- Proxies (`analytics/car_risk_proxies.py`): Manheim Used Vehicle Value Index
+- Proxies (`analytics/holy_grail/car/risk_proxies.py`): Manheim Used Vehicle Value Index
   (US wholesale), BLS CPI used cars and trucks, seasonally adjusted (US retail),
   AUTO1 Group Price Index (EU wholesale; read from a web page, medium
   confidence) and the equal-weight total return of CPRT, KMX and OPLN (listed

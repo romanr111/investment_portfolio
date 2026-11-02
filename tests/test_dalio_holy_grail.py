@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
 
-from analytics.dalio_holy_grail import DalioHolyGrailAnalyzer, format_holy_grail_cli_lines
+from analytics.dalio.dalio_holy_grail import DalioHolyGrailAnalyzer, format_holy_grail_cli_lines
 
 
 def build_synthetic_history() -> pd.DataFrame:
