@@ -5,15 +5,15 @@ import unittest
 
 class AllocationScoreV2Tests(unittest.TestCase):
     def test_six_equal_uncorrelated_groups_anchor_100(self):
-        self.assertIsNotNone(importlib.util.find_spec('analytics.allocation_score_v2'),
+        self.assertIsNotNone(importlib.util.find_spec('analytics.holy_grail.allocation_score_v2'),
                              'v2 methodology has not been implemented')
-        from analytics.allocation_score_v2 import score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import score_components_v2
         groups = {str(i): 1 / 6 for i in range(6)}
         pairs = {(a, b): 0 for a in groups for b in groups if a < b}
         self.assertAlmostEqual(score_components_v2(groups, pairs, {})['score'], 100)
 
     def test_global_equity_sectors_are_aggregated_before_breadth(self):
-        from analytics.allocation_score_v2 import score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import score_components_v2
         weights = {'equity_us': .5, 'equity_china': .5}
         same = {'equity_us': {'Financials': 1}, 'equity_china': {'Financials': 1}}
         split = {'equity_us': {'Financials': 1}, 'equity_china': {'Energy': 1}}
@@ -22,7 +22,7 @@ class AllocationScoreV2Tests(unittest.TestCase):
         self.assertAlmostEqual(score_components_v2(weights, pair, split)['score'], 13.75)
 
     def test_correlation_monotonicity_and_conservative_missing(self):
-        from analytics.allocation_score_v2 import score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import score_components_v2
         weights = {'a': .5, 'b': .5}
         scores = [score_components_v2(weights, {('a', 'b'): r}, {})['score']
                   for r in [-1, 0, .5, 1]]
@@ -32,7 +32,7 @@ class AllocationScoreV2Tests(unittest.TestCase):
         self.assertEqual(score_components_v2(weights, {}, {})['score'], 0)
 
     def test_invalid_financial_values_are_rejected(self):
-        from analytics.allocation_score_v2 import score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import score_components_v2
         for weights, correlations, sectors in [
             ({'a': True}, {}, {}), ({'a': float('nan')}, {}, {}),
             ({'a': -.1, 'b': 1.1}, {}, {}), ({'a': .9}, {}, {}),
@@ -44,7 +44,7 @@ class AllocationScoreV2Tests(unittest.TestCase):
                     score_components_v2(weights, correlations, sectors)
 
     def test_display_and_classification_snap_only_integer_noise(self):
-        from analytics.allocation_score_v2 import display_score, category
+        from analytics.holy_grail.allocation_score_v2 import display_score, category
         self.assertEqual(display_score(49.999999999), 50)
         self.assertEqual(display_score(49.99), 49)
         self.assertEqual(category(49.99), 'concentrated')
@@ -55,7 +55,7 @@ class AllocationScoreV2Tests(unittest.TestCase):
 class AllocationV2IntegrationTests(unittest.TestCase):
     def test_v2_enrichment_does_not_depend_on_v1_calibration(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         settings['calibration'] = {'invalid': True}
@@ -71,7 +71,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_scenarios_bound_missing_pairs_and_require_complete_recent_window(self):
         import numpy as np
         import pandas as pd
-        from analytics.allocation_score_v2 import evaluate_scenarios
+        from analytics.holy_grail.allocation_score_v2 import evaluate_scenarios
         dates = pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd())
         rng = np.random.default_rng(77)
         history = pd.DataFrame({'a': rng.normal(size=60), 'b': rng.normal(size=60)}, index=dates)
@@ -87,7 +87,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_zero_weight_does_not_require_a_return_history(self):
         import pandas as pd
-        from analytics.allocation_score_v2 import evaluate_scenarios
+        from analytics.holy_grail.allocation_score_v2 import evaluate_scenarios
         empty = pd.DataFrame(index=pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd()))
         scenarios = evaluate_scenarios({'treasury_short': 1.0, 'unknown': 0.0}, {}, empty, '2026-09-30')
         self.assertEqual(scenarios['m36']['status'], 'modeled')
@@ -95,7 +95,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_future_return_observations_are_rejected(self):
         import pandas as pd
-        from analytics.allocation_score_v2 import evaluate_scenarios
+        from analytics.holy_grail.allocation_score_v2 import evaluate_scenarios
         history = pd.DataFrame({'a': [0.01]}, index=pd.to_datetime(['2026-10-31']))
         with self.assertRaises(ValueError):
             evaluate_scenarios({'a': 1.0}, {}, history, '2026-09-30')
@@ -103,7 +103,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_history_observation_boundaries_and_business_scenarios(self):
         import numpy as np
         import pandas as pd
-        from analytics.allocation_score_v2 import evaluate_scenarios
+        from analytics.holy_grail.allocation_score_v2 import evaluate_scenarios
         dates = pd.date_range('2021-10-31', periods=60, freq=pd.offsets.MonthEnd())
         rng = np.random.default_rng(3)
         for count in (35, 36, 59, 60):
@@ -121,8 +121,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_present_invalid_v2_never_falls_back_to_v1(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         self.assertNotEqual(saved_diversification_view(saved)['headline'], 'Дані недоступні')
@@ -131,9 +131,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_saved_replay_rejects_resealed_tampered_groups(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail import fingerprint
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.fingerprint import fingerprint
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -145,8 +145,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_cash_only_saved_record_replays_as_not_applicable(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         data['IB_DATA'] = {}
         data['CASH_DATA']['Total'] = 110
@@ -163,7 +163,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         import json
         import tempfile
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data, enrich_snapshot_file
+        from analytics.holy_grail.enrich import enrich_combined_data, enrich_snapshot_file
         data, settings, histories = allocation_fixture()
         from tests.test_holy_grail_data import saved_legacy_fixture
         old = saved_legacy_fixture('allocation')
@@ -187,9 +187,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_replay_rejects_cleared_leverage_guard_in_frozen_evidence(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import extract_exposures
-        from analytics.allocation_inputs import allocation_settings
-        from analytics.allocation_v2_inputs import calculate_allocation_score_v2, validate_saved_allocation_v2
+        from analytics.holy_grail.exposures import extract_exposures
+        from analytics.holy_grail.allocation_inputs import allocation_settings
+        from analytics.holy_grail.allocation_v2_inputs import calculate_allocation_score_v2, validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         all_settings = {'allocation': settings, 'diversification': {'exposures': {'ib:SPY': {'leveraged': True}}}}
@@ -202,8 +202,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_unavailable_financial_result_retains_replayable_reason(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         data['TOTAL_ASSETS'] -= 1.01
         settings['method_version'] = 'capital_diversification_v2'
@@ -215,7 +215,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_invalid_v2_settings_never_produce_valid_score(self):
         import pandas as pd
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data = {'TOTAL_ASSETS': 100., 'CASH_DATA': {'Total': 0., 'Breakdown': {}},
                 'IB_DATA': {}, 'POSITION_DATA': {'p2p': [{'balance_usd': 100.}], 'as_of_date': '2026-09-30'},
                 'DATA_METADATA': {'last_updated': '2026-09-30'}}
@@ -227,7 +227,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_infinite_return_cannot_become_a_missing_observation(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         histories.iloc[-1, 0] = float('inf')
@@ -236,8 +236,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_saved_view_exposes_explicit_points_not_percent(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -250,9 +250,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_integrity_mode_rejects_resealed_bad_score_types(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail import fingerprint
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.fingerprint import fingerprint
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -264,8 +264,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_scoped_sheet_writer_uses_points_format_for_v2(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.delivery.sheet import plan_requests
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -277,7 +277,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_regular_insights_writer_preserves_v2_points_on_repeat(self):
         from tests.test_allocation_score import allocation_fixture
         from tests.fake_sheets import FakeSpreadsheet
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         from src.google_sheets.insights_refresh import refresh_insights
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
@@ -300,14 +300,14 @@ class AllocationV2IntegrationTests(unittest.TestCase):
                          {'type': 'NUMBER', 'pattern': '0" зі 100"'})
 
     def test_factual_review_uses_frozen_cutoff(self):
-        from analytics.diversification_quality import reviewed_record
+        from analytics.holy_grail.evidence import reviewed_record
         record = {'source': 'https://example.org', 'effective_from': '2020-01-01', 'reviewed_at': '2026-10-20'}
         self.assertEqual(reviewed_record({'risk_record': record}, '2026-09-30', review_cutoff='2026-10-19'), {})
         self.assertEqual(reviewed_record({'risk_record': record}, '2026-09-30', review_cutoff='2026-10-20'), record)
 
     def test_unreviewed_or_mismatched_risk_evidence_is_not_reported_as_fact(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         risk = {'source': 'https://example.org', 'effective_from': '2020-01-01',
@@ -324,8 +324,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_public_view_includes_risk_percent_without_private_evidence(self):
         import json
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         config = {'allocation': settings, 'diversification': {'exposures': {'ib:SPY': {
@@ -338,7 +338,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_previous_v2_attribution_sums_to_total(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -352,8 +352,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_unavailable_attribution_retains_valid_current_score_and_replays(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -368,9 +368,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_replay_rejects_future_evidence_review_cutoff(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail import fingerprint
-        from analytics.allocation_v2_inputs import calculate_allocation_score_v2, validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.fingerprint import fingerprint
+        from analytics.holy_grail.allocation_v2_inputs import calculate_allocation_score_v2, validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -387,7 +387,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         earlier = pd.DataFrame(0.01, index=pd.date_range('2016-10-31', periods=60, freq=pd.offsets.MonthEnd()), columns=histories.columns)
@@ -415,15 +415,15 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         import json
         import sys
         from unittest.mock import patch
-        from analytics.holy_grail_cli import main
+        from analytics.holy_grail.cli import main
         payload = {'HOLY_GRAIL_DATA': {'as_of_date': '2026-09-30', 'status': 'modeled',
                    'effective_streams': 1, 'estimated_progress_pct': 2, 'target_achieved': False},
                    'DIVERSIFICATION_DATA': {'allocation_score_v2': {'version': 'capital_diversification_v2'},
                                             'allocation_score': {'version': 'capital_diversification_v1'}}}
         output = io.StringIO()
         with patch.object(sys, 'argv', ['x', '--snapshot', 'a', '--output', 'b']), \
-             patch('analytics.holy_grail_cli.enrich_snapshot_file', return_value=payload), \
-             patch('analytics.holy_grail_cli.load_config', return_value={}), contextlib.redirect_stdout(output):
+             patch('analytics.holy_grail.cli.enrich_snapshot_file', return_value=payload), \
+             patch('analytics.holy_grail.cli.load_config', return_value={}), contextlib.redirect_stdout(output):
             main()
         parsed = json.loads(output.getvalue())
         self.assertEqual(parsed['allocation_score_v2']['version'], 'capital_diversification_v2')
@@ -432,9 +432,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_replay_uses_frozen_representatives_not_current_mappings(self):
         from unittest.mock import patch
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
-        from analytics.allocation_inputs import GROUPS
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.allocation_inputs import GROUPS
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -444,7 +444,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_profile_theme_without_reviewed_evidence_is_not_confirmed(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         settings['profiles']['ib:SPY']['themes'] = ['ai']
@@ -455,8 +455,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_missing_risk_evidence_is_explicit_without_blocking_score(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -468,7 +468,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_boolean_financial_position_is_rejected(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         data['IB_DATA']['Stocks']['SPY'] = True
         data['TOTAL_ASSETS'] = 21
@@ -479,9 +479,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_resealed_prior_basis_with_forged_weights_is_rejected(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail import fingerprint
-        from analytics.allocation_v2_inputs import _compare_basis, validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.fingerprint import fingerprint
+        from analytics.holy_grail.allocation_v2_inputs import compare_basis, validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -492,18 +492,18 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         basis = q['comparison']['previous_basis']
         basis['weights']['equity_us'] -= .01
         basis['weights']['treasury_short'] += .01
-        from analytics.allocation_v2_inputs import _group_history
-        from analytics.allocation_score_v2 import evaluate_scenarios
+        from analytics.holy_grail.allocation_v2_inputs import build_group_history
+        from analytics.holy_grail.allocation_score_v2 import evaluate_scenarios
         basis['score'] = evaluate_scenarios(basis['weights'], basis['sectors'],
-                            _group_history(basis['histories'], basis['weights'], basis['method_definition']['group_definitions']),
+                            build_group_history(basis['histories'], basis['weights'], basis['method_definition']['group_definitions']),
                             basis['as_of_date'])['m60']['score']
-        q['comparison'] = _compare_basis(q, basis)
+        q['comparison'] = compare_basis(q, basis)
         q['result_fingerprint'] = fingerprint({k: v for k, v in q.items() if k != 'result_fingerprint'})
         self.assertFalse(validate_saved_allocation_v2(q, new, '2026-09-30'))
 
     def test_legacy_v1_is_labeled_as_previous_method(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         from tests.test_holy_grail_data import saved_legacy_fixture
         saved = saved_legacy_fixture('allocation')
@@ -512,8 +512,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_reviewed_treasury_duration_and_maturity_are_disclosed(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         record = {'source': 'https://example.org', 'effective_from': '2020-01-01',
@@ -526,7 +526,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_v2_enrichment_preserves_existing_v1_and_nested_fields(self):
         from copy import deepcopy
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         from tests.test_holy_grail_data import saved_legacy_fixture
         old = saved_legacy_fixture('allocation')
@@ -541,8 +541,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_v2_details_show_sector_history_and_attribution_status(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -555,7 +555,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_private_group_override_cannot_change_pinned_method(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         settings['group_definitions'] = {'equity_us': {'label': 'US', 'representative': 'SHV'}}
@@ -564,8 +564,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_missing_risk_details_do_not_replace_main_assessment(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -575,9 +575,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_previous_source_references_have_explicit_verification_status(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail import fingerprint
-        from analytics.allocation_v2_inputs import validate_saved_allocation_v2
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.fingerprint import fingerprint
+        from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -593,7 +593,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
     def test_mixed_fund_matches_exact_look_through(self):
         from copy import deepcopy
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         direct = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -610,7 +610,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_malformed_previous_data_does_not_poison_current_score(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories,
@@ -621,8 +621,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_v2_enrichment_does_not_reuse_stale_quality_fields(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_inputs import quality_inputs_fingerprint
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.evidence import quality_inputs_fingerprint
         data, settings, histories = allocation_fixture()
         old = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         old['IB_DATA']['Stocks']['SPY'] = 80
@@ -632,7 +632,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(new['DIVERSIFICATION_DATA']['allocation_score_v2']['holdings_fingerprint'], quality_inputs_fingerprint(new))
 
     def test_duplicate_split_and_small_perturbation_do_not_manufacture_breadth(self):
-        from analytics.allocation_score_v2 import score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import score_components_v2
         original = score_components_v2({'a': .5, 'b': .5}, {('a', 'b'): .3}, {})['score']
         split = score_components_v2({'a1': .25, 'a2': .25, 'b': .5},
                                     {('a1', 'a2'): 1, ('a1', 'b'): .3, ('a2', 'b'): .3}, {})['score']
@@ -641,7 +641,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertLess(abs(perturbed-original), .001)
 
     def test_two_and_four_group_caps_include_equity_bonus(self):
-        from analytics.allocation_score_v2 import SECTORS, score_components_v2
+        from analytics.holy_grail.allocation_score_v2 import SECTORS, score_components_v2
         sectors = {name: 1/11 for name in SECTORS}
         for n, cap in [(2, 40), (4, 70)]:
             weights = {'equity_us': 1/n, **{f'g{i}': 1/n for i in range(n-1)}}
@@ -650,8 +650,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_scoped_sheet_writer_refuses_foreign_summary_formula_and_note(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.delivery.sheet import plan_requests
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -662,8 +662,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_unclaimed_summary_block_with_recognizable_row_is_not_owned(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.delivery.sheet import plan_requests
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -675,8 +675,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_scoped_sheet_writer_refuses_foreign_detail_formula(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.delivery.sheet import plan_requests
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -687,8 +687,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_new_details_never_claims_foreign_group_at_insertion_point(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.holy_grail_sheet import plan_requests
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.delivery.sheet import plan_requests
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -699,7 +699,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_failed_extraction_cannot_become_a_cash_only_result(self):
         import pandas as pd
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data = {'TOTAL_ASSETS': True, 'CASH_DATA': {'Total': 0}, 'IB_DATA': {},
                 'POSITION_DATA': {'as_of_date': '2026-09-30'}}
         settings = {'allocation': {'method_version': 'capital_diversification_v2'}}
@@ -709,8 +709,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_v2_details_disclose_method_and_market_representatives(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.enrich import enrich_combined_data
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
@@ -720,7 +720,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_boolean_or_nonfinite_cash_breakdown_is_rejected(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         for invalid in (True, float('inf')):
             data, settings, histories = allocation_fixture()
             data['CASH_DATA']['Breakdown'] = {'brokerage': invalid}
@@ -731,7 +731,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
 
     def test_malformed_liquidity_metadata_remains_unknown(self):
         from tests.test_allocation_score import allocation_fixture
-        from analytics.holy_grail_data import enrich_combined_data
+        from analytics.holy_grail.enrich import enrich_combined_data
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         record = {'source': 'https://example.org', 'effective_from': '2020-01-01',

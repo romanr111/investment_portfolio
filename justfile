@@ -31,31 +31,31 @@ crypto-sync *args:
 
 # Add risk analytics to a derived copy of a dated combined-data snapshot.
 holy-grail *args:
-    venv/bin/python -m analytics.holy_grail_cli {{args}}
+    venv/bin/python -m analytics.holy_grail.cli {{args}}
 
 # Update only the saved indicator in an existing dated worksheet.
 holy-grail-sheet *args:
-    venv/bin/python -m analytics.holy_grail_sheet {{args}}
+    venv/bin/python -m analytics.holy_grail.delivery.sheet {{args}}
 
 # Car business vs a listed used-vehicle industry proxy (offline, retrospective).
 car-proxy *args:
-    venv/bin/python -m analytics.car_industry_proxy {{args}}
+    venv/bin/python -m analytics.holy_grail.car.industry_proxy {{args}}
 
 # Car-category tracker (method v3): `build` freezes the index block, `report` prints per-group correlations and scores.
 car-category *args:
-    venv/bin/python -m analytics.car_category {{args}}
+    venv/bin/python -m analytics.holy_grail.car.tracker_cli {{args}}
 
 # Used-vehicle price index vs portfolio groups in crises (H1-H3); --fetch-manheim-url downloads raw data first.
 car-crisis *args:
-    venv/bin/python -m analytics.car_crisis_test {{args}}
+    venv/bin/python -m analytics.holy_grail.car.crisis_test {{args}}
 
 # Offline risk progress (effective independent streams, DR squared) from a saved snapshot; never writes Sheets.
 risk-progress *args:
-    venv/bin/python -m analytics.holy_grail_risk_progress {{args}}
+    venv/bin/python -m analytics.holy_grail.risk_progress {{args}}
 
 # Frozen block of retrospective used-vehicle proxy series (price indexes, listed remarketers) for the risk-progress car scenarios.
 car-proxies *args:
-    venv/bin/python -m analytics.car_risk_proxies {{args}}
+    venv/bin/python -m analytics.holy_grail.car.risk_proxies {{args}}
 
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:

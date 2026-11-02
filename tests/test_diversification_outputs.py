@@ -17,9 +17,9 @@ class QualityOutputTests(unittest.TestCase):
         return saved
 
     def test_both_outputs_show_same_quality_and_count_without_fetching(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();view=saved_diversification_view(data)
-        with patch('analytics.holy_grail_data.collect_return_history',side_effect=AssertionError('No output fetching')):
+        with patch('analytics.holy_grail.market_history.collect_return_history',side_effect=AssertionError('No output fetching')):
             table=sheet_table(data)
             self.assertEqual(table[9][:2],['Диверсифікація /100',view['score_cell']])
             html=legacy_cases.HolyGrailOutputTests().html(data)
@@ -30,7 +30,7 @@ class QualityOutputTests(unittest.TestCase):
             self.assertNotIn('<p class="hg-value">100,0%</p>',html)
 
     def test_rounded_source_total_keeps_the_saved_estimate_visible(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         from test_holy_grail_data import snapshot_fixture
         for extra in (.01, .99):
             with self.subTest(extra=extra):
@@ -48,7 +48,7 @@ class QualityOutputTests(unittest.TestCase):
                 self.assertEqual(saved['TOTAL_ASSETS'], 1500)
 
     def test_invalid_new_result_does_not_fall_back_to_legacy(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();data['DIVERSIFICATION_DATA']['as_of_date']='2026-06-30'
         view=saved_diversification_view(data)
         self.assertEqual(view['effective'],'-')
@@ -56,7 +56,7 @@ class QualityOutputTests(unittest.TestCase):
         self.assertIn('не відповідає',view['status'])
 
     def test_legacy_snapshot_has_no_current_quality_score_or_old_percentage(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();del data['DIVERSIFICATION_DATA']
         view=saved_diversification_view(data)
         self.assertTrue(view['legacy'])
@@ -65,7 +65,7 @@ class QualityOutputTests(unittest.TestCase):
         self.assertNotIn('%',view['headline'])
 
     def test_private_evidence_never_appears_in_outputs_and_rounding_is_honest(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();q=data['DIVERSIFICATION_DATA']
         q['source_provenance']={'PRIVATE-ACCOUNT':'12345'}
         q['scenarios']['recession']['private']='PRIVATE-ACCOUNT'
@@ -74,7 +74,7 @@ class QualityOutputTests(unittest.TestCase):
         self.assertNotIn('PRIVATE-ACCOUNT',legacy_cases.HolyGrailOutputTests().html(data))
 
     def test_point_and_range_scores_are_not_percent_cells(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=self.saved();q=data['DIVERSIFICATION_DATA']
         for i,check in enumerate(q['checks']): check['state']='pass' if i<7 else 'fail'
         q.update(score=70,score_min=70,score_max=70,check_counts={'pass':7,'fail':3,'unknown':0})
@@ -96,7 +96,7 @@ class QualityOutputTests(unittest.TestCase):
 
 class OutputAdversarialTests(unittest.TestCase):
     def test_malformed_optional_saved_fields_fail_closed_without_legacy_fallback(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         for field,value in [('constraints',None),('scenarios',None),('cash_share_pct','bad'),('cash_share_pct',float('nan'))]:
             data=QualityOutputTests().saved();data['DIVERSIFICATION_DATA'][field]=value
             view=saved_diversification_view(data)
@@ -119,12 +119,12 @@ class OutputAdversarialTests(unittest.TestCase):
         self.assertTrue(any(r['range']['startIndex']==100 and r['range']['endIndex']==130 for r in restore))
 
     def test_limits_and_key_failures_are_visible_next_to_headline(self):
-        from analytics.diversification_view import saved_diversification_view
+        from analytics.holy_grail.views.diversification import saved_diversification_view
         data=QualityOutputTests().saved();q=data['DIVERSIFICATION_DATA']
         q['constraints']=['stale_valuations','hedge_driven_count']
         q['checks'][0]['state']='fail'
         q['checks'][-1].update(state='unknown',reasons=['insufficient_evidence'])
-        from analytics.diversification_quality import summarize_checks
+        from analytics.holy_grail.legacy.quality import summarize_checks
         q.update(summarize_checks(q['checks']))
         view=saved_diversification_view(data)
         self.assertIn('Концентрація',view['sheet_status'])

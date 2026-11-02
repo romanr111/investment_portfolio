@@ -78,7 +78,7 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
 
 ## Dalio Holy Grail Analyzer
 
-`analytics/dalio_holy_grail.py` міряє незалежні джерела ризику, а не кількість інструментів:
+`analytics/dalio/dalio_holy_grail.py` міряє незалежні джерела ризику, а не кількість інструментів:
 
 - нормалізація історії (базова валюта, дедуплікація), опційні факторні шари
 - Layer A (rolling 12/24/36m): ефективні ставки `N_eff`, HAC-кластери, TRC-декомпозиція ризику, HHI/gini
@@ -91,7 +91,7 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
 Повний список прапорців і вихідних файлів:
 
 ```bash
-python3 -m analytics.dalio_holy_grail --help
+python3 -m analytics.dalio.dalio_holy_grail --help
 ```
 
 Запуск лише Dalio з наявного CSV:
