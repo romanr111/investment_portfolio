@@ -383,7 +383,10 @@ METHOD_V2 = {
     'version': VERSION_V2, 'scope': 'invested_assets', 'cash': 'excluded',
     'formula': 'DR=sum(w*sigma)/sqrt(w^T Sigma w); benefit=1-1/DR; score=100*benefit/(1-1/sqrt(target))',
     'scale': 'benefit_over_target_benefit_clip_0_100', 'target_streams': TARGET,
-    'estimator': 'sample_covariance_ddof1', 'stream': 'v2_group_representative_history',
+    'estimator': 'ledoit_wolf_2003_constant_correlation_on_sample_covariance_ddof1',
+    'shrinkage': {'target': 'constant_correlation', 'intensity': 'ledoit_wolf_2003_analytic_clip_0_1',
+                  'moments': 'ml_divide_by_T', 'scale': 'times_T_over_T_minus_1'},
+    'stream': 'v2_group_representative_history',
     'weights': 'saved_v2_weights_every_positive_group_required', 'windows': list(WINDOWS), 'primary_window': PRIMARY,
     'minimum_observations': 36, 'max_lag_months': MAX_LAG,
     'car_business': {'series': BASKET_ID, 'names': BASKET_NAMES, 'aggregation': 'equal_weight_all_names_required',
@@ -419,6 +422,45 @@ def _display_v2(points, streams):
             'detail': min(DETAIL_CAP, math.floor(points * 10 + TOLERANCE) / 10)}
 
 
+def _shrunk_covariance(x):
+    """Ledoit-Wolf (2003) covariance shrunk toward the constant-correlation target.
+
+    `x` is T x n complete monthly rows. Returns (covariance, intensity, mean correlation) with the ddof=1 scale of
+    `np.cov` (the shrunk ML matrix times T/(T-1); DR does not depend on that common factor), or None when the
+    inputs cannot be used (fewer than 2 rows, a non-positive variance, non-finite values). The diagonal stays the
+    sample variances, so each stream keeps its own volatility. Intensity: the paper's analytic estimate
+    kappa/T clipped to [0, 1], all moments divided by T; with a single stream there is nothing to shrink
+    (intensity 0.0, mean correlation None) and the result is the plain sample variance.
+    """
+    t, n = x.shape
+    if t < 2:
+        return None
+    centered = x - x.mean(axis=0)
+    sample = centered.T @ centered / t
+    sample = (sample + sample.T) / 2
+    variance = np.diag(sample).copy()
+    if not np.isfinite(sample).all() or (variance <= 0).any():
+        return None
+    scale = t / (t - 1)
+    if n < 2:
+        return sample * scale, 0., None
+    sigma = np.sqrt(variance)
+    outer = np.outer(sigma, sigma)
+    mean_correlation = float((np.sum(sample / outer) - n) / (n * (n - 1)))
+    target = mean_correlation * outer
+    np.fill_diagonal(target, variance)
+    squares = centered ** 2
+    pi_matrix = squares.T @ squares / t - sample ** 2
+    theta = (centered ** 3).T @ centered / t - variance[:, None] * sample
+    np.fill_diagonal(theta, 0.)
+    rho = np.trace(pi_matrix) + mean_correlation * np.sum(np.outer(1 / sigma, sigma) * theta)
+    gamma = float(np.sum((sample - target) ** 2))
+    # gamma is zero up to rounding when the sample already equals the target (always so for two streams): no shrinkage
+    kappa = (pi_matrix.sum() - rho) / gamma if gamma > 1e-24 * float(np.sum(sample ** 2)) else 0.
+    intensity = float(max(0., min(1., kappa / t))) if np.isfinite(kappa) else 0.
+    return (intensity * target + (1 - intensity) * sample) * scale, intensity, mean_correlation
+
+
 def _stats(data, weights):
     """Covariance statistics of complete rows; a reason string when the inputs cannot be used."""
     cols = list(data.columns)
@@ -426,7 +468,10 @@ def _stats(data, weights):
     w = np.array([weights[c] for c in cols], dtype=float)
     if not np.isfinite(x).all() or not np.isfinite(w).all():
         return 'degenerate_covariance'
-    cov = np.atleast_2d(np.cov(x, rowvar=False))
+    shrunk = _shrunk_covariance(x)
+    if shrunk is None:
+        return 'degenerate_covariance'
+    cov, intensity, mean_correlation = np.atleast_2d(shrunk[0]), shrunk[1], shrunk[2]
     if not np.isfinite(cov).all():
         return 'degenerate_covariance'
     sigma = np.sqrt(np.diag(cov))
@@ -446,14 +491,16 @@ def _stats(data, weights):
     return dict(cols=cols, w=w, x=x, ratio=float(ratio), streams=float(streams), points=float(points),
                 shares={c: float(s) for c, s in zip(cols, shares)},
                 annual={c: float(s * math.sqrt(12) * 100) for c, s in zip(cols, sigma)},
-                portfolio=float(math.sqrt(variance) * math.sqrt(12) * 100), min_eigenvalue=float(eigenvalues[0]))
+                portfolio=float(math.sqrt(variance) * math.sqrt(12) * 100), min_eigenvalue=float(eigenvalues[0]),
+                shrinkage=dict(target='constant_correlation', intensity=float(intensity),
+                               mean_correlation=None if mean_correlation is None else float(mean_correlation)))
 
 
 def _empty_window(months, cols, reason=None):
     return dict(months=months, status='unavailable', reason=reason, observations=0, window_start=None, window_end=None,
                 streams=len(cols), effective_streams=None, diversification_ratio=None, volatility_reduction_pct=None,
                 progress_points=None, progress_display=None, flags=[], min_eigenvalue=None, capital_weights={},
-                risk_share={}, annual_volatility_pct={}, annual_portfolio_volatility_pct=None)
+                risk_share={}, annual_volatility_pct={}, annual_portfolio_volatility_pct=None, shrinkage=None)
 
 
 def _window_v2(frame, cols, weights, months, cutoff):
@@ -486,7 +533,7 @@ def _window_v2(frame, cols, weights, months, cutoff):
                 progress_display=_display_v2(stats['points'], stats['streams']), flags=flags,
                 min_eigenvalue=stats['min_eigenvalue'], capital_weights={c: float(weights[c]) for c in cols},
                 risk_share=stats['shares'], annual_volatility_pct=stats['annual'],
-                annual_portfolio_volatility_pct=stats['portfolio']), data
+                annual_portfolio_volatility_pct=stats['portfolio'], shrinkage=stats['shrinkage']), data
 
 
 def _item(stats, status):
@@ -613,6 +660,8 @@ def _derive_v2(v2, proxies, retrospective):
     car_weight = weights.get(CAR_ID, 0.)
     frame, check, block = base, None, None
     if car_weight > 0:
+        if proxies is not None and not isinstance(proxies, dict):
+            proxies = {'unreadable': True}  # valid JSON that is no block: same marker as an unreadable file, so it replays
         if isinstance(proxies, dict):
             block = copy.deepcopy(proxies)
             keep = dict(car_proxies=block, car_proxies_fingerprint=block.get('fingerprint')

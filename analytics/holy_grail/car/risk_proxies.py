@@ -64,14 +64,16 @@ LIMITATIONS = [
 
 
 def load_block(path=LATEST_BLOCK):
-    """None when no block file exists; an unreadable file becomes an invalid block, never a silent absence."""
+    """None when no block file exists; an unreadable file, or valid JSON that is not an object, becomes an invalid
+    block, never a silent absence."""
     path = Path(path)
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding='utf-8'))
+        value = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError):
         return {'unreadable': True}
+    return value if isinstance(value, dict) else {'unreadable': True}
 
 
 class MissingBasketNames(ValueError):

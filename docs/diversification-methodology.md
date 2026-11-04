@@ -606,14 +606,40 @@ score = clip(100 * benefit / target_benefit, 0, 100)
 ```
 
 `w_i` is the weight of group `i` in the invested part, `sigma_i` the standard
-deviation of the monthly returns of its representative and `Σ` the sample
-covariance (ddof 1) of all groups on the same complete months. The weights of the
+deviation of the monthly returns of its representative and `Σ` the shrunk
+sample covariance of all groups on the same complete months (see "Covariance
+estimate" below; `sigma_i` is the square root of its diagonal, which equals the
+plain sample variance with ddof 1). The weights of the
 current snapshot are applied to the whole window: the result is a conditional
 estimate of the risk structure of today's portfolio on the history of its
 representatives, not a reconstruction of past positions or returns. The base of
 the comparison is the same assets with the same weights and volatilities at full
 positive correlation; it is not the S&P 500, cash or the portfolio's actual risk
 on some date. Monthly versus annual volatility units do not change DR.
+
+**Covariance estimate.** With 15 or so groups and at most 60 monthly rows the
+plain sample covariance is noisy, so `Σ` is estimated with the Ledoit-Wolf
+(2003) shrinkage toward a constant-correlation target (Ledoit and Wolf,
+"Improved estimation of the covariance matrix of stock returns with an
+application to portfolio selection", Journal of Empirical Finance, 2003;
+"Honey, I shrunk the sample covariance matrix", Journal of Portfolio
+Management, 2004). The sample matrix `S` (moments divided by the number of
+months `T`) is combined with `F`, which keeps every group's own variance and
+gives every pair the average sample correlation `r`, as
+`Σ = (δ F + (1 - δ) S) * T / (T - 1)`. The intensity `δ` in [0, 1] is the analytic Ledoit-Wolf value
+`clip(κ / T, 0, 1)`, recomputed for each window and frame (the 60-month and
+36-month windows, the volatility multipliers and the representative comparison
+each re-estimate on their own sample); `δ = 0` when the target equals the
+sample, and with fewer than two groups no shrinkage applies. The final factor
+`T / (T - 1)` keeps the usual ddof-1 scale, so displayed volatilities keep their
+meaning; DR does not depend on that common factor. The target keeps each
+`sigma_i` and the result stays positive semidefinite. Shrinkage lowers the
+estimation noise of correlations; it moves extreme pairs (including hedge-like
+negative ones) toward the average, so it can raise or lower the score. It does
+not remove model risk and is not a forecast. The window record stores the
+target, the intensity and the average correlation, and replay recomputes them;
+a change of the estimator changes the method fingerprint, so records saved with
+an earlier estimator render as "Недоступно" until recalculated.
 
 **Scale.** 100 means the effect of 15 equal-risk independent streams (about a
 74.18% volatility reduction in that model). It is a product policy, not a
@@ -627,6 +653,9 @@ risk; the text never says the Holy Grail is "achieved". Anchors:
 | 3 | 56.976152 |
 | 6 | 79.772287 |
 | 15 | 100 |
+
+The anchors follow from the formula alone (`DR = sqrt(N)` for `N` equal-risk
+independent streams) and do not depend on the covariance estimator.
 
 `N_effective` is the number of identical independent streams with the same
 modelled volatility effect, not a count of independent and profitable
@@ -731,10 +760,20 @@ the correctness of the external source. A valid headline is not blocked by a
 corrupt v3 or `risk_progress_v1` sibling, which is marked unavailable in its own
 detail row.
 
+**Unavailable by design.** A valid record whose status is `unavailable` (the
+basket was not collected, a data outage, an offline run without a current
+cache, or `just holy-grail` without `--car-proxies`) shows only the method, the
+status with its reason, the date and the safeguard rows. No other number
+appears in its place, the replayed `capital_diversification_v2` or v3 included,
+so a collection failure blanks the diversification section until the next
+successful run. This follows the no-fallback rule and is intended.
+
 **Display.** The compact headline is an integer with an approximation sign:
 `min(99, floor(score))` until the target of 15 streams is reached, then 100; the
 details use one decimal rounded down, capped at 99.9 before the target. The
-summary shows the score with the scale anchor in the same row, the two largest
+first summary row is the integer score as a number (formatted as "N зі 100" in
+Sheets); the scale anchor and the equivalent-stream count are in the conclusion
+note and the detail rows. The summary also shows the two largest
 positive modelled risk contributions as "group: share of capital -> share of
 risk", and the car-business assumption; then the data line (date, retrospective
 flag, concrete quality reason) and cash outside the score. Model assumptions and
@@ -749,7 +788,16 @@ group; vintages of revised indexes are known only where recorded, so a
 historical recalculation is marked retrospective (the block-date rule is enforced on replay, but a
 caller-asserted flag is an assertion that replay can neither prove nor disprove); the score says nothing about
 expected return, quality of the holdings, liquidity or protection in every
-environment. Definition of DR and its reading as equivalent independent streams:
+environment. Covariance shrinkage reduces the estimation noise of 15 or so
+groups on at most 60 months, not the model risk: the intensity is itself
+estimated from the same short sample. A listed basket cannot see the private
+business's own leverage and inventory financing, currency and country risk,
+illiquidity or key-person risk; the write-off rows are only a coarse tail check.
+The score counts any low-correlation stream, profitable or not, and no
+return-quality layer is measured; sensitivity to growth and inflation surprises
+is not measured either (the environment map is qualitative). Calibrating the car
+series from the business's own monthly results is possible only once enough
+months exist. Definition of DR and its reading as equivalent independent streams:
 Choueifaty, Froidure and Reynier, "Properties of the most diversified
 portfolio" (2013); the 0-100 transformation is this product's policy.
 

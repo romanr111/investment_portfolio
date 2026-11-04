@@ -233,6 +233,15 @@ def _comparison_rows(sensitivity):
     return rows
 
 
+def _shrinkage_rows(shrinkage):
+    """How the covariance behind the score was estimated: the sample matrix shrunk toward constant correlation."""
+    if not isinstance(shrinkage, dict) or not isinstance(shrinkage.get('intensity'), float):
+        return []
+    return [('Оцінка коваріації',
+             f"Вибіркову коваріацію згладжено до цілі зі сталою кореляцією (Ledoit-Wolf); інтенсивність згладжування для вікна 60 місяців: "
+             f"{_num(shrinkage['intensity'], 2)}. Це зменшує шум оцінки, але не модельний ризик, і не є прогнозом.")]
+
+
 def _window36_rows(record):
     window = (record.get('windows') or {}).get('m36') or {}
     if window.get('effective_streams') is None:
@@ -337,8 +346,10 @@ def risk_progress_v2_view(view, data, v2, expected, saved_at_utc=None):
             ('Припущення', ASSUMPTION if car_proxy else NO_CAR_ASSUMPTION)]
     model = 'Попередня модельна оцінка' if provisional else 'Модельна оцінка'
     label = model + (' · автобізнес через проксі' if car_proxy else '')
-    summary = lead[:1] + [('Висновок', label)] + lead[1:] + [('Дані', data_line), ('Кеш поза оцінкою', cash_text)] \
-        + list(view['safeguard_summary'])
+    # The summary score cell is the number (the writers type it with the "N зі 100" format); the long score text
+    # with the scale anchor lives in the drivers, the conclusion note and the detail rows.
+    summary = [(lead[0][0], _headline(record))] + [('Висновок', label)] + lead[1:] \
+        + [('Дані', data_line), ('Кеш поза оцінкою', cash_text)] + list(view['safeguard_summary'])
     stress = record.get('stress')
     sensitivity = record.get('sensitivity')
     reduction = main.get('volatility_reduction_pct')
@@ -348,6 +359,7 @@ def risk_progress_v2_view(view, data, v2, expected, saved_at_utc=None):
                        if car_proxy else 'Усі групи оцінені за історіями їхніх представників; ваги поточного знімка застосовано до всього вікна.'),
             ('Якість даних', '; '.join(reasons) if reasons else 'без додаткових застережень'),
             ('Вікно 60 місяців', f"{_stamp(main['window_start'])} - {_stamp(main['window_end'])}; {main['observations']} спостережень"),
+            *_shrinkage_rows(main.get('shrinkage')),
             ('Інтерпретація', f"Модельний ефект диверсифікації еквівалентний приблизно {_streams(streams)} однакового "
                               f"незалежного потоку. Модельне зниження волатильності відносно тих самих активів із повною "
                               f"позитивною кореляцією: {_num(reduction)}%. Це політика шкали, не гарантія меншого майбутнього "
@@ -366,7 +378,7 @@ def risk_progress_v2_view(view, data, v2, expected, saved_at_utc=None):
     rows.extend(_input_rows(v2, definitions, order))
     rows.append(('Метод', 'Історичні кореляції та модельні припущення не гарантують майбутньої стійкості або прибутку.'))
     from analytics.holy_grail.car.resale_market import conclusion_note
-    view.update(headline=f'≈{_headline(record)}/100', sheet_number=score_text, score_cell=_headline(record), status=label,
+    view.update(headline=f'≈{_headline(record)}/100', sheet_number=_headline(record), score_cell=_headline(record), status=label,
                 sheet_status=label, model_status=model, rows=rows, largest_text=contributions, sensitivity_text=ASSUMPTION,
                 drivers=[f'{name}: {value}' for name, value in lead] + [f'Дані: {data_line}'], sheet_summary=summary,
                 risk_facts=list((safeguards or {}).get('breach_facts') or []) + risk_fact_rows(v2)[1][:3],
