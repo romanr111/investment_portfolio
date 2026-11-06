@@ -565,19 +565,35 @@ def _render_holy_grail(view: Optional[dict]) -> str:
         return ""
     rows = "".join(f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>" for label, value in view["rows"])
     if view.get("allocation"):
-        drivers = "".join(f"<li>{_esc(text)}</li>" for text in view['drivers'])
-        risks = "".join(f"<li>{_esc(text)}</li>" for text in view.get('risk_facts', []))
+        # Compact summary: the saved view's summary rows (after the headline, up to the blank separator).
+        summary = []
+        for label, value in view.get("sheet_summary", [])[1:]:
+            if not label:
+                break
+            summary.append((label, value))
+        summary_rows = "".join(f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>" for label, value in summary)
+        # Limit breaches are already summarised in the table above (count, issuer, top-4/core, China).
+        risks = "".join(f"<li>{_esc(text)}</li>" for text in view.get('risk_facts', [])
+                        if not text.startswith("Порушення ліміту"))
+        retrospective = (f'<p class="footnote">Ретроспективна оцінка: позиції станом на {_esc(view["as_of"])}, '
+                         'історії цін і публічні індекси отримано пізніше.</p>'
+                         if view.get("retrospective") and view['headline'] != 'Дані недоступні' else "")
+        limits = (f'<p class="footnote">Обмеження: {_esc(" ".join(view["warnings"]))}</p>' if view.get("warnings") else "")
+        scored = view['headline'] != 'Дані недоступні'
+        as_of_line = (f"<p>{_esc(view.get('model_status', 'Модельна оцінка'))} станом на {_esc(view['as_of'])}.</p>"
+                      if scored else "")
+        method_note = ('<p class="footnote">Це оцінка широти між групами активів, а не прогноз: минулі кореляції не гарантують майбутньої незалежності. Ризиковий прогрес показує рух до цілі, а не її досягнення; сценарії автобізнесу є припущеннями за публічними проксі, а не вимірюванням бізнесу.</p>'
+                       if scored else "")
         return f"""
 <section id="holy-grail">
   <div class="sec-label"><span class="sec-num">05</span><h2 class="sec-title">{_esc(view.get('title') or 'Диверсифікація інвестованої частини')}</h2><span class="sec-rule"></span></div>
   <p class="hg-value">{_esc(view['headline'])}</p>
-  <p><strong>{_esc(view['status'])}</strong></p>
-  <p>{_esc(view.get('model_status', 'Модельна оцінка'))} станом на {_esc(view['as_of'])}. {_esc(view['coverage_summary'])}</p>
-  <ul>{drivers}</ul>
+  {as_of_line}
+  <table class="hg-table"><tbody>{summary_rows}</tbody></table>
   <ul>{risks}</ul>
-  <details open><summary>Як отримано оцінку</summary>
-    <table class="hg-table"><tbody>{rows}</tbody></table>
-  </details>
+  {retrospective}
+  {limits}
+  {method_note}
 </section>
 """
     if view.get("indicator"):

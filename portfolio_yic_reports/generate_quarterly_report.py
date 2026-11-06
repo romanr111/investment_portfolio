@@ -457,6 +457,14 @@ def build_report_data(
     quarter = (date_obj.month - 1) // 3 + 1
 
     main_change = find_main_change(before_alloc, after_alloc)
+    after_payload = after_data or {}
+    diversification = saved_diversification_view(
+        after_payload,
+        expected_date=date_obj.date().isoformat(),
+        saved_at_utc=after_payload.get("saved_at_utc"),
+    )
+    if (after_payload.get("allocation_score_v2_enrichment") or {}).get("retrospective"):
+        diversification["retrospective"] = True
     return ReportData(
         summary_title=(
             f"Підсумки на {date_obj.day} "
@@ -478,7 +486,7 @@ def build_report_data(
             after_data or {}, f"{date_obj.year}-Q{quarter}"
         ),
         holy_grail=saved_progress_view(after_data or {}, expected_date=date_obj.date().isoformat()),
-        diversification=saved_diversification_view(after_data or {}, expected_date=date_obj.date().isoformat()),
+        diversification=diversification,
     )
 
 
