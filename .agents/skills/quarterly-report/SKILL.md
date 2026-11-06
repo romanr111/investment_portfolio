@@ -86,11 +86,22 @@ For historical replay, validate quarter-end holdings and use a new derived copy:
 
 ```bash
 just holy-grail --snapshot VERIFIED_QUARTER_END_SNAPSHOT \
-  --output data/derived_snapshots/quarter_diversification.json --offline
+  --output data/derived_snapshots/quarter_diversification.json --offline \
+  --car-category data/car_category/block_YYYYMMDD.json \
+  --car-proxies data/car_category/proxies_YYYYMMDD.json
 venv/bin/python portfolio_yic_reports/generate_quarterly_report.py \
   --year YEAR --quarter QUARTER --before VERIFIED_BASELINE \
   --after data/derived_snapshots/quarter_diversification.json
 ```
+
+Omit the two car flags for a v2-only section. Build the block with
+`just car-category build ... --as-of QUARTER_END --out data/car_category/block_YYYYMMDD.json`
+and reuse a proxy block that passes `car_risk_proxies.validate_block` for the
+quarter end. Never write the `*_latest.json` pointers for a replay: they switch
+v3 and risk progress on for `just run` and Sheets. The section is a compact
+summary of the saved view (`quarterly_report_html.py`, `_render_holy_grail`) and
+is labeled retrospective when the derived file carries
+`allocation_score_v2_enrichment.retrospective`.
 
 The command refuses overwrite, automatic snapshot folders and latest-pointer
 changes, preserving financial fields. `--offline` reuses cached histories;
