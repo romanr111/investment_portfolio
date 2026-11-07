@@ -20,10 +20,10 @@ def main():
     parser.add_argument("--offline", action="store_true", help="Use cached public history only")
     parser.add_argument("--previous-snapshot", type=Path, help="Optional previous v2 snapshot for attribution")
     parser.add_argument("--car-category", type=Path,
-                        help="Frozen car-category block (just car-category build): also derives the v3 record")
+                        help="Frozen car-category block (just car-category build): also derives the allocation_score_v3 record")
     parser.add_argument("--car-proxies", type=Path,
-                        help="Frozen car proxy block (car_proxies_v2 or v3; just car-proxies build): derives risk_progress_v2 "
-                             "offline from it (nothing is collected) and the older risk_progress_v1 car scenarios")
+                        help="Frozen car proxy block (car_proxies_v2 or v3; just car-proxies build): derives risk_progress_v3 "
+                             "(headline), risk_progress_v2 and the older risk_progress_v1 offline (nothing is collected)")
     parser.add_argument("--what-if", action="append", default=[], metavar="ID=VALUE",
                         help="Offline before/after on a copied snapshot; repeatable, e.g. --what-if ib:VOO=+20000")
     args = parser.parse_args()
