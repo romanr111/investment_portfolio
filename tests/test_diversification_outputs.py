@@ -1,4 +1,8 @@
 """Shared saved views, not output-side risk calculations."""
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import unittest
 from html import escape
 from copy import deepcopy
@@ -43,7 +47,8 @@ class QualityOutputTests(unittest.TestCase):
                 view = saved_diversification_view(saved)
                 self.assertNotEqual(view['effective'], '-')
                 table = sheet_table(saved)
-                self.assertIn(view['effective'], str(table[10][:2]))
+                self.assertTrue(any(row[0] == 'Ефективні джерела / ціль' and view['effective'] in str(row[:2]) for row in table),
+                                'The saved estimate must stay visible in the diversification summary')
                 self.assertIn(escape(view['effective']), legacy_cases.HolyGrailOutputTests().html(saved))
                 self.assertEqual(saved['TOTAL_ASSETS'], 1500)
 

@@ -7,8 +7,17 @@ test:
 test-parallel:
     venv/bin/python tests/parallel_runner.py
 
-run:
-    venv/bin/python -m src.portfolio_sync
+# Passthrough: both `just run --flag` and the documented `just run -- --flag` form
+# reach src.portfolio_sync verbatim (the leading separator is dropped).
+run *args:
+    venv/bin/python -m src.portfolio_sync {{replace(args, "-- ", "")}}
+
+# Run the sync under the job wrapper: lock in data/run/sync.lock plus a receipt
+# line in data/run/receipts.jsonl per run; pings healthchecks.io only when the
+# HEALTHCHECK_SYNC_URL env var is set. Wrapper options (--retries,
+# --healthcheck-url) exist only when calling src.job_control.run_job directly.
+run-guarded *args:
+    venv/bin/python -m src.job_control.run_job --job sync -- venv/bin/python -m src.portfolio_sync {{replace(args, "-- ", "")}}
 
 # Preview adopting existing hand-made worksheet tabs; prints the adoptions JSON.
 # Usage: just adoption-preview "04 Oct 2026,net_worth_timeline"
@@ -56,6 +65,14 @@ risk-progress *args:
 # Frozen block of retrospective used-vehicle proxy series (price indexes, listed remarketers) for the risk-progress car scenarios.
 car-proxies *args:
     venv/bin/python -m analytics.holy_grail.car.risk_proxies {{args}}
+
+# EDGAR filing monitor for individual equity positions (SEC submissions +
+# 8-K items + Risk Factors diffs; alerts.jsonl, state.json, Telegram digest).
+# Requires SEC_USER_AGENT in data/ib_flex_env.sh; --dry-alert previews offline.
+# A literal "--" separator (just edgar-watch -- --dry-alert) is stripped in an
+# anchored way, so argparse never sees it ({{args}} would pass it through).
+edgar-watch *args:
+    venv/bin/python -m src.edgar.watch {{replace_regex(args, "^-- ", "")}}
 
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:

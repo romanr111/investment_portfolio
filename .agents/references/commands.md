@@ -22,16 +22,20 @@ The authoritative list lives in `justfile`. Key recipes:
 ### `just run` (portfolio sync pipeline)
 
 By default (`just run` with no flags):
-1. Fetches live positions from IB Gateway (`ib_insync`)
+1. Fetches live positions from IB Gateway (`ib_async`, pinned `ib_async==2.1.0`)
 2. Fetches YTD performance from IB Flex Web Service
 3. Calculates allocation and dividend income (yfinance/Yahoo)
 4. Writes `data/snapshots/combined_data_<date>_<timestamp>.json` (+ `_latest.json`)
 5. Updates Google Sheets (`data/credentials.json`)
 6. Skips history sync and Dalio analysis by default
 
+Flag passthrough works in both documented forms: `just run --run-history-sync`
+and `just run -- --run-history-sync` (the bare `--` separator is dropped before
+the module sees the flags).
+
 Full data collection (all sources + history + Dalio):
 ```bash
-just run -- --run-history-sync --run-dalio-analysis
+just run --run-history-sync --run-dalio-analysis
 ```
 
 Key flags:
@@ -44,6 +48,26 @@ Key flags:
 Full flag list: `python -m src.portfolio_sync --help` or see `README.md`.
 
 Required env vars (in `data/ib_flex_env.sh`): `IB_GATEWAY_HOST`, `IB_GATEWAY_PORT`, `IB_FLEX_TOKEN`, `IB_FLEX_QUERY_ID_YTD_PERFORMANCE`, `IB_ACCOUNT_ID`. For the quarterly report also: `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` (see `.agents/skills/quarterly-report/SKILL.md`).
+
+### `just run-guarded` (lock, receipts, retries, healthcheck pings)
+
+Runs the same sync under `src.job_control.run_job` (POSIX only):
+
+- advisory lock `data/run/sync.lock`: a second concurrent run exits 3 with
+  `outcome=locked` on stderr and receipt, without pinging;
+- one JSON receipt per run appended to `data/run/receipts.jsonl` (fields:
+  schema, job, start_utc, end_utc, duration_s, attempts, exit_code, outcome,
+  command, pid, retry_delay_s, notified); local-only, safe to delete;
+- healthcheck pings only when `HEALTHCHECK_SYNC_URL` is set: `/start` before
+  the first attempt, bare URL on success, `/fail` after the last failed
+  attempt; ping failures are stderr warnings and never change the exit code;
+- receipt and lock files are recreated on the next run if deleted.
+
+Wrapper options exist only on the direct module call:
+
+```bash
+python -m src.job_control.run_job --job sync --retries 2 -- venv/bin/python -m src.portfolio_sync
+```
 
 Outputs: `data/snapshots/combined_data_*.json`, `data/portfolio_history.csv`, `data/portfolio_history.jsonl`, `analytics/output/` (Dalio).
 
@@ -61,6 +85,26 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py --output path
 - `--ibkr-ytd N` / `--sp500-ytd N` - override the YTD figures (default: from `data/final_data.json`).
 - `--output PATH` - output HTML path (default: `portfolio_yic_reports/portfolio_report_qN_YYYY.html`).
 - `--open` - open the generated report in a browser.
+
+### `just edgar-watch`
+
+Daily SEC EDGAR monitor for individual equity positions (module `src.edgar.watch`).
+
+```bash
+just edgar-watch --dry-alert                  # preview digest, no Telegram/healthcheck
+just edgar-watch                              # full run: alerts + digest + healthcheck
+just edgar-watch --limit-tickers 5            # largest N monitored positions only
+just edgar-watch --extract-rf <SYMBOL>        # offline RF extraction probe (no state writes)
+```
+
+- Requires `SEC_USER_AGENT` in `data/ib_flex_env.sh` (honest shared default otherwise); `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` optional (digest skipped without them); healthcheck via `HEALTHCHECK_EDGAR_URL`.
+- Reads the equity buckets (`Stocks`, `China Stocks`, `REIT`) from a `data/snapshots/combined_data_*.json` snapshot (default `combined_data_latest.json`, override with `--snapshot PATH`); never fetches prices or recomputes the snapshot.
+- Flags: `--backfill-days N`, `--data-dir PATH`, `--healthcheck-url URL`, `--verbose`. Exit codes: 0 ok, 1 fatal (steady SEC 403/429: block stop, no state commit, no sends), 2 partial (per-CIK failures, successful CIKs committed), 3 busy (already running; flock in `data/edgar/watch.lock`). The `--dry-alert` state commit includes the first-contact anti-flood window: filings shown once during `--dry-alert` are marked seen and are not re-delivered once Telegram is configured.
+- State and event log live in `data/edgar/` (see `data/README.md`). Alerts append before the state commit, so a crash in that window re-alerts those filings on the next run. There is no digest resend: if the Telegram delivery fails, the full digest is printed to the log (launchd stdout redirect).
+- The launchd plist `deploy/launchd/com.investment-portfolio.edgar-watch.plist` schedules the 09:00 local daily run. It can also be wrapped by `src.job_control.run_job --job edgar` for lock+receipts; note the wrapper and the watch both honor `HEALTHCHECK_EDGAR_URL`, so set it for one side only.
+- Monitoring diverges from the job wrapper: standalone watch pings only the final result (no `/start` ping), and a steady SEC block prints the BLOCKED digest, exits 1 and pings nothing - recovery is the next launchd/scheduled run; under the wrapper, exit 2 (partial CIK failures) surfaces as a `/fail` ping. Semantic alignment of these paths belongs to the future `--job edgar` wiring.
+- `--extract-rf <SYMBOL>` fetches the two latest periodic filings of one symbol, prints the Item 1A extraction and diff counts, and writes a diff file to `data/edgar/rf_check/` without touching `state.json` or `alerts.jsonl`.
+- Offline tests: `tests/test_edgar_severity.py`, `test_edgar_risk_factors.py`, `test_edgar_state.py`, `test_edgar_watch.py`, `test_edgar_telegram.py` with fixtures in `tests/fixtures/edgar/`; no test performs live sec.gov access. The live gates L1-L4 (single request, one CIK, full dry run, full live run) are owner-executed after `SEC_USER_AGENT` is configured.
 
 ### `just fetch-snapshots`
 

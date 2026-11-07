@@ -138,10 +138,10 @@ class IBGatewayPortfolioLoader:
     def connection(self):
         self.check_socket_available()
         try:
-            from ib_insync import IB
+            from ib_async import IB
         except ImportError as exc:
             raise IBGatewayUnavailable(
-                "ib_insync is required for IB Gateway access. "
+                "ib_async is required for IB Gateway access. "
                 "Install project dependencies before running portfolio sync."
             ) from exc
 

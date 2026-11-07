@@ -3,6 +3,10 @@
 Verifies that DataSource.calculate_total_assets does not double-count IB cash
 and that typed portfolio allocation rows reconcile to net worth.
 """
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import unittest
 import json
 from decimal import Decimal

@@ -24,6 +24,12 @@ jobs:
       - name: Install requests
         run: pip install requests
 
+      - name: Healthcheck start
+        if: success()
+        run: '[ -n "$URL" ] && curl -fsS -m 10 "$URL/start" || true'
+        env:
+          URL: ${{ secrets.HEALTHCHECK_FLEX_URL }}
+
       - name: Fetch snapshot
         id: fetch
         run: python -c "from src.brokers.ib_flex_portfolio import IBFlexPortfolioFetcher; print('Fetched:', IBFlexPortfolioFetcher().fetch_and_save('data/ib_flex_snapshots'))"
@@ -47,6 +53,12 @@ jobs:
           retention-days: 365
           if-no-files-found: warn
 
+      - name: Healthcheck success
+        if: success()
+        run: '[ -n "$URL" ] && curl -fsS -m 10 "$URL" || true'
+        env:
+          URL: ${{ secrets.HEALTHCHECK_FLEX_URL }}
+
       - name: Notify Telegram
         if: always()
         run: python .github/scripts/notify_telegram.py || true
@@ -55,3 +67,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           JOB_STATUS: ${{ job.status }}
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Healthcheck fail
+        if: failure()
+        run: '[ -n "$URL" ] && curl -fsS -m 10 "$URL/fail" || true'
+        env:
+          URL: ${{ secrets.HEALTHCHECK_FLEX_URL }}

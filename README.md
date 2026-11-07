@@ -10,7 +10,7 @@ python -m src.portfolio_sync
 
 Bootstraps `.venv`, ставить requirements, підвантажує `data/ib_flex_env.sh` і запускає пайплайн:
 
-- живі позиції з Interactive Brokers Gateway (`ib_insync`)
+- живі позиції з Interactive Brokers Gateway (`ib_async`)
 - алокація та дивідендний дохід
 - датований снапшот `combined_data` у `data/snapshots/`
 - оновлення налаштованої Google Sheet
@@ -35,6 +35,31 @@ python -m src.portfolio_sync --run-history-sync --run-dalio-analysis
 ```
 
 Історія за замовчуванням: місячні рядки, дати month-end, порожній `return_pct` (поповнення й виводи — не доходності). Оверрайди: `--history-return-source pct-change`, `--history-frequency raw`.
+
+## Guarded Run і CI
+
+`just run-guarded` запускає той самий синк через `src.job_control.run_job`:
+
+- advisory lock у `data/run/sync.lock`: другий паралельний запуск дає exit 3;
+- JSON-receipt кожного запуску в `data/run/receipts.jsonl` (local-only, безпечно видаляти);
+- healthcheck-пінги лише коли задано `HEALTHCHECK_SYNC_URL` (`/start` перед першою спробою, `/fail` після останньої невдалої); збої пінгів - лише попередження.
+
+Опції обгортки (`--retries`, `--healthcheck-url`) - тільки прямим викликом `python -m src.job_control.run_job`. Офлайн-тести гонять GitHub Actions (`tests.yml`) на кожному PR і push у master.
+
+## EDGAR Watch
+
+`just edgar-watch` - денний монітор подань SEC для індивідуальних акцій зі снапшота (`just run` лишає `data/snapshots/combined_data_*.json`; він є джерелом, монітор не перекачує ціни). Бал диверсифікації не бачить емітентів, `concentration_v1` бачить статичну концентрацію; EDGAR watch додає подієвий шар - свіжі подання SEC без ручного перегляду EDGAR.
+
+Потік одного запуску: розширити університет (тикер -> CIK через `www.sec.gov/files/company_tickers.json`), по кожному CIK прочитати `data.sec.gov/submissions/CIK##########.json`, розкласифікувати нові подання (severity 8-K items: RED = банкрутство, інциденти кібербезпеки, трейдинг-стоп, недоліки звітності, уведені підрядки, зміни аудиторів, зміни контролю компанії; WARN = витрати на вихід, матеріальні знецінення, зміни етики чи статусу компанії; інше INFO), порівняти Item 1A (Risk Factors) останніх 10-K/10-Q, записати `alerts.jsonl`, закомітити `state.json`, надіслати Telegram-дайджест і healthcheck-пінг. Перший контакт із CIK позначає все свіже вікно побаченим (anti-flood); алерти тільки в межах `max_backfill_days` (7 за замовчуванням).
+
+Пункти поведінки:
+
+- `--dry-alert` - повний прогін без Telegram і healthcheck (стан таки оновлюється, і перший контакт теж: подання, показані в цьому прогоні, позначаються побаченими і не будуть повторно доставлені, коли Telegram налаштують пізніше); `--extract-rf <SYMBOL>` - офлайн-проба екстракції Risk Factors без записів стану.
+- Зупинка при блокуванні: стабільні SEC 403/429 дають exit 1, ідентичність не ротується, стан не комітиться - розбір вручну.
+- Exit codes: 0 ок, 1 фатально, 2 частковий збій (вдалі CIK закомічені), 3 вже запущено (`data/edgar/watch.lock`).
+- Вимоги: `SEC_USER_AGENT` у `data/ib_flex_env.sh` (без нього - чесний дефолт-ідентифікатор), `TELEGRAM_*` і `HEALTHCHECK_EDGAR_URL` опційні. Дані живуть у `data/edgar/` (опис і семантика `digest_sent` - в `data/README.md`).
+- Розклад: `deploy/launchd/com.investment-portfolio.edgar-watch.plist` запускає о 09:00 за локальним годинником (`launchctl bootstrap` після `mkdir -p data/edgar`).
+- Тести офлайн: `tests/test_edgar_*.py` з фейковими сесіями та фікстурами в `tests/fixtures/edgar/`; жоден тест не звертається до sec.gov. Живі гейти L1-L4 виконує власник після додавання UA.
 
 ## Concentration Safeguards
 

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  EDGAR filing watch: daily equity-position monitor at 09:00 local time.
+
+  Install (owner, once):
+    mkdir -p data/edgar
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.investment-portfolio.edgar-watch.plist
+  Notes:
+    - The hardcoded absolute paths match this checkout; relocate them if the
+      repository moves.
+    - StartCalendarInterval has no TimeZone key on purpose: it follows the
+      user's local clock.
+    - StandardOut/Error reuse data/edgar/watch.log (launchd appends).
+-->
+<dict>
+    <key>Label</key>
+    <string>com.investment-portfolio.edgar-watch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/roman/Documents/Development/investment_portfolio/venv/bin/python</string>
+        <string>-m</string>
+        <string>src.edgar.watch</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/roman/Documents/Development/investment_portfolio</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Users/roman/Documents/Development/investment_portfolio/data/edgar/watch.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/roman/Documents/Development/investment_portfolio/data/edgar/watch.log</string>
+</dict>
+</plist>

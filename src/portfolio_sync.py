@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENV_DIR = PROJECT_ROOT / ".venv"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 LOCAL_ENV_PATH = PROJECT_ROOT / "data" / "ib_flex_env.sh"
-RUNTIME_IMPORTS = ("pandas", "yaml", "ib_insync", "gspread", "requests")
+RUNTIME_IMPORTS = ("pandas", "yaml", "ib_async", "gspread", "requests")
 
 
 def _running_inside_venv() -> bool:

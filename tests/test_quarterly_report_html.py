@@ -1,5 +1,9 @@
 """Tests for the quarterly HTML report: renderer, collectors, and assembly."""
 
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import json
 import re
 import sys
