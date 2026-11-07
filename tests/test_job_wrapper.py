@@ -7,12 +7,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import src.job_control.run_job as run_job
 
 
 class JobWrapperTests(unittest.TestCase):
+    _PING_URL = "http://healthcheck.example/fixed-test-uid"
+
     def _workspace(self):
         temp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, temp, ignore_errors=True)
@@ -32,6 +34,11 @@ class JobWrapperTests(unittest.TestCase):
         lines = (run_dir / "receipts.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertTrue(lines, "one receipt line per run")
         return json.loads(lines[-1])
+
+    def _ping_ok_response(self):
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        return response
 
     def test_second_run_while_locked_exits_3_and_records_locked(self):
         temp = self._workspace()
@@ -122,6 +129,130 @@ class JobWrapperTests(unittest.TestCase):
         receipt = self._last_receipt(run_dir)
         self.assertEqual(receipt["outcome"], "success")
         self.assertEqual(receipt["notified"], "skipped")
+
+    def test_healthcheck_success_pings_start_then_bare_url_and_notifies_ok(self):
+        temp = self._workspace()
+        run_dir = self._capture_run_paths(temp)
+        with patch.object(run_job.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value = self._ping_ok_response()
+            return_code = run_job.run(
+                [
+                    "--job",
+                    "pingstart",
+                    "--env-file",
+                    "none",
+                    "--healthcheck-url",
+                    self._PING_URL,
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "print('ok')",
+                ]
+            )
+        self.assertEqual(return_code, 0)
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertIn("/start", urlopen.call_args_list[0].args[0])
+        self.assertEqual(urlopen.call_args_list[1].args[0], self._PING_URL)
+        receipt = self._last_receipt(run_dir)
+        self.assertEqual(receipt["notified"], "ok")
+
+    def test_healthcheck_after_failed_child_pings_url_with_fail_suffix(self):
+        temp = self._workspace()
+        run_dir = self._capture_run_paths(temp)
+        with patch.object(run_job.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value = self._ping_ok_response()
+            return_code = run_job.run(
+                [
+                    "--job",
+                    "pingfail",
+                    "--env-file",
+                    "none",
+                    "--healthcheck-url",
+                    self._PING_URL,
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "import sys; sys.exit(7)",
+                ]
+            )
+        self.assertEqual(return_code, 7)
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(urlopen.call_args_list[1].args[0], self._PING_URL + "/fail")
+        receipt = self._last_receipt(run_dir)
+        self.assertEqual(receipt["outcome"], "fail")
+        self.assertEqual(receipt["exit_code"], 7)
+
+    def test_healthcheck_ping_failure_records_warning_and_keeps_success_exit(self):
+        temp = self._workspace()
+        run_dir = self._capture_run_paths(temp)
+        with patch.object(run_job.urllib.request, "urlopen") as urlopen:
+            urlopen.side_effect = OSError("simulated ping outage")
+            return_code = run_job.run(
+                [
+                    "--job",
+                    "pingwarn",
+                    "--env-file",
+                    "none",
+                    "--healthcheck-url",
+                    self._PING_URL,
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "print('ok')",
+                ]
+            )
+        self.assertEqual(return_code, 0)
+        receipt = self._last_receipt(run_dir)
+        self.assertEqual(receipt["outcome"], "success")
+        self.assertEqual(receipt["notified"], "warning")
+
+    def test_first_try_success_with_retries_records_executed_attempts(self):
+        temp = self._workspace()
+        run_dir = self._capture_run_paths(temp)
+        return_code = run_job.run(
+            [
+                "--job",
+                "executed",
+                "--env-file",
+                "none",
+                "--retries",
+                "2",
+                "--retry-delay",
+                "0",
+                "--",
+                sys.executable,
+                "-c",
+                "print('ok')",
+            ]
+        )
+        receipt = self._last_receipt(run_dir)
+        self.assertEqual(return_code, 0)
+        self.assertEqual(receipt["attempts"], 1)
+
+    def test_negative_retries_clamps_to_a_single_attempt(self):
+        temp = self._workspace()
+        run_dir = self._capture_run_paths(temp)
+        return_code = run_job.run(
+            [
+                "--job",
+                "clamp",
+                "--env-file",
+                "none",
+                "--retries",
+                "-3",
+                "--retry-delay",
+                "0",
+                "--",
+                sys.executable,
+                "-c",
+                "import sys; sys.exit(7)",
+            ]
+        )
+        receipt = self._last_receipt(run_dir)
+        self.assertEqual(return_code, 7)
+        self.assertEqual(receipt["attempts"], 1)
+        self.assertEqual(receipt["exit_code"], 7)
+        self.assertEqual(receipt["outcome"], "fail")
 
 
 if __name__ == "__main__":

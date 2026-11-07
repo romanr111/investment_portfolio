@@ -30,10 +30,9 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.portfolio_sync import _load_local_env_file
+from src.env_file import _load_local_env_file, DEFAULT_ENV_FILE
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ENV_FILE = PROJECT_ROOT / "data" / "ib_flex_env.sh"
 RUN_DIR = PROJECT_ROOT / "data" / "run"
 RECEIPTS_FILE = RUN_DIR / "receipts.jsonl"
 DEFAULT_RETRY_DELAY = 1.0
@@ -192,9 +191,11 @@ def run(argv=None) -> int:
         pings.append(_ping(url + "/start"))
 
     try:
-        attempts = opts.retries + 1
+        planned_attempts = max(0, opts.retries) + 1
+        executed = 0
         exit_code = None
-        for index in range(attempts):
+        for index in range(planned_attempts):
+            executed += 1
             try:
                 exit_code = subprocess.run(command, check=False).returncode
             except OSError as exc:
@@ -202,7 +203,7 @@ def run(argv=None) -> int:
                 print(f"run_job: failed to run command: {exc}", file=sys.stderr)
             if exit_code == 0:
                 break
-            if index + 1 < attempts:
+            if index + 1 < planned_attempts:
                 time.sleep(min(retry_delay * (2**index), max(0.0, opts.retry_max_delay)))
 
         end = datetime.now(timezone.utc)
@@ -221,7 +222,7 @@ def run(argv=None) -> int:
                 "start_utc": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "end_utc": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "duration_s": round((end - start).total_seconds(), 3),
-                "attempts": attempts,
+                "attempts": executed,
                 "exit_code": exit_code,
                 "outcome": outcome,
                 "command": command,

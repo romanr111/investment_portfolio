@@ -1,15 +1,15 @@
 import importlib.util
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+from src.env_file import _load_local_env_file, DEFAULT_ENV_FILE as LOCAL_ENV_PATH
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENV_DIR = PROJECT_ROOT / ".venv"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
-LOCAL_ENV_PATH = PROJECT_ROOT / "data" / "ib_flex_env.sh"
 RUNTIME_IMPORTS = ("pandas", "yaml", "ib_async", "gspread", "requests")
 
 
@@ -27,29 +27,6 @@ def _venv_python() -> Path:
 
 def _missing_runtime_imports() -> list:
     return [name for name in RUNTIME_IMPORTS if importlib.util.find_spec(name) is None]
-
-
-def _load_local_env_file(path: Path = LOCAL_ENV_PATH) -> None:
-    if not path.exists():
-        return
-
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].strip()
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key:
-            continue
-        try:
-            parsed = shlex.split(value, comments=False, posix=True)
-        except ValueError:
-            parsed = [value]
-        os.environ.setdefault(key, parsed[0] if parsed else "")
 
 
 def _ensure_venv() -> None:
