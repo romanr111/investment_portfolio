@@ -126,6 +126,9 @@ class AllocationIntegrationTests(unittest.TestCase):
                 self.assertFalse(validate_saved_allocation(q,altered,replay=True))
 
     def test_html_sheet_and_scoped_writer_share_one_percent_not_the_old_count(self):
+        from private_data_guard import private_data_available
+        if not private_data_available():
+            self.skipTest('private local data modules are absent in this checkout')
         from test_holy_grail_outputs import HolyGrailOutputTests
         from test_holy_grail_outputs import sheet_table
         from analytics.holy_grail.delivery.sheet import plan_requests
@@ -144,6 +147,9 @@ class AllocationIntegrationTests(unittest.TestCase):
         self.assertIn({'type':'PERCENT','pattern':'0%'},formats)
 
     def test_private_sources_and_usd_values_are_not_published(self):
+        from private_data_guard import private_data_available
+        if not private_data_available():
+            self.skipTest('private local data modules are absent in this checkout')
         from test_holy_grail_outputs import HolyGrailOutputTests
         from analytics.holy_grail.fingerprint import fingerprint
         saved=self.saved()

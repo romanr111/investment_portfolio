@@ -1,4 +1,8 @@
 """Both output adapters consume one saved result, without collecting market data."""
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import importlib
 import sys
 from pathlib import Path

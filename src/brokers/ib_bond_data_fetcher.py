@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, Generator
 
-from ib_insync import IB, BarData, Bond, Contract
+from ib_async import IB, BarData, Contract
 
 # Constants for connection management
 BASE_CLIENT_ID = 1000
@@ -92,7 +92,7 @@ class LoggerConfig:
     @staticmethod
     def setup_logger(name: str, level: int = logging.WARNING) -> logging.Logger:
         # Configure IB loggers
-        for logger_name in ["ib_insync", "ib_insync.wrapper", "ib_insync.client"]:
+        for logger_name in ["ib_async", "ib_async.wrapper", "ib_async.client", "ib_async.ib"]:
             logging.getLogger(logger_name).setLevel(logging.WARNING)
 
         # Setup application logger

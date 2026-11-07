@@ -10,7 +10,7 @@ python -m src.portfolio_sync
 
 Bootstraps `.venv`, ставить requirements, підвантажує `data/ib_flex_env.sh` і запускає пайплайн:
 
-- живі позиції з Interactive Brokers Gateway (`ib_insync`)
+- живі позиції з Interactive Brokers Gateway (`ib_async`)
 - алокація та дивідендний дохід
 - датований снапшот `combined_data` у `data/snapshots/`
 - оновлення налаштованої Google Sheet
@@ -35,6 +35,16 @@ python -m src.portfolio_sync --run-history-sync --run-dalio-analysis
 ```
 
 Історія за замовчуванням: місячні рядки, дати month-end, порожній `return_pct` (поповнення й виводи — не доходності). Оверрайди: `--history-return-source pct-change`, `--history-frequency raw`.
+
+## Guarded Run і CI
+
+`just run-guarded` запускає той самий синк через `src.job_control.run_job`:
+
+- advisory lock у `data/run/sync.lock`: другий паралельний запуск дає exit 3;
+- JSON-receipt кожного запуску в `data/run/receipts.jsonl` (local-only, безпечно видаляти);
+- healthcheck-пінги лише коли задано `HEALTHCHECK_SYNC_URL` (`/start` перед першою спробою, `/fail` після останньої невдалої); збої пінгів - лише попередження.
+
+Опції обгортки (`--retries`, `--healthcheck-url`) - тільки прямим викликом `python -m src.job_control.run_job`. Офлайн-тести гонять GitHub Actions (`tests.yml`) на кожному PR і push у master.
 
 ## Concentration Safeguards
 

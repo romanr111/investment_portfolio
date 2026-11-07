@@ -32,6 +32,9 @@ class IndicatorTests(unittest.TestCase):
         self.assertEqual(saved_diversification_view(saved)['effective'],'-')
 
     def test_html_and_sheet_render_same_count_without_policy_and_protect_provenance(self):
+        from private_data_guard import private_data_available
+        if not private_data_available():
+            self.skipTest('private local data modules are absent in this checkout')
         from analytics.holy_grail.fingerprint import fingerprint
         from test_holy_grail_outputs import HolyGrailOutputTests
         from test_holy_grail_outputs import sheet_table
