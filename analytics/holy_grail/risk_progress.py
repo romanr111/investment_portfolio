@@ -67,7 +67,7 @@ def _record(v2, **fields):
     return seal_result(result)
 
 
-def _applicable(v2):
+def v2_applicable(v2):
     return (isinstance(v2, dict) and v2.get('status') in {'modeled', 'provisional'}
             and isinstance(v2.get('histories'), dict) and isinstance(v2.get('groups'), list)
             and isinstance(v2.get('coverage'), dict) and isinstance(v2.get('configuration'), dict)
@@ -222,7 +222,7 @@ def derive_risk_progress_v1(v2, proxies=None):
     without it the record has no such key. A failure to compute is an explicit unavailable record,
     never a silent fallback.
     """
-    if not _applicable(v2):
+    if not v2_applicable(v2):
         return None
     try:
         weights = {g['id']: g['weight'] for g in v2['groups']}
@@ -404,25 +404,25 @@ METHOD_V2 = {
 IGNORED_V2 = {'calculated_at', 'result_fingerprint'}
 
 
-def _identity(v2):
+def has_v2_identity(v2):
     return isinstance(v2, dict) and all(isinstance(v2.get(key), str) for key in (
         'as_of_date', 'result_fingerprint', 'method_fingerprint', 'history_fingerprint'))
 
 
-def _source_v2(v2):
+def source_v2_summary(v2):
     return dict(result_fingerprint=v2['result_fingerprint'], method_fingerprint=v2['method_fingerprint'],
                 history_fingerprint=v2['history_fingerprint'], score=v2.get('score'), status=v2.get('status'))
 
 
-def _display_v2(points, streams):
+def display_points(points, streams, target=TARGET):
     """Integer for the compact headline, one decimal (rounded down) for details; 100 only at the target."""
-    if streams >= TARGET - EPS:
+    if streams >= target - EPS:
         return {'headline': 100, 'detail': 100.0}
     return {'headline': min(HEADLINE_CAP, int(math.floor(points + EPS))),
             'detail': min(DETAIL_CAP, math.floor(points * 10 + TOLERANCE) / 10)}
 
 
-def _shrunk_covariance(x):
+def shrunk_covariance(x):
     """Ledoit-Wolf (2003) covariance shrunk toward the constant-correlation target.
 
     `x` is T x n complete monthly rows. Returns (covariance, intensity, mean correlation) with the ddof=1 scale of
@@ -461,20 +461,12 @@ def _shrunk_covariance(x):
     return (intensity * target + (1 - intensity) * sample) * scale, intensity, mean_correlation
 
 
-def _stats(data, weights):
-    """Covariance statistics of complete rows; a reason string when the inputs cannot be used."""
-    cols = list(data.columns)
-    x = data.to_numpy(dtype=float)
-    w = np.array([weights[c] for c in cols], dtype=float)
-    if not np.isfinite(x).all() or not np.isfinite(w).all():
+def dr_stats(cov, w, cols, target_benefit=TARGET_BENEFIT):
+    """Diversification statistics of a stream covariance and capital weights; a reason string when unusable."""
+    cov = np.atleast_2d(cov)
+    if not np.isfinite(cov).all() or not np.isfinite(w).all():
         return 'degenerate_covariance'
-    shrunk = _shrunk_covariance(x)
-    if shrunk is None:
-        return 'degenerate_covariance'
-    cov, intensity, mean_correlation = np.atleast_2d(shrunk[0]), shrunk[1], shrunk[2]
-    if not np.isfinite(cov).all():
-        return 'degenerate_covariance'
-    sigma = np.sqrt(np.diag(cov))
+    sigma = np.sqrt(np.clip(np.diag(cov), 0., None))
     variance, standalone = float(w @ cov @ w), float(w @ sigma)
     if (sigma <= 0).any() or variance <= standalone ** 2 * METHOD_V2['tolerances']['variance_floor']:
         return 'degenerate_covariance'
@@ -486,14 +478,29 @@ def _stats(data, weights):
     if abs(streams - round(streams)) <= EPS:
         streams = float(round(streams))
         ratio = math.sqrt(streams)
-    points = min(100., max(0., 100 * (1 - 1 / ratio) / TARGET_BENEFIT))
+    points = min(100., max(0., 100 * (1 - 1 / ratio) / target_benefit))
     shares = w * (cov @ w) / variance
-    return dict(cols=cols, w=w, x=x, ratio=float(ratio), streams=float(streams), points=float(points),
+    return dict(cols=cols, w=w, ratio=float(ratio), streams=float(streams), points=float(points),
                 shares={c: float(s) for c, s in zip(cols, shares)},
                 annual={c: float(s * math.sqrt(12) * 100) for c, s in zip(cols, sigma)},
-                portfolio=float(math.sqrt(variance) * math.sqrt(12) * 100), min_eigenvalue=float(eigenvalues[0]),
-                shrinkage=dict(target='constant_correlation', intensity=float(intensity),
-                               mean_correlation=None if mean_correlation is None else float(mean_correlation)))
+                portfolio=float(math.sqrt(variance) * math.sqrt(12) * 100), min_eigenvalue=float(eigenvalues[0]))
+
+
+def _stats(data, weights):
+    """Covariance statistics of complete rows; a reason string when the inputs cannot be used."""
+    cols = list(data.columns)
+    x = data.to_numpy(dtype=float)
+    w = np.array([weights[c] for c in cols], dtype=float)
+    if not np.isfinite(x).all() or not np.isfinite(w).all():
+        return 'degenerate_covariance'
+    shrunk = shrunk_covariance(x)
+    if shrunk is None:
+        return 'degenerate_covariance'
+    stats = dr_stats(shrunk[0], w, cols)
+    if isinstance(stats, str):
+        return stats
+    return dict(stats, x=x, shrinkage=dict(target='constant_correlation', intensity=float(shrunk[1]),
+                                           mean_correlation=None if shrunk[2] is None else float(shrunk[2])))
 
 
 def _empty_window(months, cols, reason=None):
@@ -503,22 +510,30 @@ def _empty_window(months, cols, reason=None):
                 risk_share={}, annual_volatility_pct={}, annual_portfolio_volatility_pct=None, shrinkage=None)
 
 
+def measured_window(frame, cols, months, cutoff):
+    """Complete rows of the last `months` calendar rows and why they cannot be used (None when usable)."""
+    sub = frame[cols].iloc[-months:]
+    data = sub.dropna()
+    if len(data) < METHOD_V2['minimum_observations']:
+        return data, 'insufficient_common_history'
+    floor = cutoff - pd.offsets.MonthEnd(MAX_LAG)
+    stale = [c for c in cols if sub[c].last_valid_index() is None or sub[c].last_valid_index() < floor]
+    if stale:
+        return data, 'stale_series:' + ','.join(stale)
+    if data.index[-1] < floor:
+        return data, 'stale_common_history'
+    return data, None
+
+
 def _window_v2(frame, cols, weights, months, cutoff):
     """DR window on the last `months` calendar rows; (record, complete-rows frame or None)."""
     out = _empty_window(months, cols)
     if not cols:
         return dict(out, reason='no_streams'), None
-    sub = frame[cols].iloc[-months:]
-    data = sub.dropna()
+    data, reason = measured_window(frame, cols, months, cutoff)
     out['observations'] = len(data)
-    if len(data) < METHOD_V2['minimum_observations']:
-        return dict(out, reason='insufficient_common_history'), None
-    floor = cutoff - pd.offsets.MonthEnd(MAX_LAG)
-    stale = [c for c in cols if sub[c].last_valid_index() is None or sub[c].last_valid_index() < floor]
-    if stale:
-        return dict(out, reason='stale_series:' + ','.join(stale)), None
-    if data.index[-1] < floor:
-        return dict(out, reason='stale_common_history'), None
+    if reason:
+        return dict(out, reason=reason), None
     out.update(window_start=data.index[0].date().isoformat(), window_end=data.index[-1].date().isoformat())
     stats = _stats(data, weights)
     if isinstance(stats, str):
@@ -530,7 +545,7 @@ def _window_v2(frame, cols, weights, months, cutoff):
     return dict(out, status='provisional' if lagged or short else 'modeled',
                 effective_streams=stats['streams'], diversification_ratio=stats['ratio'],
                 volatility_reduction_pct=float(100 * (1 - 1 / stats['ratio'])), progress_points=stats['points'],
-                progress_display=_display_v2(stats['points'], stats['streams']), flags=flags,
+                progress_display=display_points(stats['points'], stats['streams']), flags=flags,
                 min_eigenvalue=stats['min_eigenvalue'], capital_weights={c: float(weights[c]) for c in cols},
                 risk_share=stats['shares'], annual_volatility_pct=stats['annual'],
                 annual_portfolio_volatility_pct=stats['portfolio'], shrinkage=stats['shrinkage']), data
@@ -541,7 +556,7 @@ def _item(stats, status):
         return dict(status='unavailable', reason=stats, effective_streams=None, progress_points=None,
                     progress_display=None, car_risk_share=None, annual_portfolio_volatility_pct=None)
     return dict(status=status, reason=None, effective_streams=stats['streams'], progress_points=stats['points'],
-                progress_display=_display_v2(stats['points'], stats['streams']),
+                progress_display=display_points(stats['points'], stats['streams']),
                 car_risk_share=stats['shares'][CAR_ID], annual_portfolio_volatility_pct=stats['portfolio'])
 
 
@@ -621,7 +636,7 @@ def _stress(data, weights, status, car_weight_pct_nav):
     return dict(status=status, reason=None, worst_months=worst, car_writeoff=writeoff)
 
 
-def _provenance(block, name):
+def block_provenance(block, name):
     return block['series'][name].get('provenance') or 'imported:' + str(block.get('fingerprint'))
 
 
@@ -633,10 +648,37 @@ def _record_v2(v2, retrospective, **fields):
                                     car_proxies_cutoff=None, series={}),
                   status='unavailable', reason=None, warnings=[], progress_points=None, progress_display=None,
                   method=copy.deepcopy(METHOD_V2), method_fingerprint=fingerprint(METHOD_V2),
-                  source_v2=_source_v2(v2), car_proxies=None, car_proxies_fingerprint=None, coverage=None,
+                  source_v2=source_v2_summary(v2), car_proxies=None, car_proxies_fingerprint=None, coverage=None,
                   windows={}, sensitivity=None, stress=None)
     result.update(fields)
     return seal_result(result)
+
+
+def car_basket_frame(v2, base, proxies):
+    """`base` plus the car basket column from a frozen proxy block: (frame, check, block, keep, reason).
+
+    `keep` holds the embedded block (kept even when invalid, so the failure replays); `reason` is None on success.
+    """
+    keep, block = {}, None
+    if proxies is not None and not isinstance(proxies, dict):
+        proxies = {'unreadable': True}  # valid JSON that is no block: same marker as an unreadable file, so it replays
+    if isinstance(proxies, dict):
+        block = copy.deepcopy(proxies)
+        keep = dict(car_proxies=block, car_proxies_fingerprint=block.get('fingerprint')
+                    if isinstance(block.get('fingerprint'), str) else None)
+    if proxies is None:
+        return base, None, None, keep, 'car_proxies_missing'
+    check = inspect_block(proxies, v2['as_of_date'])
+    if not check['integrity']:
+        return base, check, block, keep, 'invalid_car_proxies_block'
+    main_check = check['series'].get(BASKET_ID)
+    if main_check is None or not main_check['ok']:
+        excluded = proxies.get('excluded')
+        collected = excluded.get(BASKET_ID) if isinstance(excluded, dict) else None
+        reason = (main_check['reason'] or 'unusable') if main_check is not None else collected or 'missing'
+        return base, check, block, keep, 'car_basket_unavailable:' + str(reason)
+    basket = series_map(proxies)[BASKET_ID]
+    return base.assign(**{CAR_ID: basket.reindex(base.index)}), check, block, keep, None
 
 
 def _derive_v2(v2, proxies, retrospective):
@@ -644,7 +686,7 @@ def _derive_v2(v2, proxies, retrospective):
         return _record_v2(v2, retrospective, reason=reason, warnings=[reason.split(':')[0]], **more)
     if v2.get('status') == 'not_applicable':
         return _record_v2(v2, retrospective, status='not_applicable', reason='no_invested_assets')
-    if not _applicable(v2):
+    if not v2_applicable(v2):
         return fail('source_v2_unavailable')
     groups = [(g['id'], g['weight']) for g in v2['groups']]
     if not all(isinstance(w, (int, float)) and not isinstance(w, bool) and math.isfinite(w) and w >= 0 for _, w in groups) \
@@ -660,25 +702,9 @@ def _derive_v2(v2, proxies, retrospective):
     car_weight = weights.get(CAR_ID, 0.)
     frame, check, block = base, None, None
     if car_weight > 0:
-        if proxies is not None and not isinstance(proxies, dict):
-            proxies = {'unreadable': True}  # valid JSON that is no block: same marker as an unreadable file, so it replays
-        if isinstance(proxies, dict):
-            block = copy.deepcopy(proxies)
-            keep = dict(car_proxies=block, car_proxies_fingerprint=block.get('fingerprint')
-                        if isinstance(block.get('fingerprint'), str) else None)
-        if proxies is None:
-            return fail('car_proxies_missing')
-        check = inspect_block(proxies, v2['as_of_date'])
-        if not check['integrity']:
-            return fail('invalid_car_proxies_block', **keep)
-        main_check = check['series'].get(BASKET_ID)
-        if main_check is None or not main_check['ok']:
-            excluded = proxies.get('excluded')
-            collected = excluded.get(BASKET_ID) if isinstance(excluded, dict) else None
-            reason = (main_check['reason'] or 'unusable') if main_check is not None else collected or 'missing'
-            return fail('car_basket_unavailable:' + str(reason), **keep)
-        basket = series_map(proxies)[BASKET_ID]
-        frame = base.assign(**{CAR_ID: basket.reindex(base.index)})
+        frame, check, block, keep, reason = car_basket_frame(v2, base, proxies)
+        if reason:
+            return fail(reason, **keep)
     missing = sorted(g for g in weights if g not in frame)
     covered = []
     for g in sorted(weights):
@@ -692,10 +718,10 @@ def _derive_v2(v2, proxies, retrospective):
                    car_proxies_cutoff=None, series={})
     if block is not None:
         car_proxy = dict(id=BASKET_ID, names=list(BASKET_NAMES), last_month=block['series'][BASKET_ID]['last_month'],
-                         provenance=_provenance(block, BASKET_ID),
+                         provenance=block_provenance(block, BASKET_ID),
                          assumption='business_behaves_like_listed_remarketers_basket')
         vintage = dict(vintage, car_proxies_cutoff=block['cutoff_month'],
-                       series={n: dict(last_month=i['last_month'], provenance=_provenance(block, n))
+                       series={n: dict(last_month=i['last_month'], provenance=block_provenance(block, n))
                                for n, i in sorted(block['series'].items())})
         retrospective = bool(retrospective) or (isinstance(block.get('as_of_date'), str)
                                                 and block['as_of_date'] > v2['as_of_date'])
@@ -745,7 +771,7 @@ def derive_risk_progress_v2(v2, proxies, *, retrospective=False):
     The block-date rule is enforced on replay; a caller-asserted True cannot be proven or disproven there
     (a re-sealed record can carry any recorded fact), so it is an assertion, not a guarantee.
     """
-    if not _identity(v2):
+    if not has_v2_identity(v2):
         return None
     try:
         return _derive_v2(v2, proxies, retrospective)
@@ -753,7 +779,7 @@ def derive_risk_progress_v2(v2, proxies, *, retrospective=False):
         return _record_v2(v2, retrospective, reason='invalid_inputs', warnings=['invalid_inputs'])
 
 
-def _equal(a, b):
+def replay_equal(a, b):
     """Replay comparison: ints and strings exact, floats within 1e-8 absolute, containers recursive.
 
     Stricter than `same_value` on purpose: an int must stay an int (`observations`, counters).
@@ -765,9 +791,9 @@ def _equal(a, b):
     if isinstance(a, float) and isinstance(b, float):
         return math.isclose(a, b, rel_tol=0, abs_tol=TOLERANCE)
     if isinstance(a, dict) and isinstance(b, dict):
-        return a.keys() == b.keys() and all(_equal(a[k], b[k]) for k in a)
+        return a.keys() == b.keys() and all(replay_equal(a[k], b[k]) for k in a)
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
-        return len(a) == len(b) and all(_equal(x, y) for x, y in zip(a, b))
+        return len(a) == len(b) and all(replay_equal(x, y) for x, y in zip(a, b))
     return type(a) is type(b) and a == b if a is not None and b is not None else a is b
 
 
@@ -785,7 +811,7 @@ def validate_saved_risk_progress_v2(result, data, v2, expected_date=None, *, v2_
             return False
         if result.get('method') != METHOD_V2 or result.get('method_fingerprint') != fingerprint(METHOD_V2):
             return False
-        if result.get('source_v2') != _source_v2(v2):
+        if result.get('source_v2') != source_v2_summary(v2):
             return False
         datetime.fromisoformat(result['calculated_at'])
         if result['status'] not in {'modeled', 'provisional', 'unavailable', 'not_applicable'} or (
@@ -795,7 +821,7 @@ def validate_saved_risk_progress_v2(result, data, v2, expected_date=None, *, v2_
         fresh = derive_risk_progress_v2(v2, result.get('car_proxies'), retrospective=result['retrospective'])
         if fresh is None:
             return False
-        return _equal({k: v for k, v in fresh.items() if k not in IGNORED_V2},
+        return replay_equal({k: v for k, v in fresh.items() if k not in IGNORED_V2},
                       {k: v for k, v in result.items() if k not in IGNORED_V2})
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return False

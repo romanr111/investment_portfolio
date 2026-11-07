@@ -19,10 +19,18 @@ def iso_date(value):
     return date.fromisoformat(str(value)[:10]).isoformat()
 
 
+POSITIONAL_PREFIXES = frozenset({'crypto_lending', 'p2p', 'other_assets'})
+
+
+def is_positional(identifier):
+    """Ids of these kinds are list indexes; a record keyed by one must also name the holding's source identity."""
+    return identifier.split(':', 1)[0] in POSITIONAL_PREFIXES
+
+
 def bound_exposure_record(records, identifier, fallback, source_identity=None):
     """Index-keyed evidence is usable only when bound to the same economic holding."""
     record = records.get(identifier)
-    positional = identifier.split(':', 1)[0] in {'crypto_lending', 'p2p', 'other_assets'}
+    positional = is_positional(identifier)
     if record is not None and (not positional or (source_identity and record.get('source_identity') == source_identity)):
         return record
     return records.get(fallback, {})
