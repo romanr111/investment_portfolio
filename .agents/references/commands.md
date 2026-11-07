@@ -86,6 +86,25 @@ venv/bin/python portfolio_yic_reports/generate_quarterly_report.py --output path
 - `--output PATH` - output HTML path (default: `portfolio_yic_reports/portfolio_report_qN_YYYY.html`).
 - `--open` - open the generated report in a browser.
 
+### `just edgar-watch`
+
+Daily SEC EDGAR monitor for individual equity positions (module `src.edgar.watch`).
+
+```bash
+just edgar-watch --dry-alert                  # preview digest, no Telegram/healthcheck
+just edgar-watch                              # full run: alerts + digest + healthcheck
+just edgar-watch --limit-tickers 5            # largest N monitored positions only
+just edgar-watch --extract-rf <SYMBOL>        # offline RF extraction probe (no state writes)
+```
+
+- Requires `SEC_USER_AGENT` in `data/ib_flex_env.sh` (honest shared default otherwise); `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` optional (digest skipped without them); healthcheck via `HEALTHCHECK_EDGAR_URL`.
+- Reads the equity buckets (`Stocks`, `China Stocks`, `REIT`) from a `data/snapshots/combined_data_*.json` snapshot (default `combined_data_latest.json`, override with `--snapshot PATH`); never fetches prices or recomputes the snapshot.
+- Flags: `--backfill-days N`, `--data-dir PATH`, `--healthcheck-url URL`, `--verbose`. Exit codes: 0 ok, 1 fatal (steady SEC 403/429: block stop, no state commit, no sends), 2 partial (per-CIK failures, successful CIKs committed), 3 busy (already running; flock in `data/edgar/watch.lock`).
+- State and event log live in `data/edgar/` (see `data/README.md`). Alerts append before the state commit, so a lost digest is re-sent on the next run.
+- The launchd plist `deploy/launchd/com.investment-portfolio.edgar-watch.plist` schedules the 09:00 local daily run. It can also be wrapped by `src.job_control.run_job --job edgar` for lock+receipts; note the wrapper and the watch both honor `HEALTHCHECK_EDGAR_URL`, so set it for one side only.
+- `--extract-rf <SYMBOL>` fetches the two latest periodic filings of one symbol, prints the Item 1A extraction and diff counts, and writes a diff file to `data/edgar/rf_check/` without touching `state.json` or `alerts.jsonl`.
+- Offline tests: `tests/test_edgar_severity.py`, `test_edgar_risk_factors.py`, `test_edgar_state.py`, `test_edgar_watch.py`, `test_edgar_telegram.py` with fixtures in `tests/fixtures/edgar/`; no test performs live sec.gov access. The live gates L1-L4 (single request, one CIK, full dry run, full live run) are owner-executed after `SEC_USER_AGENT` is configured.
+
 ### `just fetch-snapshots`
 
 Downloads the artifacts of the last 4 runs of `.github/workflows/flex-snapshot.yml` (positions and quarterly trades XML) into `data/ib_flex_snapshots/` with the authenticated `gh` CLI. Download failures are suppressed and artifacts can land in nested folders: inspect the XML and keep validated exports in the top-level directory. There is no recipe for a direct fetch; a missing export is fetched with `IBFlexPortfolioFetcher` (`src/brokers/ib_flex_portfolio.py`; needs `IB_FLEX_TOKEN` and the query id env var, see `data/ib_flex_env.sh`), as shown in the `quarterly-report` skill.

@@ -18,6 +18,33 @@ committed to Git.
 
 Deleting these files is safe; the next run recreates them.
 
+## EDGAR watch state (`data/edgar/`)
+
+`just edgar-watch` keeps its state here. Everything except the log is recreated
+on the next run, and tracked files or PR text never carry holdings, weights,
+amounts, scores or account ids from this directory.
+
+- `state.json` - per-CIK bookkeeping: resolved universe, seen accessions, Risk
+  Factors baselines. Deleting it loses that history, so the next run treats
+  everything inside `max_backfill_days` as new again.
+- `alerts.jsonl` - append-only event log. `digest_sent` is stamped when the
+  alert is appended (true means "was part of the sent digest batch"); the state
+  commits before the Telegram send, so a delivery failure is never written back.
+- `cik_map.json` - ticker to CIK cache from `www.sec.gov/files/company_tickers.json`,
+  30-day refresh TTL; a failed refresh falls back to the stale cache.
+- `config.json` - optional. `force_include: {SYM: {via, note}}` to monitor an
+  unfund-classified ADR by proxy symbol, `force_exclude`, `min_market_value_usd`
+  floor, `max_backfill_days`, and `digest: {max_red_lines, max_info_lines,
+  max_form4_lines, char_budget}` caps.
+- `filings/<CIK>/<accession without dashes>/` - extracted Risk Factors text
+  (`risk_factors.txt`), `metadata.json`, and `rf_diff_vs_<prev>.txt` artifacts.
+- `rf_check/` - scratch output of `--extract-rf`; safe to delete.
+- `watch.lock` - advisory flock holder; `watch.log` - run log.
+
+The seen-accession window is capped (500 newest per CIK): a stale filing from a
+very high-volume filer can resurface once after cap churn; that documented
+trade-off keeps the state file bounded.
+
 ## Portfolio insights settings
 
 The dated Google Sheets portfolio tab can use optional local settings from

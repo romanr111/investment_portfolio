@@ -1,0 +1,25 @@
+{
+  "as_of_date": "2026-11-01",
+  "saved_at_utc": "2026-11-01T00:00:00+00:00",
+  "source": "test-fixture",
+  "data": {
+    "IB_DATA": {
+      "Stocks": {
+        "TESTA": 900,
+        "TESTB": 500,
+        "SAMPLECO": 300
+      },
+      "China Stocks": {
+        "HKSTOCK": 120
+      },
+      "REIT": {},
+      "Bonds": {
+        "SAMPLENOTE": 250
+      },
+      "Crypto Coins": {
+        "SAMPLECOIN": 10
+      }
+    },
+    "TOTAL_ASSETS": 2000
+  }
+}

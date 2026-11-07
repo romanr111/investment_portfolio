@@ -66,6 +66,12 @@ risk-progress *args:
 car-proxies *args:
     venv/bin/python -m analytics.holy_grail.car.risk_proxies {{args}}
 
+# EDGAR filing monitor for individual equity positions (SEC submissions +
+# 8-K items + Risk Factors diffs; alerts.jsonl, state.json, Telegram digest).
+# Requires SEC_USER_AGENT in data/ib_flex_env.sh; --dry-alert previews offline.
+edgar-watch *args:
+    venv/bin/python -m src.edgar.watch {{args}}
+
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:
     #!/usr/bin/env bash
