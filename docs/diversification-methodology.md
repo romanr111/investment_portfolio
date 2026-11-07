@@ -458,13 +458,8 @@ car block (`analytics/holy_grail/risk_progress_v3.py`), saved as
 `DIVERSIFICATION_DATA.risk_progress_v3`; `risk_progress_v2` (100 = 15 streams,
 invested only) stays in the details.
 
-**Goal (owner decision, 2026-11-07).** For an individual, non-accredited investor
-with up to about $1M in the US and Ukraine: 100 is reachable with effort but not
-trivial; a simple liquid portfolio stays well below it. Assets outside the broker
-count: property, land, Ukrainian government bonds and deposits and P2P loans are
-modeled from public parameters; infrastructure, private equity, private credit
-and timber count through listed stand-ins. Each asset has a country and
-optionally a city, one city treated as more closely linked.
+**Goal.** What the score aims for and why the target is 7:
+[diversification-goal.md](diversification-goal.md).
 
 ```
 DR = sum(w_i * sigma_i) / sqrt(wᵀ Σ w)      N_effective = DR²

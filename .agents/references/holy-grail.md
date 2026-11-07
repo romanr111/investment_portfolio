@@ -2,7 +2,7 @@
 
 Load this for any task on the diversification score, asset correlation, concentration limits, the what-if CLI, the car-category tracker (v3), the risk-progress headline (`risk_progress_v3` with private streams; `risk_progress_v2` before it) and its car proxy block, or the saved `DIVERSIFICATION_DATA` record.
 
-This is a map, not the methodology. Formulas, thresholds and policy live in `docs/diversification-methodology.md`, which wins on any conflict. Link to its headings by name, not by line number. The repo is public: never put holdings, weights, amounts, scores or account ids from `data/` into tracked files.
+This is a map, not the methodology. Formulas, thresholds and policy live in `docs/diversification-methodology.md`, which wins on any conflict; the goal the headline serves is in `docs/diversification-goal.md`. Link to its headings by name, not by line number. The repo is public: never put holdings, weights, amounts, scores or account ids from `data/` into tracked files.
 
 ## 1. What exists
 
