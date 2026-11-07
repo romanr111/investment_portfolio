@@ -643,7 +643,9 @@ reaches 100 at its best weights, while a typical liquid portfolio stays near 60.
 **Universe and weights.** The invested part of the v2 record plus the declared
 private streams. Capital weights are value over that universe, applied to the
 whole window like v2. Cash stays outside, except deposits declared from Cash
-(see below). Balances and totals are never changed.
+(see below). The view's "Кеш поза оцінкою" shows the v2 cash share minus those
+deposits (both as shares of NAV); the "Cash від повного портфеля" detail row
+keeps the full v2 cash share. Balances and totals are never changed.
 
 **Streams.**
 
@@ -672,8 +674,8 @@ whole window like v2. Cash stays outside, except deposits declared from Cash
   same location across classes shares `k`; different cities of one country share
   `g` and `h`; countries are linked only through `F` (and the UA link). US and
   `other` rows have no country factor; without a location (or with
-  `diversified`) `s_l` folds into `s_k`. Locations are compared after collapsing
-  whitespace and case.
+  `diversified` or `-`) `s_l` folds into `s_k`. Locations are compared after
+  collapsing whitespace and case.
 - UA link: the Ukrainian country factor is tied to the measured Ukrainian
   streams (the car business, only with a reviewed `business_geography` of
   Ukraine, and Ukrainian proxy holdings):
@@ -700,10 +702,12 @@ columns change the joint shrinkage.
 
 **Parameters.** `analytics/models/private_streams_v1.json` holds public
 literature and index values only, with sources and an access note for a
-non-accredited investor for every row. Its fingerprint is part of the method,
-and the parameters a record used are embedded in it. Changing any value needs a
-new file and method version, and the boundary shows "Змінено методику". Rows
-(class:country):
+non-accredited investor for every row. The method embeds a fingerprint of the
+behaviour-bearing values only (`parameters_fingerprint`); descriptions,
+sources, access notes, proxy labels and the changelog are outside it. The
+parameters a record used are embedded in it. Changing any behaviour-bearing
+value needs a new file and method version, and the boundary shows "Змінено
+методику". Rows (class:country):
 
 - `residential_re` US, UA, PL, DE, ES, PT, AE, GE
 - `commercial_re` US, UA, DE, ES, PL
@@ -743,6 +747,10 @@ Rules:
 - A declared class without a usable series gives unavailable (`no_history`);
   the factor and proxy histories are collected with the v2 histories only when
   private streams are declared.
+- A missing or unreadable parameter file gives unavailable with a reason that
+  names the cause (`private_model_invalid:<Error>`); an unexpected failure
+  during derivation does the same (`invalid_inputs:<Exception>`). A sealed
+  record replays only when the same failure reproduces.
 
 **Calibration (public data, the 60 months to 2026-10; parameters frozen by
 sha256 before any score was read, never tuned).** The reference portfolios:
@@ -803,6 +811,10 @@ reaches 89.7. A 30-stream individual menu reaches 100 (7.1 streams, adverse
   not see.
 - Declared values are appraisals.
 - The 60-month window is one regime.
+- Moving a stream between locations is not a location ranking: the effect
+  depends on the rest of the portfolio. In an equity-heavy portfolio, moving a
+  Ukrainian stream to the US can add more diversification than moving it to
+  another Ukrainian city. Geography enters as a pairwise link structure.
 
 The score is a modelled effect of diversification under a product scale. It is
 not a grade, a forecast or a measurement of any property or business.

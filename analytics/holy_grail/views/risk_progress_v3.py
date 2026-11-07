@@ -205,7 +205,9 @@ def risk_progress_v3_view(view, data, v2, expected, saved_at_utc=None):
     definitions = v2['configuration']['group_definitions']
     stamp = _stamp(v2['as_of_date'])
     cash = v2['coverage'].get('cash_pct_nav')
-    cash_text = _pct(cash) if cash is not None else '-'
+    source = (record.get('coverage') or {}).get('cash_source_pct_nav') if valid else None
+    outside = max(0., cash - source) if cash is not None and source is not None else None
+    cash_text = _pct(outside) if outside is not None else '-'
     safeguards = _concentration_section_for(data, v2, v2['configuration'].get('concentration_decisions'))
     safeguard_rows = list((safeguards or {}).get('rows') or [])
     view.update(title='Диверсифікація портфеля', as_of=stamp, cash_cell=cash_text, warnings=[], principal_constraint='',

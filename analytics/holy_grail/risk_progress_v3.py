@@ -9,8 +9,8 @@ A sibling record derived offline from a saved, replayed capital_diversification_
   business basket.
 
 The declarations live in the private config (`private_streams`) and are frozen inside the v2 record's configuration.
-The parameters live in the public model file `analytics/models/private_streams_v1.json`; its fingerprint is part of
-the method and the parameters used are embedded in the record.
+The parameters live in the public model file `analytics/models/private_streams_v1.json`; the fingerprint of its
+behaviour-bearing values is part of the method and the parameters used are embedded in the record.
 
 Streams
   measured : a v2 group representative history (after reclassification), the car basket, a proxy basket.
@@ -25,7 +25,7 @@ Covariance : Sigma = A blockdiag(Sigma_shrunk(measured), I) A' (positive semidef
 Score      : DR = sum(w sigma)/sqrt(w' Sigma w); points = 100*(1-1/DR)/(1-1/sqrt(7)) clipped; 100 only at 7 streams.
 
 The central parameters give the headline. Favorable and adverse vary only the dependence parameters (correlations,
-residual shares, rho); a separate x0.5/x2 residual volatility sensitivity is reported. Neither is a confidence
+residual shares, rho); a separate x0.5/x2 total modeled volatility sensitivity is reported. Neither is a confidence
 interval. Balances, totals and the v2 record are never changed; a failure is an explicit unavailable record and
 never falls back to another method.
 """
@@ -65,6 +65,8 @@ PROXY_PREFIX = 'proxy:'
 PRIVATE_PREFIX = 'private:'
 FX_COLUMN = 'fx_eur'
 DOCUMENTATION_KEYS = ('basis', 'sources', 'access_non_accredited', 'notes')
+MODEL_ROW_KEYS = frozenset({'vol_annual', 'share_scenarios', 'cash_eligible'}
+                           | set(CORRELATION_KEYS.values()) | set(DOCUMENTATION_KEYS))
 ENTRY_REQUIRED = frozenset({'id', 'class', 'country', 'value_usd', 'valuation_as_of'})
 ENTRY_OPTIONAL = frozenset({'location', 'currency', 'debt_usd', 'nav_source', 'held_from', 'valuation_source',
                             'reviewed_at', 'primary_residence'})
@@ -129,6 +131,8 @@ def load_model(path=PRIVATE_MODEL_PATH):
         cls, _, country = key.partition(':')
         if not cls or cls in proxies or country_code(country) != country or not isinstance(row, dict):
             raise ValueError('model_rows')
+        if set(row) - MODEL_ROW_KEYS:
+            raise ValueError('model_rows')
         _check_triplet(row.get('vol_annual'), 1e-6, 3.)
         for factor in FACTORS:
             if factor != 'fx_eur' or 'corr_fx_eur' in row:
@@ -146,8 +150,19 @@ def load_model(path=PRIVATE_MODEL_PATH):
     return model
 
 
+def _model_parameters(model):
+    """The behaviour-bearing parameters only; prose, sources and labels never enter the method fingerprint."""
+    return dict(
+        version=model['version'], factors=copy.deepcopy(model['factors']),
+        no_country_factor=list(model['no_country_factor']), car_link_rho=copy.deepcopy(model['car_link_rho']),
+        proxies={name: dict(symbols=list(proxy['symbols'])) for name, proxy in sorted(model['proxies'].items())},
+        rows={key: {field: copy.deepcopy(value) for field, value in sorted(row.items())
+                    if field not in DOCUMENTATION_KEYS}
+              for key, row in sorted(model['rows'].items())})
+
+
 def method_v3(model):
-    """The method definition; the model enters through its version and fingerprint."""
+    """The method definition; the model enters through its version and parameter fingerprint."""
     return {
         'version': VERSION_V3, 'scope': 'invested_assets_plus_declared_private_streams',
         'cash': 'excluded_except_declared_cash_eligible_deposits',
@@ -158,7 +173,7 @@ def method_v3(model):
                     'proxy': 'equal_weight_basket_all_names_required',
                     'modeled': 'r=beta*F+sigma_res*(sqrt(s_c)*g_country+sqrt(s_k)*h_class_country+sqrt(s_l)*k_location)',
                     'identity': 'class_country_location',
-                    'location': 'whitespace_collapsed_casefold_diversified_or_empty_is_none'},
+                    'location': 'whitespace_collapsed_casefold_diversified_dash_or_empty_is_none'},
         'loadings': 'beta=Sigma_F^-1*(sigma_F*rho*vol_central*multiplier); rho_scaled_to_r2_cap; residual=vol^2-beta*Sigma_F*beta',
         'ua_link': 'g_UA=rho*e/sigma_e+sqrt(1-rho^2)*u_UA; e=value_weighted_residual_of_measured_ua_streams_vs_other_measured',
         'scenarios': {'headline': 'central', 'favorable': 'low', 'adverse': 'high',
@@ -179,7 +194,8 @@ def method_v3(model):
         'tolerances': dict(rp.METHOD_V2['tolerances'], correlation_r2_cap=R2_CAP),
         'model': {'path': 'analytics/models/private_streams_v1.json',
                   'version': model.get('version') if isinstance(model, dict) else None,
-                  'fingerprint': fingerprint(model) if isinstance(model, dict) else None},
+                  'parameters_fingerprint': (fingerprint(_model_parameters(model))
+                                             if isinstance(model, dict) else None)},
     }
 
 
@@ -240,7 +256,7 @@ def _location(value, reason):
     if not isinstance(value, str):
         raise _Unavailable(reason)
     text = ' '.join(value.split()).casefold()
-    return None if text in ('', 'diversified') else text
+    return None if text in ('', 'diversified', '-') else text
 
 
 def _kind(model, cls, country, reason):
@@ -254,12 +270,12 @@ def _kind(model, cls, country, reason):
 
 
 def _private(v2, model):
-    """Declared entries and reclassified positions: (items, excluded counts, flags). Raises _Unavailable."""
+    """Declared entries and reclassified positions: (items, excluded counts, flags, cash_total). Raises _Unavailable."""
     settings = v2['configuration'].get('extraction_settings')
     declared = settings.get('private_streams') if isinstance(settings, dict) else None
     excluded = dict(primary_residence=0, not_yet_held=0, zero_value=0)
     if declared is None:
-        return [], excluded, set()
+        return [], excluded, set(), 0.
     bad = 'invalid_private_streams'
     if not isinstance(declared, dict) or not set(declared) <= {'entries', 'reclassify'}:
         raise _Unavailable(bad)
@@ -331,7 +347,7 @@ def _private(v2, model):
                       else [('unknown', value)])
         items.append(dict(source='reclassify', cls=spec['class'], country=country, location=location, kind=kind,
                           amount=value, components=components))
-    return items, excluded, flags
+    return items, excluded, flags, cash_total
 
 
 def _stream_id(item):
@@ -639,7 +655,8 @@ def _derive(v2, proxies, model, retrospective):
     if v2.get('status') == 'not_applicable':
         return make(status='not_applicable', reason='no_invested_assets')
     if not isinstance(model, dict):
-        return fail('private_model_invalid')
+        cause = MODEL_ERROR if model is MODEL and MODEL_ERROR else type(model).__name__
+        return fail('private_model_invalid' + (':' + cause if cause else ''))
     if not rp.v2_applicable(v2):
         return fail('source_v2_unavailable')
     groups = [(g['id'], g['weight']) for g in v2['groups']]
@@ -648,7 +665,7 @@ def _derive(v2, proxies, model, retrospective):
     invested_pct_nav = float(v2['coverage']['invested_pct_nav'])
     cash_pct_nav = float(v2['coverage']['cash_pct_nav'])
     try:
-        items, excluded, private_flags = _private(v2, model)
+        items, excluded, private_flags, cash_total = _private(v2, model)
         amounts = {kinds: _universe(v2, items, kinds) for kinds in
                    (frozenset(), frozenset({'modeled'}), frozenset({'modeled', 'proxy'}))}
     except _Unavailable as error:
@@ -697,7 +714,10 @@ def _derive(v2, proxies, model, retrospective):
                                for n, i in sorted(block['series'].items())})
         retrospective = bool(retrospective) or (isinstance(block.get('as_of_date'), str)
                                                 and block['as_of_date'] > v2['as_of_date'])
+    nav = invested * 100. / invested_pct_nav if invested and invested_pct_nav else None
+    cash_source_pct_nav = 100. * cash_total / nav if nav is not None else 0.
     coverage = dict(invested_pct_nav=invested_pct_nav, cash_pct_nav=cash_pct_nav,
+                    cash_source_pct_nav=cash_source_pct_nav,
                     universe_over_invested=total / invested,
                     private_pct_universe=100 * (by_kind['modeled'] + by_kind['proxy']) / total,
                     modeled_pct_universe=100 * by_kind['modeled'] / total,
@@ -757,8 +777,9 @@ def derive_risk_progress_v3(v2, proxies, *, model=_DEFAULT, retrospective=False)
     try:
         return _derive(v2, proxies, model, retrospective)
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError, IndexError, ZeroDivisionError,
-            np.linalg.LinAlgError):
-        return _record_v3(v2, retrospective, method_v3(model), reason='invalid_inputs', warnings=['invalid_inputs'])
+            np.linalg.LinAlgError) as error:
+        return _record_v3(v2, retrospective, method_v3(model),
+                          reason='invalid_inputs:' + type(error).__name__, warnings=['invalid_inputs'])
 
 
 def validate_saved_risk_progress_v3(result, data, v2, expected_date=None, *, v2_validated=False):
@@ -769,7 +790,7 @@ def validate_saved_risk_progress_v3(result, data, v2, expected_date=None, *, v2_
             return False
         if result.get('result_fingerprint') != fingerprint({k: v for k, v in result.items() if k != 'result_fingerprint'}):
             return False
-        if MODEL is None or result.get('method') != METHOD_V3 or result.get('method_fingerprint') != fingerprint(METHOD_V3):
+        if result.get('method') != METHOD_V3 or result.get('method_fingerprint') != fingerprint(METHOD_V3):
             return False
         if not v2_validated and not validate_saved_allocation_v2(v2, data, expected_date, replay=True):
             return False
