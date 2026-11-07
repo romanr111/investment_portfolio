@@ -53,7 +53,7 @@ car-crisis *args:
 risk-progress *args:
     venv/bin/python -m analytics.holy_grail.risk_progress {{args}}
 
-# Frozen block of retrospective used-vehicle proxy series (price indexes, listed remarketers) for the risk-progress car scenarios.
+# Frozen block of retrospective used-vehicle proxy series (price indexes, listed remarketers) for the risk-progress car scenarios and the comparison in risk_progress_v2.
 car-proxies *args:
     venv/bin/python -m analytics.holy_grail.car.risk_proxies {{args}}
 

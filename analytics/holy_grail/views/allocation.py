@@ -79,7 +79,8 @@ def group_label(identifier, definitions):
 
 
 _PROXY_LABELS = {'manheim_wholesale': 'Manheim (США, гурт)', 'bls_used_retail': 'BLS CPI вживані авто (США, роздріб)',
-                 'auto1_wholesale_eu': 'AUTO1 (Європа, гурт)', 'listed_remarketers': 'Акції CPRT/KMX/OPLN (кошик)'}
+                 'auto1_wholesale_eu': 'AUTO1 (Європа, гурт)', 'listed_remarketers': 'Акції CPRT/KMX/OPLN (кошик)',
+                 'ukraine_vehicle_cpi': 'Держстат ІСЦ купівля транспорту (Україна, роздріб, USD)'}
 _RELATIONS = {'not_correlated': 'не корелює', 'moderately_correlated': 'помірно корелює', 'correlated': 'корелює'}
 _EFFECTS = {'adds_diversification': 'додає диверсифікацію', 'reduces_diversification': 'знижує диверсифікацію',
             'neutral': 'не змінює диверсифікацію'}
@@ -507,10 +508,35 @@ def sheet_detail_rows(rows):
     return packed
 
 
+def risk_fact_rows(result):
+    """Detail rows for the confirmed and unknown risk facts of a replayed v2 record, and the public fact texts."""
+    risk_labels = {'treasury_short': 'Treasury до 1 року', 'treasury_medium': 'Treasury понад 1-10 років',
+                   'treasury_long': 'Treasury понад 10 років', 'credit_lending': 'Кредит та lending',
+                   'business': 'Приватний бізнес', 'business_ukraine': 'Бізнес в Україні', 'economic_fx': 'Валютна експозиція',
+                   'counterparty': 'Залежність від контрагентів', 'illiquidity': 'Обмежена ліквідність',
+                   'confirmed_ai_theme': 'Підтверджена AI-тема'}
+    facts = sorted((item for item in result.get('risk_facts', []) if item['id'] in risk_labels),
+                   key=lambda item: (-item['affected_pct_nav'], item['id']))
+    public_facts = [risk_labels[item['id']] + ': ' + _pct(item['affected_pct_nav']) + ' NAV' for item in facts]
+    rows = [('Фактичний ризик', fact) for fact in public_facts]
+    for detail in result.get('risk_details', []):
+        duration = f"{detail['rate_duration']:.1f}".replace('.', ',')
+        maturity = detail['maturity'] or 'не підтверджено'
+        rows.append(('Підтверджена duration', duration + ' року; погашення: ' + maturity + '; ' + _pct(detail['affected_pct_nav']) + ' NAV'))
+    for key, unknown_label in [('duration_pct_nav', 'Duration не підтверджено'),
+                               ('counterparty_pct_nav', 'Контрагенти не підтверджені'),
+                               ('liquidity_pct_nav', 'Ліквідність не підтверджена'),
+                               ('business_geography_pct_nav', 'Географія бізнесу не підтверджена'),
+                               ('economic_fx_pct_nav', 'Економічна валютна експозиція не підтверджена')]:
+        if result.get('risk_unknown', {}).get(key, 0) > 0:
+            rows.append(('Невідомо', unknown_label + ': ' + _pct(result['risk_unknown'][key]) + ' NAV'))
+    return rows, public_facts
+
+
 def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
     """Present only whitelisted fields from a fully replayed v2 record."""
     from analytics.holy_grail.allocation_v2_inputs import validate_saved_allocation_v2
-    result = data['DIVERSIFICATION_DATA']['allocation_score_v2']
+    result = data['DIVERSIFICATION_DATA'].get('allocation_score_v2')
     expected = expected_date or str(data.get('POSITION_DATA', {}).get('as_of_date')
                                     or data.get('DATA_METADATA', {}).get('last_updated') or '')[:10]
     view = empty_view('Некоректна або неузгоджена збережена оцінка')
@@ -519,20 +545,31 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
                 sheet_number='Дані недоступні', drivers=[], coverage_summary='', largest_text='-',
                 sensitivity_text='-', rows=[], risk_facts=[])
     valid = validate_saved_allocation_v2(result, data, expected, replay=True)
-    # v3 lives beside v2. A valid v3 supplies the scenarios; one that cannot be computed shows the
-    # v2 assumption numbers with an explicit warning; a present but invalid one never falls back.
-    shown, extra_warnings = result, []
+    # A saved risk_progress_v2 decides the headline before any older method: it is replayed against this very v2,
+    # and a record that does not replay shows "Недоступно" and never another method's number. Key presence decides,
+    # so a present-but-null record is replayed too; only snapshots without the key keep the older dispatch.
+    # risk_progress_v3 (the individual-investor headline) comes first under the same rule.
+    if valid and 'risk_progress_v3' in data['DIVERSIFICATION_DATA']:
+        from analytics.holy_grail.views.risk_progress_v3 import risk_progress_v3_view
+        return risk_progress_v3_view(view, data, result, expected, saved_at_utc)
+    if valid and 'risk_progress_v2' in data['DIVERSIFICATION_DATA']:
+        from analytics.holy_grail.views.risk_progress_v2 import risk_progress_v2_view
+        return risk_progress_v2_view(view, data, result, expected, saved_at_utc)
+    # v3 lives beside v2. A valid record supplies the scenarios; one that cannot be computed passes to v2 with an
+    # explicit warning; a present but invalid one never falls back.
+    shown, extra_warnings, fallback_label = result, [], ''
+    shown_keys = ('version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')
     category_record = data['DIVERSIFICATION_DATA'].get('allocation_score_v3')
     if valid and category_record is not None:
         from analytics.holy_grail.allocation_score_v3 import validate_saved_allocation_v3
         if not validate_saved_allocation_v3(category_record, data, result, expected, v2_validated=True):
             valid = False
         elif category_record['status'] == 'unavailable':
-            extra_warnings = category_record['warnings']
+            extra_warnings += category_record['warnings']
+            fallback_label = ' · Припущення v2: блок категорії авто недоступний'
         else:
-            shown = dict(result, **{key: category_record[key] for key in (
-                'version', 'method', 'status', 'score', 'display_score', 'category', 'scenarios', 'assessment')},
-                warnings=category_record['warnings'])
+            shown = dict(result, **{key: category_record[key] for key in shown_keys},
+                         warnings=category_record['warnings'])
     # Risk progress lives beside v2 as well. Absent: the view is unchanged. Present: replayed against this
     # very v2; one that does not replay shows "Недоступно" and never a number.
     progress_row, progress_lines = None, []
@@ -580,8 +617,7 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
             if assessment['available'] != assessment['expected']:
                 label += ' · Не всі сценарії доступні'
             if shown['status'] == 'provisional': label += ' · Попередньо'
-            if extra_warnings:  # the tab shows this label and note only, so the v2 fallback must be named here
-                label += ' · Припущення v2: блок категорії авто недоступний'
+            label += fallback_label  # the tab shows this label and note only, so a fallback must be named here
             from analytics.holy_grail.car.resale_market import conclusion_note
             view['conclusion_note'] = conclusion_note(shown, data.get('CAR_RESALE_MARKET_CONTEXT'), saved_at_utc,
                                                       progress_lines)
@@ -642,26 +678,8 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
                 rows.append(('Порівняння', 'Внески відтворено зі збережених входів; відбитки джерела не підтверджені без оригіналу.'))
             else:
                 rows.append(('Порівняння', 'Недоступно: ' + str(comparison.get('reason', 'невідомо'))))
-            risk_labels = {'treasury_short': 'Treasury до 1 року', 'treasury_medium': 'Treasury понад 1-10 років',
-                           'treasury_long': 'Treasury понад 10 років', 'credit_lending': 'Кредит та lending',
-                           'business': 'Приватний бізнес', 'business_ukraine': 'Бізнес в Україні', 'economic_fx': 'Валютна експозиція',
-                           'counterparty': 'Залежність від контрагентів', 'illiquidity': 'Обмежена ліквідність',
-                           'confirmed_ai_theme': 'Підтверджена AI-тема'}
-            facts = sorted((item for item in result.get('risk_facts', []) if item['id'] in risk_labels),
-                           key=lambda item: (-item['affected_pct_nav'], item['id']))
-            public_facts = [risk_labels[item['id']] + ': ' + _pct(item['affected_pct_nav']) + ' NAV' for item in facts]
-            rows.extend(('Фактичний ризик', fact) for fact in public_facts)
-            for detail in result.get('risk_details', []):
-                duration = f"{detail['rate_duration']:.1f}".replace('.', ',')
-                maturity = detail['maturity'] or 'не підтверджено'
-                rows.append(('Підтверджена duration', duration + ' року; погашення: ' + maturity + '; ' + _pct(detail['affected_pct_nav']) + ' NAV'))
-            for key, unknown_label in [('duration_pct_nav', 'Duration не підтверджено'),
-                               ('counterparty_pct_nav', 'Контрагенти не підтверджені'),
-                               ('liquidity_pct_nav', 'Ліквідність не підтверджена'),
-                               ('business_geography_pct_nav', 'Географія бізнесу не підтверджена'),
-                               ('economic_fx_pct_nav', 'Економічна валютна експозиція не підтверджена')]:
-                if result.get('risk_unknown', {}).get(key, 0) > 0:
-                    rows.append(('Невідомо', unknown_label + ': ' + _pct(result['risk_unknown'][key]) + ' NAV'))
+            fact_rows, public_facts = risk_fact_rows(result)
+            rows.extend(fact_rows)
             rows.extend(('Обмеження', warning) for warning in warnings)
             rows.append(('Метод', 'Історичні кореляції та модельні припущення не гарантують майбутньої стійкості або прибутку.'))
             # The Details group no longer renders in the tab (owner 2026-10-29)

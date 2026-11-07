@@ -1,0 +1,1757 @@
+{
+ "version": "private_streams_v1",
+ "as_of": "2026-11-07",
+ "description": "Public parameters of risk_progress_v3 (analytics/holy_grail/risk_progress_v3.py): modeled private streams by class:country and listed proxy baskets. Literature and public-index values only; no holdings. Changing any value needs a new file and method version.",
+ "parameters_sha256_of_research_file": "185d96b27eea7cc058f67665bd5b4fb31e539abac625fa0531b10de482d86ed4",
+ "conventions": {
+  "stream": "r = beta*F + sigma_res*(sqrt(s_c)*g_country + sqrt(s_k)*h_class_country + sqrt(s_l)*k_location); one stream per class, country and location; no idiosyncratic term",
+  "vol_annual": "annual USD volatility, unlevered, total return, desmoothed where possible; the central value is always used (x0.5/x2 sensitivity reported separately)",
+  "correlations": "with the factor representatives (equity_us, treasury_medium, commodities, optional EURUSD=X); low <= central <= high; favorable uses low, adverse uses high",
+  "share_scenarios": "residual variance shares country/class_country/location summing to 1; low = low country dependence",
+  "no_country_factor": "US risk sits in the factors; other means no single country",
+  "cash_eligible": "only these rows may declare nav_source cash (the value is already in CASH_DATA); USD cash, including USD deposits in Ukrainian banks, stays cash and outside the score",
+  "access_non_accredited": "how a non-accredited individual can hold the class (Reg CF, Reg A and 506(b) possible; 506(c) accredited only)"
+ },
+ "factors": {
+  "equity": {
+   "group": "equity_us"
+  },
+  "bonds": {
+   "group": "treasury_medium"
+  },
+  "commodity": {
+   "group": "commodities"
+  },
+  "fx_eur": {
+   "symbol": "EURUSD=X"
+  }
+ },
+ "no_country_factor": [
+  "US",
+  "other"
+ ],
+ "car_link_rho": {
+  "low": 0.25,
+  "central": 0.5,
+  "high": 0.7
+ },
+ "car_link_rho_documentation": {
+  "basis": "model-judgement",
+  "definition": "corr(car-business residual, g_UA); residual = rho g + sqrt(1-rho^2) e",
+  "rationale": "USD-priced imported used cars; demand tied to UA incomes, FX and war (2022 collapse then duty-free import surge); policy-specific customs shocks keep it below the FX/sovereign s_c^0.5 (~0.75-0.77). No measured series found.",
+  "sources": [
+   {
+    "url": "none",
+    "publisher": "n/a",
+    "date": "2026-11-07",
+    "note": "not searched in this revision (time box spent on housing and Eurobond data); value unchanged",
+    "kind": "judgement"
+   }
+  ]
+ },
+ "proxies": {
+  "infrastructure": {
+   "symbols": [
+    "BIP",
+    "BEP"
+   ],
+   "label": "Brookfield listed infrastructure and renewable vehicles"
+  },
+  "private_equity": {
+   "symbols": [
+    "BN",
+    "KKR"
+   ],
+   "label": "listed alternative asset managers (equity beta dominates)"
+  },
+  "private_credit_funds": {
+   "symbols": [
+    "BIZD"
+   ],
+   "label": "listed BDC basket"
+  },
+  "timberland": {
+   "symbols": [
+    "WOOD"
+   ],
+   "label": "listed global timber and forestry"
+  }
+ },
+ "known_model_gaps": {
+  "iberian_cycle": "ES vs PT housing residuals after F correlate 0.69 (q) / 0.88 (a); the model treats g_ES and g_PT as independent, overstating ES+PT diversification",
+  "euro_rates": "euro-area rate shocks (2022) hit DE/ES/PT property together but IEF is a US Treasury factor; cross-country residual corr DE-ES 0.16, DE-PT 0.16 (q) stays low over 2006-2026"
+ },
+ "changelog": [
+  "US and other rows unchanged from assumptions_v3.json.",
+  "UA rows replaced by params_ua/ua_rows.json (residential_re:UA measured from LUN city series; commercial_re:UA vol 0.22 -> 0.20 judgement; others unchanged).",
+  "Added global rows from params_global/global_rows.json: commercial_re:DE, commercial_re:ES, commercial_re:PL, residential_re:AE, residential_re:DE, residential_re:ES, residential_re:GE, residential_re:PL, residential_re:PT.",
+  "Dropped farmland:PL: not purchasable by the target investor: Polish law restricts farmland buyers to farmers; non-EU buyers also need an Interior Ministry permit.",
+  "Weak rows kept with flags: commercial_re:PL (institutional deals index over EUR 5m), residential_re:GE (judgement, no continuous series), residential_re:AE (BIS offer prices to 2024-04).",
+  "Accepted the global agent regime fix for DE/ES/PT central correlation vectors (consistency with the 60-month factor matrix; no score was computed when it was made).",
+  "Model gap: ES and PT residuals correlate 0.69-0.88 (Iberian cycle) but country factors are independent; the global reference R8 therefore holds only one Iberian country.",
+  "Optional 4th factor EURUSD=X: used only by rows that declare corr_fx_eur (EUR beta 0 otherwise), so US/UA/other rows are unaffected."
+ ],
+ "rows": {
+  "commercial_re:DE": {
+   "vol_annual": {
+    "low": 0.09,
+    "central": 0.13,
+    "high": 0.18
+   },
+   "corr_equity": {
+    "low": 0.2,
+    "central": 0.32,
+    "high": 0.45
+   },
+   "corr_bonds": {
+    "low": 0.0,
+    "central": 0.25,
+    "high": 0.53
+   },
+   "corr_commodity": {
+    "low": -0.1,
+    "central": 0.05,
+    "high": 0.3
+   },
+   "corr_fx_eur": {
+    "low": 0.7,
+    "central": 0.85,
+    "high": 0.94
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.3,
+     "s_k": 0.15,
+     "s_l": 0.55
+    },
+    "central": {
+     "s_c": 0.4,
+     "s_k": 0.2,
+     "s_l": 0.4
+    },
+    "high": {
+     "s_c": 0.55,
+     "s_k": 0.2,
+     "s_l": 0.25
+    }
+   },
+   "basis": {
+    "vol_annual": "measured + judgement: vdp commercial (office/retail, prime and non-prime) USD 12m vol 9.7% all, 11.0% office, 8.9% retail; annual 11.3% (n=13); AC1 0.82-0.90 so Geltner desmoothing refused (a > 0.8); central raised to 13% for smoothing and small-unit heterogeneity (judgement); US commercial central 12%",
+    "corr_equity": "measured: quarterly 0.30, annual 0.36 (2013Q3-2026Q2)",
+    "corr_bonds": "measured: quarterly 0.35, annual 0.53 (window dominated by the 2022 rate shock); low 0 (judgement, US NPI -0.18)",
+    "corr_commodity": "measured: quarterly 0.09, annual -0.07",
+    "corr_fx_eur": "measured: quarterly 0.94, annual 0.86",
+    "s_c": "measured anchor: res vs commercial residual corr 0.69 (q) / 0.83 (a) -> sqrt(s_c_res x s_c_com) ~0.46-0.66; set below residential (0.40)",
+    "s_k": "judgement: s_c+s_k 0.60 central (US commercial s_k 0.55; no German commercial city pair at quarterly frequency)",
+    "s_l": "judgement: single small premises (tenant, micro-location) heterogeneity"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "CPP Germany vdp commercial all/office/retail quarterly 2013Q1+ (transaction-based hedonic, bank-financed deals; not small-unit specific)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    }
+   ],
+   "access_non_accredited": "No restriction on foreign buyers (unverified_summary). Costs: Grunderwerbsteuer 3.5-6.5% by state, notary and land registry ~1.5-2%, agent up to ~3.6%: round trip 8-15%. Ticket: small flat ~EUR 150-300k (judgement). Rent regulation (Mietpreisbremse) caps rent growth in tight markets. Commercial units: same purchase rules; no small-premises index exists (this row is a proxy)."
+  },
+  "commercial_re:ES": {
+   "vol_annual": {
+    "low": 0.08,
+    "central": 0.12,
+    "high": 0.17
+   },
+   "corr_equity": {
+    "low": 0.15,
+    "central": 0.3,
+    "high": 0.4
+   },
+   "corr_bonds": {
+    "low": 0.0,
+    "central": 0.25,
+    "high": 0.43
+   },
+   "corr_commodity": {
+    "low": -0.05,
+    "central": 0.12,
+    "high": 0.25
+   },
+   "corr_fx_eur": {
+    "low": 0.7,
+    "central": 0.8,
+    "high": 0.87
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.25,
+     "s_k": 0.2,
+     "s_l": 0.55
+    },
+    "central": {
+     "s_c": 0.4,
+     "s_k": 0.2,
+     "s_l": 0.4
+    },
+    "high": {
+     "s_c": 0.55,
+     "s_k": 0.2,
+     "s_l": 0.25
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: Banco de Espana commercial (registry transactions, hedonic) USD vol quarterly-annualised 9.0% all, 12.3% office, 9.7% retail; 12m 8.1%; annual 10.2% (2014Q3-2026Q2, no bust in sample); AC1 0.20 (not smoothed, desmoothing immaterial); central 12% adds pre-2014 bust risk (judgement)",
+    "corr_equity": "measured: quarterly 0.28, annual 0.38; retail 0.24 / 0.41",
+    "corr_bonds": "measured: quarterly 0.30, annual 0.40 (2014+ only)",
+    "corr_commodity": "measured: quarterly 0.15, annual 0.02",
+    "corr_fx_eur": "measured: quarterly 0.87, annual 0.84",
+    "s_c": "measured anchor: res vs commercial residual corr 0.50 (q) / 0.81 (a); res vs retail 0.40 / 0.76",
+    "s_k": "judgement (as DE commercial)",
+    "s_l": "judgement: locales (shop units) depend on street-level footfall"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "CPP Spain Banco de Espana all/office/retail/industrial quarterly 2014Q1+; covers all registered commercial transactions (closest to small units of the three countries)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    }
+   ],
+   "access_non_accredited": "No restriction on foreign buyers; NIE needed. A 100% tax on non-EU non-resident buyers was proposed (Jan 2025) and sent to Congress (Jan 2026) but not enacted as of the latest summaries (unverified_summary) - a live policy risk for this row. Costs: ITP 6-10% resale or 10% VAT + AJD new build, notary/registry/agent: 10-14%. Golden visa via property ended 2025. Ticket ~EUR 100k+ outside prime areas (judgement). Shop units (locales) are a common retail-investor asset; same purchase rules."
+  },
+  "commercial_re:PL": {
+   "vol_annual": {
+    "low": 0.1,
+    "central": 0.15,
+    "high": 0.22
+   },
+   "corr_equity": {
+    "low": 0.05,
+    "central": 0.2,
+    "high": 0.45
+   },
+   "corr_bonds": {
+    "low": -0.05,
+    "central": 0.15,
+    "high": 0.35
+   },
+   "corr_commodity": {
+    "low": -0.08,
+    "central": 0.15,
+    "high": 0.43
+   },
+   "corr_fx_eur": {
+    "low": 0.5,
+    "central": 0.66,
+    "high": 0.8
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.25,
+     "s_k": 0.2,
+     "s_l": 0.55
+    },
+    "central": {
+     "s_c": 0.35,
+     "s_k": 0.25,
+     "s_l": 0.4
+    },
+    "high": {
+     "s_c": 0.5,
+     "s_k": 0.25,
+     "s_l": 0.25
+    }
+   },
+   "basis": {
+    "vol_annual": "measured proxy: NBP hedonic indices for properties > EUR 5m (institutional, annual 2007-2025, n=19) converted via PLN: USD vol office Warsaw 15.9%, retail 12.3%; not small premises; if these deals are EUR-priced the PLN conversion adds noise",
+    "corr_equity": "measured: annual 0.15 (office) / 0.08 (retail); high = residential PL",
+    "corr_bonds": "measured: annual 0.22 / 0.15",
+    "corr_commodity": "measured: annual 0.43 / -0.08",
+    "corr_fx_eur": "measured: annual 0.66 / 0.66",
+    "s_c": "measured anchor: annual residual corr with PL residential 0.54 (office) / 0.64 (retail), n=15 -> implied s_c ~0.42; set 0.35 (EUR-priced institutional market carries less PLN risk)",
+    "s_k": "judgement",
+    "s_l": "judgement"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "CPP Poland NBP office Warsaw, office and retail whole country, annual 2000-2025, > EUR 5m properties"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    }
+   ],
+   "access_non_accredited": "Commercial premises: permit status for non-EEA buyers unclear (verify with a notary); apartments (samodzielny lokal mieszkalny): non-EEA buyers incl. Ukrainian and US citizens exempt from the MSWiA permit (unverified_summary: several legal/broker guides); houses and land need a permit unless 5+ years on a permanent residence permit. Costs similar to residential; VAT may apply."
+  },
+  "commercial_re:UA": {
+   "vol_annual": {
+    "low": 0.13,
+    "central": 0.2,
+    "high": 0.35
+   },
+   "corr_equity": {
+    "low": 0.0,
+    "central": 0.19,
+    "high": 0.35
+   },
+   "corr_bonds": {
+    "low": -0.2,
+    "central": 0.05,
+    "high": 0.15
+   },
+   "corr_commodity": {
+    "low": -0.15,
+    "central": 0.14,
+    "high": 0.25
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.15,
+     "s_k": 0.15,
+     "s_l": 0.7
+    },
+    "central": {
+     "s_c": 0.3,
+     "s_k": 0.25,
+     "s_l": 0.45
+    },
+    "high": {
+     "s_c": 0.45,
+     "s_k": 0.3,
+     "s_l": 0.25
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement: measured residential:UA 14% x commercial/residential US ratio 1.33 -> ~19-20%; USD prime rents moved -16% (office 2022, CBRE) and ~+6% (warehouse 2024->2025); vacancy 5.5% -> 27-29% implies extra value loss; no price/yield series found",
+    "corr_equity": "model-judgement rule corr_US x 0.12/0.22",
+    "corr_bonds": "same rule",
+    "corr_commodity": "same rule",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement",
+    "s_l": "model-judgement"
+   },
+   "sources": [
+    {
+     "url": "https://www.property-forum.eu/news/hows-kyivs-office-market-doing-during-the-war/13231 ; https://en.interfax.com.ua/news/economic/1007436.html",
+     "publisher": "Property Forum (CBRE Ukraine) / Interfax (UTG)",
+     "date": "2022-2025",
+     "note": "Kyiv class A rent $28.1 pre-war, about -30% by 2023 (UTG); class A vacancy 5.5% end-2021 -> 27.4% (2023) -> 28.6% (early 2025) (search summaries)",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://bank.gov.ua/NBU_Exchange/exchange_site?start=20100101&end=20261107&valcode=usd&json",
+     "publisher": "National Bank of Ukraine",
+     "date": "accessed 2026-11-07",
+     "note": "official UAH/USD daily; measure.py: UAH carry in USD vol 17.7% (2013-2026 monthly), 10.0% (2016-2026), annual-return vol 20.7%; worst month -41%, worst 12m -60%; corr SPY/IEF/DBC monthly -0.09/-0.06/0.05, quarterly 0.15/-0.11/0.29",
+     "kind": "measured"
+    },
+    {
+     "url": "https://www.property-forum.eu/news/hows-kyivs-office-market-doing-during-the-war/13231 ; https://inventure.com.ua/en/news/ukraine/kyiv-warehouse-market:-key-trends-in-h1-2025 ; https://statista.com/statistics/913540/prime-office-rents-in-ukraine/",
+     "publisher": "CBRE Ukraine / Cushman & Wakefield (via Property Forum, Inventure, Statista)",
+     "date": "2017-2025",
+     "note": "Kyiv prime office rent USD 20-27/m2/month 2017-Q3 2021, -16% in 2022 to 21, 20 early 2024; prime warehouse 2.5-5 (2015, DTZ), 4.9 (2024), 5.3 (2025)",
+     "kind": "unverified_summary"
+    }
+   ],
+   "access_non_accredited": "Direct purchase of small premises (street retail, office units); no fund access for retail."
+  },
+  "commercial_re:US": {
+   "vol_annual": {
+    "low": 0.08,
+    "central": 0.12,
+    "high": 0.18
+   },
+   "corr_equity": {
+    "low": 0.1,
+    "central": 0.35,
+    "high": 0.5
+   },
+   "corr_bonds": {
+    "low": -0.18,
+    "central": 0.1,
+    "high": 0.25
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.25,
+    "high": 0.4
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.4,
+     "s_l": 0.6
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.55,
+     "s_l": 0.45
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.7,
+     "s_l": 0.3
+    }
+   },
+   "basis": {
+    "vol_annual": "desmoothed/literature (TBI 4.32%/qtr ~8.6%/yr low; KKR non-core unsmoothed 11.2%; NTBI 12.3%; high 17.1% KKR-range)",
+    "corr_equity": "literature (KKR core 0.36, non-core 0.48; raw NPI 0.28; low = MIT TBI-era 0.1-0.2)",
+    "corr_bonds": "literature (KKR vs US Agg 0.14-0.25; raw NPI vs Agg -0.18)",
+    "corr_commodity": "literature+measured (DWS US NL RE vs commodities 0.3; VNQ vs DBC 0.31)",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement (residential measured 0.75 less heterogeneity across property types/assets)",
+    "s_l": "model-judgement"
+   },
+   "sources": [
+    {
+     "url": "https://www.kkr.com/content/dam/kkr/insights/pdf/kkr-capital-market-assumptions-july-2026.pdf",
+     "publisher": "KKR",
+     "date": "2026-07 (data 2026-04-30)",
+     "note": "unsmoothed vol RE core (ODCE) 7.5%, non-core 11.2%; corr global eq 0.36/0.48, US Agg 0.25/0.14 (via research/L/assumptions.json)"
+    },
+    {
+     "url": "https://aura.abdn.ac.uk/server/api/core/bitstreams/0f2cbde6-cb3c-4b47-acee-511b9f6d683f/content",
+     "publisher": "Univ. of Aberdeen (Delfim, Hoesli)",
+     "date": "n.d. (data 1984Q2-2018Q3)",
+     "note": "NPI 2.07%/qtr vs transaction-based TBI 4.32%/qtr"
+    },
+    {
+     "url": "https://www.deutsche-am.com/globalassets/institutional/research/pdfs/Alternative_Indices_Primer.pdf",
+     "publisher": "DWS",
+     "date": "2019-03",
+     "note": "raw NPI corr S&P 0.28, Agg -0.18; US NL RE vs commodities 0.3 (smoothed)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance, SPY IEF DBC EMB HYG VNQ adjusted monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07",
+     "note": "factor returns; EMB vol 11.4% corr 0.60/0.43/0.30; HYG 10.2% corr 0.74/0.09/0.41 (2008-2026 monthly)"
+    }
+   ],
+   "access_non_accredited": "Direct small-property ownership, Reg A+ eREITs (Fundrise, RealtyMogul), non-traded REITs; NCREIF-type core funds are institutional only."
+  },
+  "development_land:UA": {
+   "vol_annual": {
+    "low": 0.18,
+    "central": 0.3,
+    "high": 0.45
+   },
+   "corr_equity": {
+    "low": 0.0,
+    "central": 0.2,
+    "high": 0.35
+   },
+   "corr_bonds": {
+    "low": -0.3,
+    "central": -0.08,
+    "high": 0.05
+   },
+   "corr_commodity": {
+    "low": -0.1,
+    "central": 0.12,
+    "high": 0.2
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.15,
+     "s_k": 0.1,
+     "s_l": 0.75
+    },
+    "central": {
+     "s_c": 0.3,
+     "s_k": 0.2,
+     "s_l": 0.5
+    },
+    "high": {
+     "s_c": 0.45,
+     "s_k": 0.25,
+     "s_l": 0.3
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement: 2x residential:UA rule capped (Davis-Heathcote ratio)",
+    "corr_equity": "model-judgement rule from development_land:US x 0.18/0.30",
+    "corr_bonds": "same rule",
+    "corr_commodity": "same rule",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement",
+    "s_l": "model-judgement"
+   },
+   "sources": [
+    {
+     "url": "https://fraser.stlouisfed.org/title/finance-economics-discussion-series-1491/price-quantity-residential-land-united-states-722916",
+     "publisher": "Federal Reserve FEDS (Davis, Heathcote; JME 2007)",
+     "date": "2007",
+     "note": "residential land prices about twice as volatile as existing home prices since 1970 (abstract, via search summary)",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://lun.ua/stat/2024",
+     "publisher": "LUN Statistics",
+     "date": "2024 annual",
+     "note": "2024 secondary 1-room price change by city: Lviv +13%, Kyiv -2%, Dnipro -17%, Kharkiv -19%, Zaporizhzhia -21%, Ivano-Frankivsk +18%",
+     "kind": "unverified_summary"
+    }
+   ],
+   "access_non_accredited": "Direct purchase of plots (citizens; foreigners restricted for farmland-category plots)."
+  },
+  "development_land:US": {
+   "vol_annual": {
+    "low": 0.12,
+    "central": 0.18,
+    "high": 0.3
+   },
+   "corr_equity": {
+    "low": 0.1,
+    "central": 0.35,
+    "high": 0.55
+   },
+   "corr_bonds": {
+    "low": -0.4,
+    "central": -0.15,
+    "high": 0.1
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.2,
+    "high": 0.35
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.4,
+     "s_l": 0.6
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.55,
+     "s_l": 0.45
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.7,
+     "s_l": 0.3
+    }
+   },
+   "basis": {
+    "vol_annual": "literature rule: 2x residential (Davis-Heathcote land ~2x existing-home vol) applied to residential:US low/central/high",
+    "corr_equity": "model-judgement (more cyclical than housing)",
+    "corr_bonds": "model-judgement (from residential:US)",
+    "corr_commodity": "model-judgement",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement (2006-09 swing was nationwide in 23 metros; zoning local)",
+    "s_l": "model-judgement"
+   },
+   "sources": [
+    {
+     "url": "https://fraser.stlouisfed.org/title/finance-economics-discussion-series-1491/price-quantity-residential-land-united-states-722916",
+     "publisher": "Federal Reserve FEDS (Davis, Heathcote; JME 2007)",
+     "date": "2007",
+     "note": "residential land prices about twice as volatile as existing home prices since 1970 (abstract, via search summary)"
+    },
+    {
+     "url": "https://www.federalreserve.gov/econres/feds/commercial-and-residential-land-prices-across-the-united-states.htm",
+     "publisher": "Federal Reserve FEDS (Nichols, Oliner, Mulhall; JUE 2013)",
+     "date": "2010-04 / 2013",
+     "note": "23-metro land indices: dramatic rise to 2006-07 peak then steep descent; numbers not read"
+    },
+    {
+     "url": "https://fred.stlouisfed.org/series/CSUSHPINSA (and 20 metro *XRNSA series)",
+     "publisher": "S&P Dow Jones Indices via FRED",
+     "date": "accessed 2026-11-07, data to 2026-08",
+     "note": "Case-Shiller NSA metro price indices; measure.py: annual Dec-Dec metro vol median 7.1% (1992-2025) / 8.2% (2007-2025); avg pairwise corr of metro residuals after SPY/IEF/DBC 0.76 (annual 2007-2025) / 0.745 (quarterly deseasonalised 2006-2026); national corr SPY/IEF/DBC 0.53/-0.53/0.22 annual, 0.20/-0.27/0.17 quarterly"
+    }
+   ],
+   "access_non_accredited": "Direct purchase of parcels; no accreditation needed. Income nil; exits slow."
+  },
+  "farmland:UA": {
+   "vol_annual": {
+    "low": 0.12,
+    "central": 0.17,
+    "high": 0.28
+   },
+   "corr_equity": {
+    "low": -0.2,
+    "central": -0.07,
+    "high": 0.19
+   },
+   "corr_bonds": {
+    "low": -0.21,
+    "central": -0.1,
+    "high": 0.06
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.16,
+    "high": 0.3
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.2,
+     "s_k": 0.2,
+     "s_l": 0.6
+    },
+    "central": {
+     "s_c": 0.35,
+     "s_k": 0.3,
+     "s_l": 0.35
+    },
+    "high": {
+     "s_c": 0.5,
+     "s_k": 0.35,
+     "s_l": 0.15
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement anchored on USD/ha path 2021-2025 (-14%, +4%, +10%, +17%, +26% per yr; mixed sources) plus rent; market only since 2021-07",
+    "corr_equity": "model-judgement rule corr_US x 0.112/0.17",
+    "corr_bonds": "same rule",
+    "corr_commodity": "same rule (grain prices raise land values)",
+    "s_c": "model-judgement (war, FX, land-law risk)",
+    "s_k": "model-judgement",
+    "s_l": "model-judgement (regional price levels 31k-190k UAH/ha; occupied/mined regions)"
+   },
+   "sources": [
+    {
+     "url": "https://komersant.ua/en/vid-kilkosti-do-iakosti-iak-u-2025-rotsi-zminyvsia-ukrainskyy-rynok-silhospzemel ; https://dia.dp.gov.ua/en/in-2025-the-land-market-transitioned-to-a-stable-and-predictable-development-model/",
+     "publisher": "Komersant / Ministry of Economy data / Opendatabot",
+     "date": "2025-2026",
+     "note": "UAH/ha: Dec 2021 33,700; 2023 39,000->42,000; 2024 avg 46,678; 2025 avg 57,400; Nov 2025 64,701 (search summaries; methods differ). In USD (ua_points.py): 1235, 1066, 1106, 1162, 1377, 1533",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://bank.gov.ua/NBU_Exchange/exchange_site?start=20100101&end=20261107&valcode=usd&json",
+     "publisher": "National Bank of Ukraine",
+     "date": "accessed 2026-11-07",
+     "note": "official UAH/USD daily; measure.py: UAH carry in USD vol 17.7% (2013-2026 monthly), 10.0% (2016-2026), annual-return vol 20.7%; worst month -41%, worst 12m -60%; corr SPY/IEF/DBC monthly -0.09/-0.06/0.05, quarterly 0.15/-0.11/0.29",
+     "kind": "measured"
+    },
+    {
+     "url": "research/L/assumptions.json farmland_us",
+     "publisher": "this project (agent L)",
+     "date": "2026-11-06",
+     "note": "farmland_us vol 0.085/0.112/0.132 (model), corr eq -0.32/-0.11/0.30",
+     "kind": "judgement"
+    }
+   ],
+   "access_non_accredited": "Ukrainian citizens only (foreigners barred); legal cap per buyer; direct purchase or lease-back."
+  },
+  "farmland:US": {
+   "vol_annual": {
+    "low": 0.085,
+    "central": 0.112,
+    "high": 0.132
+   },
+   "corr_equity": {
+    "low": -0.32,
+    "central": -0.11,
+    "high": 0.3
+   },
+   "corr_bonds": {
+    "low": -0.21,
+    "central": -0.16,
+    "high": 0.1
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.25,
+    "high": 0.45
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.4,
+     "s_l": 0.6
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.6,
+     "s_l": 0.4
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.75,
+     "s_l": 0.25
+    }
+   },
+   "basis": {
+    "vol_annual": "literature/model (agent L farmland_us; no unsmoothed farmland study read)",
+    "corr_equity": "literature (UBS/NCREIF raw annual -0.11; FarmTogether -0.32)",
+    "corr_bonds": "literature (UBS raw -0.16; Pifer's -0.21); high model-judgement",
+    "corr_commodity": "model-judgement (crop prices drive income; UBS CPI 0.23 is not DBC)",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement (common rate/crop-price drivers vs regional crop mix)",
+    "s_l": "model-judgement"
+   },
+   "sources": [
+    {
+     "url": "research/L/assumptions.json farmland_us",
+     "publisher": "this project (agent L)",
+     "date": "2026-11-06",
+     "note": "farmland_us vol 0.085/0.112/0.132 (model), corr eq -0.32/-0.11/0.30"
+    },
+    {
+     "url": "https://www.ubs.com/lu/en/assetmanagement/insights/asset-class-perspectives/food-and-agriculture/articles/farmland-beyond-the-narrative/ (PDF)",
+     "publisher": "UBS Farmland Investors / PREA Quarterly",
+     "date": "Summer 2026 (NCREIF to 2025-12-31)",
+     "note": "annual raw corr farmland vs stocks -0.11, bonds -0.16, CPI 0.23 (1991-2025)"
+    }
+   ],
+   "access_non_accredited": "Direct land purchase; most farmland platforms (AcreTrader, FarmTogether) are accredited-only - not verified this session."
+  },
+  "ovdp_deposits_uah:UA": {
+   "vol_annual": {
+    "low": 0.1,
+    "central": 0.16,
+    "high": 0.21
+   },
+   "corr_equity": {
+    "low": -0.09,
+    "central": 0.08,
+    "high": 0.27
+   },
+   "corr_bonds": {
+    "low": -0.21,
+    "central": -0.08,
+    "high": 0.09
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.15,
+    "high": 0.29
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.4,
+     "s_k": 0.6,
+     "s_l": 0.0
+    },
+    "central": {
+     "s_c": 0.6,
+     "s_k": 0.4,
+     "s_l": 0.0
+    },
+    "high": {
+     "s_c": 0.8,
+     "s_k": 0.2,
+     "s_l": 0.0
+    }
+   },
+   "cash_eligible": true,
+   "basis": {
+    "vol_annual": "measured: monthly vol 10.0% (2016-2026) / 17.7% (2013-2026); annual-return vol 14.7%/20.7%; carry = NBU key rate (deposits lower, vol effect negligible); fat left tail",
+    "corr_equity": "measured (monthly -0.09..0.06, quarterly 0.13..0.27)",
+    "corr_bonds": "measured",
+    "corr_commodity": "measured",
+    "s_c": "model-judgement (FX is the purest country signal; not 1 because the managed peg and carry are class-specific)",
+    "s_k": "model-judgement (1 - s_c)",
+    "s_l": "model-judgement (no location)"
+   },
+   "sources": [
+    {
+     "url": "https://bank.gov.ua/NBU_Exchange/exchange_site?start=20100101&end=20261107&valcode=usd&json",
+     "publisher": "National Bank of Ukraine",
+     "date": "accessed 2026-11-07",
+     "note": "official UAH/USD daily; measure.py: UAH carry in USD vol 17.7% (2013-2026 monthly), 10.0% (2016-2026), annual-return vol 20.7%; worst month -41%, worst 12m -60%; corr SPY/IEF/DBC monthly -0.09/-0.06/0.05, quarterly 0.15/-0.11/0.29",
+     "kind": "measured"
+    },
+    {
+     "url": "https://index.minfin.com.ua/en/banks/nbu/refinance/",
+     "publisher": "Minfin.com.ua (NBU key rate table)",
+     "date": "accessed 2026-11-07",
+     "note": "key policy rate history used as UAH carry proxy",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance, SPY IEF DBC EMB HYG VNQ adjusted monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07",
+     "note": "factor returns; EMB vol 11.4% corr 0.60/0.43/0.30; HYG 10.2% corr 0.74/0.09/0.41 (2008-2026 monthly)",
+     "kind": "measured"
+    }
+   ],
+   "access_non_accredited": "Ukrainian bank deposits and OVDP via banks/brokers/Diia; residents; non-residents via custodians with FX-repatriation limits."
+  },
+  "p2p_loans:UA": {
+   "vol_annual": {
+    "low": 0.14,
+    "central": 0.22,
+    "high": 0.35
+   },
+   "corr_equity": {
+    "low": -0.05,
+    "central": 0.15,
+    "high": 0.35
+   },
+   "corr_bonds": {
+    "low": -0.2,
+    "central": -0.05,
+    "high": 0.1
+   },
+   "corr_commodity": {
+    "low": -0.1,
+    "central": 0.1,
+    "high": 0.3
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.3,
+     "s_k": 0.2,
+     "s_l": 0.5
+    },
+    "central": {
+     "s_c": 0.45,
+     "s_k": 0.2,
+     "s_l": 0.35
+    },
+    "high": {
+     "s_c": 0.6,
+     "s_k": 0.2,
+     "s_l": 0.2
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement: UAH carry vol 0.16 plus consumer-credit and platform default (E-Cash closure, 35% recovery)",
+    "corr_equity": "model-judgement (between UAH carry measured and P2P US)",
+    "corr_bonds": "model-judgement",
+    "corr_commodity": "model-judgement",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement",
+    "s_l": "model-judgement: platform/originator risk"
+   },
+   "sources": [
+    {
+     "url": "https://alternativecreditinvestor.com/2022/02/24/mintos-removes-russia-and-ukraine-loans/ ; https://www.crowdfundinsider.com/2021/08/178902-european-p2p-lender-mintos-recovers-funds-from-ukraine-based-lending-firm-e-cash/",
+     "publisher": "Alternative Credit Investor / Crowdfund Insider",
+     "date": "2021-08, 2022-02",
+     "note": "Mintos excluded RU/UA loans from primary market Feb 2022; UA lender E-Cash closed, recovery raised to 35%; Dziesiatka in litigation",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://bank.gov.ua/NBU_Exchange/exchange_site?start=20100101&end=20261107&valcode=usd&json",
+     "publisher": "National Bank of Ukraine",
+     "date": "accessed 2026-11-07",
+     "note": "official UAH/USD daily; measure.py: UAH carry in USD vol 17.7% (2013-2026 monthly), 10.0% (2016-2026), annual-return vol 20.7%; worst month -41%, worst 12m -60%; corr SPY/IEF/DBC monthly -0.09/-0.06/0.05, quarterly 0.15/-0.11/0.29",
+     "kind": "measured"
+    }
+   ],
+   "access_non_accredited": "Few UA platforms; UA originators were removed from Mintos primary market in 2022."
+  },
+  "p2p_loans:US": {
+   "vol_annual": {
+    "low": 0.04,
+    "central": 0.07,
+    "high": 0.12
+   },
+   "corr_equity": {
+    "low": 0.15,
+    "central": 0.4,
+    "high": 0.65
+   },
+   "corr_bonds": {
+    "low": -0.1,
+    "central": 0.05,
+    "high": 0.3
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.15,
+    "high": 0.4
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.55,
+     "s_l": 0.45
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.7,
+     "s_l": 0.3
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.85,
+     "s_l": 0.15
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement: short-duration consumer credit between reported note vol (~3-5%, smoothed) and HY (HYG 10.2%)",
+    "corr_equity": "literature low (LendingClub A-C 0.15-0.22, 2010-2019, no recession); central/high HY-like in recessions (HYG 0.74)",
+    "corr_bonds": "model-judgement",
+    "corr_commodity": "model-judgement (HYG vs DBC 0.41 upper anchor)",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement (national consumer credit cycle)",
+    "s_l": "model-judgement: for P2P 'location' = platform/originator risk"
+   },
+   "sources": [
+    {
+     "url": "https://moneyandbanking.com/commentary/2020/2/9/has-p2p-lending-already-hit-the-wall",
+     "publisher": "Money & Banking (Cecchetti, Schoenholtz)",
+     "date": "2020-02-09",
+     "note": "LendingClub grades A-C corr with S&P 500 0.15-0.22 (2010Q1-2019Q3); no recession in sample; post-2016 data use projected losses"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance, SPY IEF DBC EMB HYG VNQ adjusted monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07",
+     "note": "factor returns; EMB vol 11.4% corr 0.60/0.43/0.30; HYG 10.2% corr 0.74/0.09/0.41 (2008-2026 monthly)"
+    }
+   ],
+   "access_non_accredited": "Prosper notes (state-limited); LendingClub retail notes ended 2020 (background knowledge, not verified this session)."
+  },
+  "p2p_loans:other": {
+   "vol_annual": {
+    "low": 0.07,
+    "central": 0.11,
+    "high": 0.16
+   },
+   "corr_equity": {
+    "low": 0.15,
+    "central": 0.5,
+    "high": 0.65
+   },
+   "corr_bonds": {
+    "low": -0.1,
+    "central": 0.15,
+    "high": 0.3
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.4,
+    "high": 0.5
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.35,
+     "s_l": 0.65
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.5,
+     "s_l": 0.5
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.65,
+     "s_l": 0.35
+    }
+   },
+   "basis": {
+    "vol_annual": "model-judgement: EUR exposure (EURUSD vol 9.0% measured) combined with credit/originator vol ~6% (independence) -> 10.8%; low = credit only",
+    "corr_equity": "measured EUR leg (0.41) + model credit leg (0.40) combined -> 0.56; low = EUR-hedged",
+    "corr_bonds": "same combination (0.15)",
+    "corr_commodity": "same combination (0.46)",
+    "s_c": "model-judgement (non-US/UA: no country factor in this model)",
+    "s_k": "model-judgement",
+    "s_l": "model-judgement: originator risk dominant (Mintos 2020-22 originator defaults)"
+   },
+   "sources": [
+    {
+     "url": "https://fred.stlouisfed.org/series/DEXUSEU",
+     "publisher": "Federal Reserve H.10 via FRED",
+     "date": "accessed 2026-11-07",
+     "note": "EURUSD monthly vol 9.0%, corr SPY/IEF/DBC 0.41/0.15/0.46 (2006-03..2026-10)"
+    },
+    {
+     "url": "https://alternativecreditinvestor.com/2022/02/24/mintos-removes-russia-and-ukraine-loans/ ; https://www.crowdfundinsider.com/2021/08/178902-european-p2p-lender-mintos-recovers-funds-from-ukraine-based-lending-firm-e-cash/",
+     "publisher": "Alternative Credit Investor / Crowdfund Insider",
+     "date": "2021-08, 2022-02",
+     "note": "Mintos excluded RU/UA loans from primary market Feb 2022; UA lender E-Cash closed, recovery raised to 35%; Dziesiatka in litigation"
+    },
+    {
+     "url": "https://northern.finance/en/review/mintos-vs-bondora-comparison/",
+     "publisher": "Northern Finance (third party)",
+     "date": "2026",
+     "note": "Mintos investors averaged ~6.0%/yr 2020-2025 (estimate)"
+    },
+    {
+     "url": "https://bondora.com/en/?p=109577",
+     "publisher": "Bondora",
+     "date": "2023-01",
+     "note": "cumulative 2014-2022 recovery rate 48.0% (sponsor)"
+    }
+   ],
+   "access_non_accredited": "Mintos and Bondora are open to retail investors (EU and some non-EU residents); secondary-market liquidity can freeze."
+  },
+  "residential_re:AE": {
+   "vol_annual": {
+    "low": 0.1,
+    "central": 0.16,
+    "high": 0.24
+   },
+   "corr_equity": {
+    "low": 0.0,
+    "central": 0.12,
+    "high": 0.3
+   },
+   "corr_bonds": {
+    "low": -0.25,
+    "central": -0.05,
+    "high": 0.1
+   },
+   "corr_commodity": {
+    "low": 0.1,
+    "central": 0.25,
+    "high": 0.4
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.3,
+     "s_k": 0.22,
+     "s_l": 0.48
+    },
+    "central": {
+     "s_c": 0.45,
+     "s_k": 0.27,
+     "s_l": 0.28
+    },
+    "high": {
+     "s_c": 0.6,
+     "s_k": 0.25,
+     "s_l": 0.15
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: Dubai (offer + transaction prices, BIS DPP monthly 2003-2024) USD 12m vol 14.9% (2006Q2-2024Q2, incl. 2008-10 crash), annual 15.3%; quarterly AC1 0.70 -> desmoothed 21.7% (high); 2014Q1-2024Q1 only 9.4% (low); Abu Dhabi 9.6%",
+    "corr_equity": "measured: quarterly 0.08, desmoothed 0.11, annual 0.04; 2014+ annual 0.19",
+    "corr_bonds": "measured: quarterly -0.03, annual 0.02; Abu Dhabi annual -0.44 (low end)",
+    "corr_commodity": "measured: quarterly 0.29, desmoothed 0.27, annual 0.18 (oil-liquidity link; judgement keeps high 0.40)",
+    "corr_fx_eur": "omitted (EUR beta 0): AED is pegged to USD; measured corr with EURUSD 0.20 (q) / 0.26 (a) is mostly via SPY/DBC",
+    "s_c": "measured anchor + judgement: Dubai residential vs Dubai office (offer prices, 2018-2024, n=24) residual corr 0.73 -> implied s_c ~0.47",
+    "s_k": "measured anchor: Dubai vs Abu Dhabi residual corr 0.70 (q, n=61) / 0.77 (a, n=15) = s_c+s_k between emirates; within Dubai likely higher (judgement)",
+    "s_l": "1 - s_c - s_k; off-plan/developer and building-level risk sit here"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "DPP UAE: Dubai (2003-01..2024-04), Abu Dhabi (2009-01..2024-04), 5 Emirates; CPP Dubai office/retail (2018Q1-2024Q1); series stop in 2024 so the 2024-26 run-up is not in the sample"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    },
+    {
+     "url": "https://globalpropertyguide.com/middle-east/united-arab-emirates/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q2",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 4.94% (Q2 2026; another summary cites 5.45%) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    }
+   ],
+   "access_non_accredited": "Foreigners may buy freehold in designated zones (Dubai freehold areas since 2002/Law 7 of 2006) (unverified_summary). Costs: DLD transfer fee 4% + agent ~2% + registration/trustee fees; off-plan purchases with developer payment plans are common (developer credit risk). Ticket ~AED 0.5-1m (USD 140-270k) for a studio/1-bed (judgement). No income or capital gains tax; AED pegged to USD."
+  },
+  "residential_re:DE": {
+   "vol_annual": {
+    "low": 0.075,
+    "central": 0.1,
+    "high": 0.14
+   },
+   "corr_equity": {
+    "low": 0.2,
+    "central": 0.38,
+    "high": 0.45
+   },
+   "corr_bonds": {
+    "low": 0.05,
+    "central": 0.45,
+    "high": 0.55
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.1,
+    "high": 0.3
+   },
+   "corr_fx_eur": {
+    "low": 0.75,
+    "central": 0.84,
+    "high": 0.92
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.3,
+     "s_k": 0.25,
+     "s_l": 0.45
+    },
+    "central": {
+     "s_c": 0.45,
+     "s_k": 0.3,
+     "s_l": 0.25
+    },
+    "high": {
+     "s_c": 0.6,
+     "s_k": 0.28,
+     "s_l": 0.12
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: USD 12m vol 9.1% national (2006Q2-2026Q2), Berlin 8.8%, Frankfurt 8.9% (vdp hedonic); desmoothed 9.4-11.1%; 2016+ desmoothed 11.1%; high adds property-level noise (judgement)",
+    "corr_equity": "measured: quarterly 0.31-0.34, annual 0.26-0.29, desmoothed 0.26-0.34; regime vector 0.39. Central = regime-consistent vector (regime_vectors.py: measured local-currency leg 2007-2025 annual + EUR leg under the 60m factor matrix where EUR-IEF corr is 0.50); long-run USD values are the low end",
+    "corr_bonds": "measured: quarterly 0.06-0.10, annual 0.05-0.19 (2006-2026); 2016+ 0.43 (q) / 0.65 (a); regime vector 0.52 -> central 0.45",
+    "corr_commodity": "measured: quarterly 0.30-0.34, annual 0.08-0.12, desmoothed 0.22-0.33; regime vector 0.08 -> central 0.10",
+    "corr_fx_eur": "measured: quarterly 0.95, annual 0.81-0.88, desmoothed 0.79-0.85 (USD value = EUR price x EURUSD); regime vector 0.84",
+    "s_c": "measured anchor + judgement: national res vs commercial residual corr 0.69 (q) / 0.83 (a, n=12) -> implied s_c 0.46-0.66 after averaging adjustment; DE vs ES/PT residual corr only 0.16 so the residual is country-specific",
+    "s_k": "measured anchor: Berlin vs Frankfurt residual corr 0.75 (q, n=81) / 0.91 (a, n=19) = s_c+s_k",
+    "s_l": "1 - s_c - s_k"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "DE nominal SPP; DPP Berlin, Frankfurt (vdp, 2003Q1+), 7 cities annual (Bundesbank); CPP vdp commercial (2013Q1+)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    },
+    {
+     "url": "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hpi_q/Q.TOTAL.I15_Q.DE+ES+PT+PL",
+     "publisher": "Eurostat",
+     "date": "accessed 2026-11-07, data to 2026Q2",
+     "kind": "measured",
+     "note": "cross-check of BIS national series 2011Q1+: local quarterly vol identical for ES/PT/PL (corr 1.00), DE corr 0.95 (Destatis vs vdp)"
+    },
+    {
+     "url": "https://www.globalpropertyguide.com/europe/germany/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q1",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 3.42% (Q1 2026) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    }
+   ],
+   "access_non_accredited": "No restriction on foreign buyers (unverified_summary). Costs: Grunderwerbsteuer 3.5-6.5% by state, notary and land registry ~1.5-2%, agent up to ~3.6%: round trip 8-15%. Ticket: small flat ~EUR 150-300k (judgement). Rent regulation (Mietpreisbremse) caps rent growth in tight markets."
+  },
+  "residential_re:ES": {
+   "vol_annual": {
+    "low": 0.08,
+    "central": 0.12,
+    "high": 0.16
+   },
+   "corr_equity": {
+    "low": 0.15,
+    "central": 0.33,
+    "high": 0.4
+   },
+   "corr_bonds": {
+    "low": -0.1,
+    "central": 0.2,
+    "high": 0.45
+   },
+   "corr_commodity": {
+    "low": 0.1,
+    "central": 0.2,
+    "high": 0.33
+   },
+   "corr_fx_eur": {
+    "low": 0.62,
+    "central": 0.76,
+    "high": 0.9
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.35,
+     "s_k": 0.2,
+     "s_l": 0.45
+    },
+    "central": {
+     "s_c": 0.5,
+     "s_k": 0.25,
+     "s_l": 0.25
+    },
+    "high": {
+     "s_c": 0.65,
+     "s_k": 0.23,
+     "s_l": 0.12
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: USD 12m vol 12.1% national (2006Q2-2026Q2, incl. 2008-14 bust), Madrid 12.5%, Cataluna 12.4% (INE hedonic); desmoothed 12.9-13.6%; 2016+ only 7.6% (low)",
+    "corr_equity": "measured: quarterly 0.30-0.33, annual 0.27-0.34, desmoothed 0.18-0.24; regime vector 0.35. Central = regime-consistent vector (regime_vectors.py: measured local-currency leg 2007-2025 annual + EUR leg under the 60m factor matrix where EUR-IEF corr is 0.50); long-run USD values are the low end",
+    "corr_bonds": "measured: quarterly ~0.0, annual -0.05..-0.17, desmoothed -0.10 (2006-2026); 2016+ 0.44 (q) / 0.51 (a); regime vector 0.19 -> central 0.20",
+    "corr_commodity": "measured: quarterly 0.32-0.34, annual 0.20-0.27, desmoothed 0.27-0.31; regime vector 0.18 -> central 0.20",
+    "corr_fx_eur": "measured: quarterly 0.87-0.91, annual 0.71-0.77, desmoothed 0.66-0.68; 2016+ 0.93-0.95; regime vector 0.76",
+    "s_c": "measured anchor + judgement: res vs commercial residual corr 0.50 (q) / 0.81 (a, n=11) -> implied s_c 0.35-0.65; ES vs PT residual corr 0.69 (q) / 0.88 (a): an Iberian common cycle the model cannot represent",
+    "s_k": "measured anchor: regional residual corr (INE, 2007-2025) Madrid-Cataluna 0.94, Madrid-Andalucia 0.80, Madrid-Valenciana 0.78, Cataluna-Andalucia 0.87, Balears-Pais Vasco 0.85 (q); 0.89-0.99 (a). Regions aggregate many cities, so city-level s_c+s_k set to 0.75 central (judgement)",
+    "s_l": "1 - s_c - s_k"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "ES nominal SPP; DPP Madrid (INE); CPP Banco de Espana commercial (2014Q1+)"
+    },
+    {
+     "url": "https://servicios.ine.es/wstempus/js/EN/DATOS_TABLA/25171?nult=90&tip=A",
+     "publisher": "INE Spain",
+     "date": "accessed 2026-11-07, data 2007Q1-2025Q4",
+     "kind": "measured",
+     "note": "IPV housing price index by autonomous community"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    },
+    {
+     "url": "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hpi_q/Q.TOTAL.I15_Q.DE+ES+PT+PL",
+     "publisher": "Eurostat",
+     "date": "accessed 2026-11-07, data to 2026Q2",
+     "kind": "measured",
+     "note": "cross-check of BIS national series 2011Q1+: local quarterly vol identical for ES/PT/PL (corr 1.00), DE corr 0.95 (Destatis vs vdp)"
+    },
+    {
+     "url": "https://www.globalpropertyguide.com/europe/spain/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q1",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 5.45% (Q1 2026) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    },
+    {
+     "url": "https://www.thelocal.es/20261019/will-spains-100-percent-property-tax-on-foreign-buyers-ever-pass",
+     "publisher": "The Local Spain",
+     "date": "2026-10-19",
+     "kind": "unverified_summary",
+     "note": "status of the proposed 100% tax on non-EU non-resident buyers (not enacted per search summaries)"
+    }
+   ],
+   "access_non_accredited": "No restriction on foreign buyers; NIE needed. A 100% tax on non-EU non-resident buyers was proposed (Jan 2025) and sent to Congress (Jan 2026) but not enacted as of the latest summaries (unverified_summary) - a live policy risk for this row. Costs: ITP 6-10% resale or 10% VAT + AJD new build, notary/registry/agent: 10-14%. Golden visa via property ended 2025. Ticket ~EUR 100k+ outside prime areas (judgement)."
+  },
+  "residential_re:GE": {
+   "vol_annual": {
+    "low": 0.09,
+    "central": 0.14,
+    "high": 0.22
+   },
+   "corr_equity": {
+    "low": 0.0,
+    "central": 0.2,
+    "high": 0.35
+   },
+   "corr_bonds": {
+    "low": -0.25,
+    "central": -0.1,
+    "high": 0.1
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.2,
+    "high": 0.4
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.35,
+     "s_k": 0.15,
+     "s_l": 0.5
+    },
+    "central": {
+     "s_c": 0.5,
+     "s_k": 0.2,
+     "s_l": 0.3
+    },
+    "high": {
+     "s_c": 0.65,
+     "s_k": 0.2,
+     "s_l": 0.15
+    }
+   },
+   "basis": {
+    "vol_annual": "judgement anchored on measured points: Geostat Tbilisi new-dwelling RPPI (GEL; y/y 14.3% 2022Q4, 10.7% 2023Q1, 10.4% 2024Q4, 3.3% 2025Q4, 4.9% 2026Q2) x NBG USD/GEL -> USD y/y +31%, +34%, +5.8%, +7.6%, +8.0%; GEL vs USD vol 9.3% (q) / 8.2% (a), with -22% (2015) and -12% (2020) years. Index starts 2019 and uses offer prices: no vol can be measured",
+    "corr_equity": "judgement: GEL/USD measured corr SPY 0.29 (q) / -0.18 (a); EM-like housing set at 0.20",
+    "corr_bonds": "judgement: GEL/USD corr IEF -0.24 (q) / -0.31 (a)",
+    "corr_commodity": "judgement: GEL/USD corr DBC 0.38 (q) / 0.56 (a); set 0.20 (housing priced in USD dampens the FX leg)",
+    "corr_fx_eur": "omitted (EUR beta 0): no USD housing series; GEL/USD corr with EURUSD 0.33",
+    "s_c": "judgement: GEL residual after F has vol 8.2% (R2 on F 0.23), plus political risk (2024-25 domestic crisis, EU accession frozen) and migration-driven demand shocks (2022)",
+    "s_k": "judgement: no second-city series (Batumi only in broker snapshots)",
+    "s_l": "judgement: district spread Vake USD 2,299 vs Samgori USD 1,118 per sqm (TBC Capital, Oct 2025, unverified_summary); new-build vs Soviet stock"
+   },
+   "sources": [
+    {
+     "url": "https://geostat.ge/media/81560/Residential-Property-Price-Index---II-quarter-of-2026.pdf",
+     "publisher": "Geostat",
+     "date": "2026-07-23",
+     "kind": "measured",
+     "note": "PDF read: RPPI +63.8% vs 2020 average, +0.9% q/q, +4.9% y/y (GEL, new dwellings Tbilisi, offer prices). Also read: Q1 2021 (+13.6% y/y), Q4 2022 (+14.3%), Q1 2023 (+10.7%) releases in dl/ge"
+    },
+    {
+     "url": "https://gbc.ge/en/news/Economics-news/rppi-in-georgia-increased-by-104-in-2024-y-o-y",
+     "publisher": "GBC (citing Geostat)",
+     "date": "2025",
+     "kind": "unverified_summary",
+     "note": "RPPI +10.4% y/y 2024; Q4 2025 +3.3% y/y (1tv.ge summary)"
+    },
+    {
+     "url": "https://nbg.gov.ge/gw/api/ct/monetarypolicy/currencies/en/json/?currencies=USD&date=YYYY-MM-DD",
+     "publisher": "National Bank of Georgia",
+     "date": "accessed 2026-11-07, month-ends 2008-01..2026-10",
+     "kind": "measured",
+     "note": "official GEL per USD; dl/nbg/usd_gel_monthend.csv"
+    },
+    {
+     "url": "https://cbw.ge/real-estate/tbilisi-rental-prices-expected-to-stabilize-at-9-10-per-square-meter-in-2025-galt-taggart",
+     "publisher": "Galt & Taggart via cbw.ge/gbc.ge",
+     "date": "2025-2026",
+     "kind": "unverified_summary",
+     "note": "primary market ~USD 1,320/sqm Dec 2024, ~1,412 May 2026, 1,426 Jul 2026; rental yield 8.5% (Jul 2026)"
+    },
+    {
+     "url": "https://www.globalpropertyguide.com/europe/georgia/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q1",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 7.42% (Q1 2026) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    }
+   ],
+   "access_non_accredited": "Foreigners may buy apartments and non-agricultural land freely; agricultural land is restricted for foreigners (unverified_summary). Costs low: registration fee, agent ~2-3%, no transfer tax; rental income taxed 5% (residential, individuals) (unverified_summary). Ticket ~USD 50-90k for a new-build flat (Galt & Taggart ~USD 1,400/sqm primary, 2026). Prices are effectively quoted in USD."
+  },
+  "residential_re:PL": {
+   "vol_annual": {
+    "low": 0.1,
+    "central": 0.14,
+    "high": 0.2
+   },
+   "corr_equity": {
+    "low": 0.25,
+    "central": 0.4,
+    "high": 0.52
+   },
+   "corr_bonds": {
+    "low": -0.15,
+    "central": 0.05,
+    "high": 0.35
+   },
+   "corr_commodity": {
+    "low": 0.0,
+    "central": 0.25,
+    "high": 0.42
+   },
+   "corr_fx_eur": {
+    "low": 0.52,
+    "central": 0.72,
+    "high": 0.86
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.35,
+     "s_k": 0.2,
+     "s_l": 0.45
+    },
+    "central": {
+     "s_c": 0.5,
+     "s_k": 0.25,
+     "s_l": 0.25
+    },
+    "high": {
+     "s_c": 0.65,
+     "s_k": 0.23,
+     "s_l": 0.12
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: USD 12m-horizon vol 11.5% (GUS hedonic national, 2010Q3-2026Q2), 15.4-16.0% (Warsaw asking, 7-city NBP hedonic, 2007-2026 incl. 2008-09 PLN crash); Geltner-desmoothed 13-17% (12m), 20-21% quarterly-annualised for city series (high)",
+    "corr_equity": "measured: quarterly 0.46-0.53, annual 0.30-0.44, desmoothed 0.29-0.51",
+    "corr_bonds": "measured: quarterly -0.09..0.08, annual 0.00-0.05; 2016-2026 window 0.36 (q) / 0.47 (a) after the 2022 joint sell-off (high)",
+    "corr_commodity": "measured: quarterly 0.25-0.42, annual 0.10-0.35; 2016+ annual -0.52 (low end widened to 0)",
+    "corr_fx_eur": "measured: quarterly 0.78-0.86, annual 0.70-0.77, desmoothed 0.52-0.77 (PLN/USD corr with EURUSD 0.85)",
+    "s_c": "measured anchor + judgement: PLN residual after F (vol 5.8%) has corr 0.85 with the PL housing USD residual (quarterly); res vs commercial annual residual corr 0.54-0.64 -> implied s_c ~0.42 after averaging adjustment",
+    "s_k": "measured anchor: Warsaw vs 10-city asking residual corr 0.85 (q) / 0.85 (a) -> implied city-pair rho 0.74 = s_c+s_k",
+    "s_l": "1 - s_c - s_k (central 0.25, same as US metros); low scenario allows single-flat noise"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "PL nominal SPP (GUS hedonic 2010+); DPP Warsaw/10 cities asking per sqm, 7 cities NBP hedonic (2006Q3+); CPP office Warsaw and retail (annual)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    },
+    {
+     "url": "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hpi_q/Q.TOTAL.I15_Q.DE+ES+PT+PL",
+     "publisher": "Eurostat",
+     "date": "accessed 2026-11-07, data to 2026Q2",
+     "kind": "measured",
+     "note": "cross-check of BIS national series 2011Q1+: local quarterly vol identical for ES/PT/PL (corr 1.00), DE corr 0.95 (Destatis vs vdp)"
+    },
+    {
+     "url": "https://www.globalpropertyguide.com/europe/poland/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q1",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 5.92% (Q1 2026) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    }
+   ],
+   "access_non_accredited": "Apartments (samodzielny lokal mieszkalny): non-EEA buyers incl. Ukrainian and US citizens exempt from the MSWiA permit (unverified_summary: several legal/broker guides); houses and land need a permit unless 5+ years on a permanent residence permit. Costs: 2% PCC on resale (VAT in price on new build), notary and court fees ~1%, agent 2-3%. Ticket: small flat in a regional city ~USD 80-120k, Warsaw ~USD 150k+ (judgement)."
+  },
+  "residential_re:PT": {
+   "vol_annual": {
+    "low": 0.08,
+    "central": 0.12,
+    "high": 0.16
+   },
+   "corr_equity": {
+    "low": 0.18,
+    "central": 0.4,
+    "high": 0.48
+   },
+   "corr_bonds": {
+    "low": -0.15,
+    "central": 0.05,
+    "high": 0.4
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.22,
+    "high": 0.33
+   },
+   "corr_fx_eur": {
+    "low": 0.68,
+    "central": 0.78,
+    "high": 0.9
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.3,
+     "s_k": 0.2,
+     "s_l": 0.5
+    },
+    "central": {
+     "s_c": 0.5,
+     "s_k": 0.25,
+     "s_l": 0.25
+    },
+    "high": {
+     "s_c": 0.65,
+     "s_k": 0.23,
+     "s_l": 0.12
+    }
+   },
+   "basis": {
+    "vol_annual": "measured: USD 12m vol 11.2% (Statistics Portugal/Confidencial Imobiliario via BIS, 2006Q2-2026Q2), annual 11.7%, desmoothed 12.2-13.7%; 2016+ 7.7% (low)",
+    "corr_equity": "measured: quarterly 0.34, annual 0.40, desmoothed 0.20; regime vector 0.48 (local leg corr SPY 0.36). Central = regime-consistent vector (regime_vectors.py: measured local-currency leg 2007-2025 annual + EUR leg under the 60m factor matrix where EUR-IEF corr is 0.50); long-run USD values are the low end",
+    "corr_bonds": "measured: quarterly -0.01, annual -0.16, desmoothed -0.07 (2006-2026); 2016+ 0.46 (q) / 0.53 (a); regime vector 0.05 (local leg corr IEF -0.45)",
+    "corr_commodity": "measured: quarterly 0.33, annual 0.27, desmoothed 0.28; regime vector 0.22",
+    "corr_fx_eur": "measured: quarterly 0.92, annual 0.81, desmoothed 0.73; 2016+ 0.95; regime vector 0.78",
+    "s_c": "judgement: no PT regional or commercial quarterly series used; ES split applied with a wider low (0.30). PT commercial annual (INE PT, 2010-2025) not paired",
+    "s_k": "judgement (ES regional measurements transferred)",
+    "s_l": "1 - s_c - s_k"
+   },
+   "sources": [
+    {
+     "url": "https://data.bis.org/static/bulk/WS_SPP_csv_flat.zip ; WS_DPP_csv_flat.zip ; WS_CPP_csv_flat.zip",
+     "publisher": "BIS (national sources: GUS, NBP, vdpResearch, Bundesbank, INE, Banco de Espana, Statistics Portugal, private UAE compilers)",
+     "date": "accessed 2026-11-07, data to 2026Q2 (AE to 2024-04)",
+     "kind": "measured",
+     "note": "PT nominal SPP (1988+); CPP Portugal annual (2009+)"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EURUSD=X PLN=X AED=X monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "kind": "measured",
+     "note": "factor and FX returns; EURUSD before 2003-12 from FRED DEXUSEU (v3/params/dl/fred)"
+    },
+    {
+     "url": "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hpi_q/Q.TOTAL.I15_Q.DE+ES+PT+PL",
+     "publisher": "Eurostat",
+     "date": "accessed 2026-11-07, data to 2026Q2",
+     "kind": "measured",
+     "note": "cross-check of BIS national series 2011Q1+: local quarterly vol identical for ES/PT/PL (corr 1.00), DE corr 0.95 (Destatis vs vdp)"
+    },
+    {
+     "url": "https://www.globalpropertyguide.com/europe/portugal/rental-yields",
+     "publisher": "Global Property Guide",
+     "date": "2026 Q2",
+     "kind": "unverified_summary",
+     "note": "average gross rental yield 4.29% (Q2 2026) (search summary, page not opened); income leg = gross x 0.70 (judgement cost share)"
+    }
+   ],
+   "access_non_accredited": "No restriction on foreign buyers (unverified_summary). Costs: IMT 0-7.5% + 0.8% stamp duty, notary/registry, agent: ~8-12%. Golden visa real-estate route removed 2023; short-let licences (AL) restricted. Ticket ~EUR 150k+ (judgement)."
+  },
+  "residential_re:UA": {
+   "vol_annual": {
+    "low": 0.09,
+    "central": 0.14,
+    "high": 0.25
+   },
+   "corr_equity": {
+    "low": -0.2,
+    "central": 0.0,
+    "high": 0.3
+   },
+   "corr_bonds": {
+    "low": -0.1,
+    "central": 0.05,
+    "high": 0.2
+   },
+   "corr_commodity": {
+    "low": -0.1,
+    "central": 0.0,
+    "high": 0.3
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.2,
+     "s_k": 0.05,
+     "s_l": 0.75
+    },
+    "central": {
+     "s_c": 0.35,
+     "s_k": 0.15,
+     "s_l": 0.5
+    },
+    "high": {
+     "s_c": 0.5,
+     "s_k": 0.2,
+     "s_l": 0.3
+    }
+   },
+   "basis": {
+    "vol_annual": "measured (LUN asking prices, USD): Kyiv new-build 2014-2026 monthly-annualised 14.7%, quarterly 11.1% (Geltner 12.2%, AC1_q 0.09), 2014-16 23.8%/16.5%, 2017-21 7.7%; 5-city quarterly 2021-26 median 9.1% (Odesa 5.3%, Kharkiv 21.5%); central 14% allows for sticky asks",
+    "corr_equity": "measured: Kyiv 2014-26 -0.11 (m) / -0.03 (q); 5-city index 2021-26 0.05 (m) / 0.28 (q, n=22); secondary 2023-26 -0.20 (m); central = median",
+    "corr_bonds": "measured: Kyiv 0.07 / -0.10; 5-city 0.13 / 0.19; secondary -0.06; central = median",
+    "corr_commodity": "measured: Kyiv -0.01 / 0.23; 5-city -0.04 / 0.29; secondary -0.11; central = median",
+    "s_c": "measured+model: residual (after F) corr city vs UAH value 0.52 (m) / 0.39 (q) 5-city mean, Kyiv 0.69-0.74; = sqrt(s_c x 0.6) -> s_c 0.25-0.45; part of it is mechanical UAH-quoted new-build asks",
+    "s_k": "measured+model: s_c+s_k = residual cross-city corr 0.47 (m) / 0.24 (q) new-build 2021-26, 0.67-0.71 secondary 2023-26 (seasonality may inflate), 0.09 new-build 2023-26 q; s_k = remainder",
+    "s_l": "measured: 1 - (s_c+s_k); war geography: USD change 2021Q4->2026Q3 Lviv +63%, Ivano-Frankivsk +96%, Kyiv +9%, Kharkiv -29% (new-build)"
+   },
+   "sources": [
+    {
+     "url": "https://lun.ua/stat/api/data/price?cityId={1,113,115,105,120,109,110,103} ; https://lun.ua/stat/api/data/flat-price-history?cityId=..&contractTypeId=1",
+     "publisher": "LUN Statistics (lun.ua/stat) public JSON API",
+     "date": "accessed 2026-11-07",
+     "note": "new-build average asking USD/m2 by city monthly: Kyiv 2014-01..2026-11, Lviv/Odesa/Dnipro/Kharkiv/Zaporizhzhia/Ivano-Frankivsk/Vinnytsia 2021-01..2026-11 (2022-03/04 missing outside Kyiv); secondary median asking USD/m2 by rooms 2023-05..2026-11. measure_housing.py -> measure_housing_output.json",
+     "kind": "measured"
+    },
+    {
+     "url": "https://bank.gov.ua/NBU_Exchange/exchange_site?start=20100101&end=20261107&valcode=usd&json",
+     "publisher": "National Bank of Ukraine",
+     "date": "accessed 2026-11-07",
+     "note": "official UAH/USD daily (copied from ../params/dl/nbu); monthly-average USD value of UAH used as the country-factor check",
+     "kind": "measured"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance SPY IEF DBC EMB, monthly, auto_adjust)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07, data to 2026-10",
+     "note": "factor returns for regressions and check.py",
+     "kind": "measured"
+    },
+    {
+     "url": "https://lun.ua/stat/2024",
+     "publisher": "LUN Statistics",
+     "date": "2024 annual",
+     "note": "previous anchor kept for context: 2024 1-room secondary changes Lviv +13% .. Zaporizhzhia -21%",
+     "kind": "unverified_summary"
+    }
+   ],
+   "access_non_accredited": "Direct purchase (USD-quoted market); open to residents and foreigners; no accreditation concept."
+  },
+  "residential_re:US": {
+   "vol_annual": {
+    "low": 0.06,
+    "central": 0.09,
+    "high": 0.15
+   },
+   "corr_equity": {
+    "low": 0.1,
+    "central": 0.3,
+    "high": 0.53
+   },
+   "corr_bonds": {
+    "low": -0.53,
+    "central": -0.25,
+    "high": 0.0
+   },
+   "corr_commodity": {
+    "low": 0.05,
+    "central": 0.2,
+    "high": 0.3
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0,
+     "s_k": 0.55,
+     "s_l": 0.45
+    },
+    "central": {
+     "s_c": 0,
+     "s_k": 0.75,
+     "s_l": 0.25
+    },
+    "high": {
+     "s_c": 0,
+     "s_k": 0.8,
+     "s_l": 0.2
+    }
+   },
+   "basis": {
+    "vol_annual": "measured (metro annual price vol 7-8%, p90 11-12%) + desmoothed high (annual AC1 0.63-0.66 -> Geltner x2.1)",
+    "corr_equity": "measured (annual 0.53, quarterly 0.20)",
+    "corr_bonds": "measured (annual -0.53, quarterly -0.27)",
+    "corr_commodity": "measured (annual 0.22, quarterly 0.17)",
+    "s_c": "model-judgement (US: none)",
+    "s_k": "measured (avg pairwise metro residual corr after F 0.745-0.76; low for city/property level)",
+    "s_l": "measured (1 - s_k)"
+   },
+   "sources": [
+    {
+     "url": "https://fred.stlouisfed.org/series/CSUSHPINSA (and 20 metro *XRNSA series)",
+     "publisher": "S&P Dow Jones Indices via FRED",
+     "date": "accessed 2026-11-07, data to 2026-08",
+     "note": "Case-Shiller NSA metro price indices; measure.py: annual Dec-Dec metro vol median 7.1% (1992-2025) / 8.2% (2007-2025); avg pairwise corr of metro residuals after SPY/IEF/DBC 0.76 (annual 2007-2025) / 0.745 (quarterly deseasonalised 2006-2026); national corr SPY/IEF/DBC 0.53/-0.53/0.22 annual, 0.20/-0.27/0.17 quarterly"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance, SPY IEF DBC EMB HYG VNQ adjusted monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07",
+     "note": "factor returns; EMB vol 11.4% corr 0.60/0.43/0.30; HYG 10.2% corr 0.74/0.09/0.41 (2008-2026 monthly)"
+    }
+   ],
+   "access_non_accredited": "Direct ownership (single rental) or Reg A+ platforms (e.g. Arrived, Fundrise); no accreditation needed for direct purchase."
+  },
+  "ua_sovereign_usd:UA": {
+   "vol_annual": {
+    "low": 0.15,
+    "central": 0.35,
+    "high": 0.55
+   },
+   "corr_equity": {
+    "low": 0.05,
+    "central": 0.3,
+    "high": 0.55
+   },
+   "corr_bonds": {
+    "low": -0.15,
+    "central": 0.1,
+    "high": 0.4
+   },
+   "corr_commodity": {
+    "low": -0.2,
+    "central": 0.1,
+    "high": 0.3
+   },
+   "share_scenarios": {
+    "low": {
+     "s_c": 0.35,
+     "s_k": 0.65,
+     "s_l": 0.0
+    },
+    "central": {
+     "s_c": 0.55,
+     "s_k": 0.45,
+     "s_l": 0.0
+    },
+    "high": {
+     "s_c": 0.75,
+     "s_k": 0.25,
+     "s_l": 0.0
+    }
+   },
+   "basis": {
+    "vol_annual": "measured (rough) + literature: ICU weekly range midpoints Aug 2022-Aug 2024 (18 points, old bonds) -> 37% annualised (EMB 11.8% same window); prices 85-90 pre-invasion, 15-24 low (Nov 2022), 62 (2034 A-bond, Nov 2026); low 15% = peacetime single-B (EMB x1.3); central 35% kept",
+    "corr_equity": "model-judgement (EMB 0.60 upper anchor; distressed bonds trade on recovery)",
+    "corr_bonds": "model-judgement (EMB vs IEF 0.43 upper anchor)",
+    "corr_commodity": "model-judgement (2022: commodities up, Ukraine down)",
+    "s_c": "model-judgement",
+    "s_k": "model-judgement (restructuring mechanics, US rates)",
+    "s_l": "model-judgement (no location)"
+   },
+   "sources": [
+    {
+     "url": "https://icu.ua/download/4294/ICUWeeklyInsight-20230417-Eng.pdf ; https://icu.ua/download/4506/ICUWeeklyInsight-20240401-Eng.pdf",
+     "publisher": "ICU (Investment Capital Ukraine)",
+     "date": "2023-04-17, 2024-04-01",
+     "note": "Ukraine USD Eurobonds 17-23 cents (Apr 2023), 29-38 cents (Mar 2024); pre-invasion chart scale ~70-90; downloaded and text-extracted",
+     "kind": "measured"
+    },
+    {
+     "url": "https://www.spokesman.com/stories/2024/dec/31/riskier-bonds-lure-traders-in-lackluster-year-for- ; https://www.bnnbloomberg.ca/morgan-stanley-bet-on-ukraine-s-debt-returns-47-in-three-months-1.1938573",
+     "publisher": "Bloomberg (syndicated)",
+     "date": "2024-12-31; 2023-06-27",
+     "note": "Ukraine dollar bonds returned close to 60% in 2024; >30% in Q2 2023 (search summaries)",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://icu.ua/download/1427/ICUDebtInsight-20151208.pdf",
+     "publisher": "ICU",
+     "date": "2015-12-08",
+     "note": "2015 restructuring: 20% haircut into GDP warrants; new bonds 90-95 (search summary)",
+     "kind": "unverified_summary"
+    },
+    {
+     "url": "https://finance.yahoo.com (yfinance, SPY IEF DBC EMB HYG VNQ adjusted monthly)",
+     "publisher": "Yahoo Finance",
+     "date": "accessed 2026-11-07",
+     "note": "factor returns; EMB vol 11.4% corr 0.60/0.43/0.30; HYG 10.2% corr 0.74/0.09/0.41 (2008-2026 monthly)",
+     "kind": "measured"
+    },
+    {
+     "url": "https://icu.ua/download/<id>/ICUWeeklyInsight-<date>-Eng.pdf (monthly sample 2018-2026, list via web.archive.org CDX)",
+     "publisher": "ICU",
+     "date": "2018-03..2026-07",
+     "note": "text-extracted Eurobond price statements (dl/icu/sentences.txt); eurobond_points.py: 37% vol 2022-08..2024-08; Dec 2021 yields 6.24-7.85%, Feb 2022 9.5-13.3%; no pre-war price series in text",
+     "kind": "measured"
+    },
+    {
+     "url": "https://api.onvista.de/api/v1/bonds/ISIN:XS2895056013/snapshot ; https://api.onvista.de/api/v1/instruments/search/facet?searchValue=Ukraine",
+     "publisher": "onvista (quotes Frankfurt/Stuttgart)",
+     "date": "2026-11-06",
+     "note": "Ukraine 2024(34) Reg S step-up notes 62.2 (Frankfurt) / 62.85 (Stuttgart); listing shows the Sept 2024 restructuring into 2029-2036 notes and a 2025 Series C 2032 note; daily history endpoint returned 403 (terms of use), not pursued",
+     "kind": "measured"
+    },
+    {
+     "url": "https://ukranews.com/en/amp/news/1127767-ukraine-s-eurobonds-fall-in-price-as-investors-lose-faith-in-ceasefire-bloomberg",
+     "publisher": "Bloomberg via Ukranews",
+     "date": "2026",
+     "note": "Feb 2034 bond 62.5 end-Dec 2025 -> about 60.5 early 2026",
+     "kind": "unverified_summary"
+    }
+   ],
+   "access_non_accredited": "Eurobonds via international broker (e.g. IB) in min. lots; USD OVDP via Ukrainian banks."
+  }
+ }
+}

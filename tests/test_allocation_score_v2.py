@@ -53,6 +53,15 @@ class AllocationScoreV2Tests(unittest.TestCase):
 
 
 class AllocationV2IntegrationTests(unittest.TestCase):
+    @staticmethod
+    def _older_snapshot(saved):
+        """The same saved data without the risk progress keys: how snapshots saved before them still render."""
+        from copy import deepcopy
+        older = deepcopy(saved)
+        older['DIVERSIFICATION_DATA'].pop('risk_progress_v3')
+        older['DIVERSIFICATION_DATA'].pop('risk_progress_v2')
+        return older
+
     def test_v2_enrichment_does_not_depend_on_v1_calibration(self):
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail.enrich import enrich_combined_data
@@ -182,7 +191,10 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(result['data']['HOLY_GRAIL_DATA'], before['data']['HOLY_GRAIL_DATA'])
         q = result['data']['DIVERSIFICATION_DATA']
         self.assertIn('allocation_score_v2', q)
-        self.assertEqual({k: v for k, v in q.items() if k not in ('allocation_score_v2', 'concentration_v1')}, before['data']['DIVERSIFICATION_DATA'])
+        self.assertEqual(q['risk_progress_v2']['version'], 'risk_progress_v2')
+        self.assertEqual(q['risk_progress_v3']['version'], 'risk_progress_v3')
+        derived = ('allocation_score_v2', 'concentration_v1', 'risk_progress_v2', 'risk_progress_v3')
+        self.assertEqual({k: v for k, v in q.items() if k not in derived}, before['data']['DIVERSIFICATION_DATA'])
         self.assertIn('allocation_score_v2_enrichment', result)
 
     def test_replay_rejects_cleared_leverage_guard_in_frozen_evidence(self):
@@ -235,6 +247,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(saved['DIVERSIFICATION_DATA']['allocation_score_v2']['status'], 'unavailable')
 
     def test_saved_view_exposes_explicit_points_not_percent(self):
+        from copy import deepcopy
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail.enrich import enrich_combined_data
         from analytics.holy_grail.views.diversification import saved_diversification_view
@@ -242,11 +255,24 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         result = saved['DIVERSIFICATION_DATA']['allocation_score_v2']
+        points = saved['DIVERSIFICATION_DATA']['risk_progress_v3']['progress_display']['headline']
         view = saved_diversification_view(saved)
         self.assertEqual(view['number_kind'], 'allocation_points')
-        self.assertEqual(view['sheet_number'], result['display_score'])
-        self.assertEqual(view['headline'], f"{result['display_score']} зі 100")
+        self.assertIsInstance(view['sheet_number'], int)
+        self.assertEqual(view['sheet_number'], points)
+        self.assertEqual(view['sheet_summary'][0][1], points)
+        self.assertEqual(view['headline'], f'≈{points}/100')
         self.assertEqual(view['number_format'], {'type': 'NUMBER', 'pattern': '0" зі 100"'})
+        # A snapshot saved before risk_progress_v3 keeps the risk_progress_v2 headline.
+        v2_only = deepcopy(saved)
+        v2_only['DIVERSIFICATION_DATA'].pop('risk_progress_v3')
+        self.assertEqual(saved_diversification_view(v2_only)['sheet_number'],
+                         saved['DIVERSIFICATION_DATA']['risk_progress_v2']['progress_display']['headline'])
+        # A snapshot saved before risk_progress_v2 keeps its own explicit points.
+        older = saved_diversification_view(self._older_snapshot(saved))
+        self.assertEqual(older['sheet_number'], result['display_score'])
+        self.assertEqual(older['headline'], f"{result['display_score']} зі 100")
+        self.assertEqual(older['number_format'], {'type': 'NUMBER', 'pattern': '0" зі 100"'})
 
     def test_integrity_mode_rejects_resealed_bad_score_types(self):
         from tests.test_allocation_score import allocation_fixture
@@ -286,8 +312,19 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         for _ in range(2):
             refresh_insights(book, saved, config={})
         main = book.worksheet('30 Sep 2026')
-        self.assertEqual(main.values[(10, 2)], saved['DIVERSIFICATION_DATA']['allocation_score_v2']['display_score'])
+        points = saved['DIVERSIFICATION_DATA']['risk_progress_v3']['progress_display']['headline']
+        self.assertEqual(main.values[(10, 2)], points)
+        self.assertIsInstance(main.values[(10, 2)], int)
         self.assertEqual(main.formats[(10, 2)]['numberFormat'], {'type': 'NUMBER', 'pattern': '0" зі 100"'})
+        # Older snapshots (no risk progress keys) keep writing the v2 points the same way on repeat.
+        older_book = FakeSpreadsheet()
+        older = self._older_snapshot(saved)
+        for _ in range(2):
+            refresh_insights(older_book, older, config={})
+        self.assertEqual(older_book.worksheet('30 Sep 2026').values[(10, 2)],
+                         saved['DIVERSIFICATION_DATA']['allocation_score_v2']['display_score'])
+        self.assertEqual(older_book.worksheet('30 Sep 2026').formats[(10, 2)]['numberFormat'],
+                         {'type': 'NUMBER', 'pattern': '0" зі 100"'})
 
     def test_legacy_formatter_accepts_explicit_points_kind(self):
         from types import SimpleNamespace
@@ -546,12 +583,15 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         data, settings, histories = allocation_fixture()
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
-        rows = saved_diversification_view(saved)['rows']
-        names = [key for key, _ in rows]
+        names = [key for key, _ in saved_diversification_view(saved)['rows']]
         self.assertIn('Сектори: Акції США', names)
-        self.assertIn('Історія пар', names)
-        self.assertIn('Порівняння', names)
         self.assertIn('Модель', names)
+        # Pair history and the comparison belong to the v2 details of snapshots saved before risk_progress_v2.
+        older_names = [key for key, _ in saved_diversification_view(self._older_snapshot(saved))['rows']]
+        self.assertIn('Сектори: Акції США', older_names)
+        self.assertIn('Історія пар', older_names)
+        self.assertIn('Порівняння', older_names)
+        self.assertIn('Модель', older_names)
 
     def test_private_group_override_cannot_change_pinned_method(self):
         from tests.test_allocation_score import allocation_fixture
@@ -570,8 +610,11 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         view = saved_diversification_view(saved)
-        self.assertIn('Концентрований', view['status'])
+        self.assertEqual(view['status'], 'Модельна оцінка')
         self.assertNotIn('Економічна валютна', view['status'])
+        older = saved_diversification_view(self._older_snapshot(saved))
+        self.assertIn('Концентрований', older['status'])
+        self.assertNotIn('Економічна валютна', older['status'])
 
     def test_previous_source_references_have_explicit_verification_status(self):
         from tests.test_allocation_score import allocation_fixture
@@ -716,7 +759,10 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         rows = saved_diversification_view(saved)['rows']
         self.assertTrue(any(label == 'Представник: Акції США' and value == 'SPY' for label, value in rows))
-        self.assertTrue(any(label == 'Формула' and '100' in value for label, value in rows))
+        # The v2 formula row belongs to the v2 details of snapshots saved before risk_progress_v2.
+        older_rows = saved_diversification_view(self._older_snapshot(saved))['rows']
+        self.assertTrue(any(label == 'Представник: Акції США' and value == 'SPY' for label, value in older_rows))
+        self.assertTrue(any(label == 'Формула' and '100' in value for label, value in older_rows))
 
     def test_boolean_or_nonfinite_cash_breakdown_is_rejected(self):
         from tests.test_allocation_score import allocation_fixture

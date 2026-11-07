@@ -20,9 +20,10 @@ def main():
     parser.add_argument("--offline", action="store_true", help="Use cached public history only")
     parser.add_argument("--previous-snapshot", type=Path, help="Optional previous v2 snapshot for attribution")
     parser.add_argument("--car-category", type=Path,
-                        help="Frozen car-category block (just car-category build): also derives the v3 record")
+                        help="Frozen car-category block (just car-category build): also derives the allocation_score_v3 record")
     parser.add_argument("--car-proxies", type=Path,
-                        help="Frozen car proxy block (just car-proxies build): also derives risk_progress_v1 with car scenarios")
+                        help="Frozen car proxy block (car_proxies_v2 or v3; just car-proxies build): derives risk_progress_v3 "
+                             "(headline), risk_progress_v2 and the older risk_progress_v1 from it; the car basket is not collected")
     parser.add_argument("--what-if", action="append", default=[], metavar="ID=VALUE",
                         help="Offline before/after on a copied snapshot; repeatable, e.g. --what-if ib:VOO=+20000")
     args = parser.parse_args()
@@ -51,6 +52,8 @@ def main():
     quality = data.get("DIVERSIFICATION_DATA") or {}
     v2 = quality.get("allocation_score_v2") or {}
     v3 = quality.get("allocation_score_v3") or {}
+    headline = quality.get("risk_progress_v2") or {}
+    individual = quality.get("risk_progress_v3") or {}
     progress = quality.get("risk_progress_v1") or {}
     scenarios = progress.get("car_scenarios") or {}
     print(json.dumps({"output": str(args.output.resolve()),
@@ -62,6 +65,21 @@ def main():
                       "allocation_score_v2": quality.get("allocation_score_v2"),
                       "allocation_score_v3": {key: v3.get(key) for key in (
                           "status", "score", "display_score", "category", "warnings")} if v3 else None,
+                      "risk_progress_v3": {
+                          "status": individual.get("status"), "reason": individual.get("reason"),
+                          "progress_display": individual.get("progress_display"), "warnings": individual.get("warnings"),
+                          "private_streams": individual.get("private"),
+                          "scenarios": (individual.get("scenarios") or {}).get("range"),
+                          "private_gain_points": (individual.get("private_gain") or {}).get("total_points"),
+                      } if individual else None,
+                      "risk_progress_v2": {
+                          "status": headline.get("status"), "reason": headline.get("reason"),
+                          "progress_display": headline.get("progress_display"), "warnings": headline.get("warnings"),
+                          "covered_pct_invested": (headline.get("coverage") or {}).get("covered_pct_invested"),
+                          "car_proxy": ((headline.get("coverage") or {}).get("car_proxy") or {}).get("id"),
+                          "proxy_comparison": ((headline.get("sensitivity") or {}).get("proxy_comparison") or {}).get("status"),
+                          "volatility_sensitivity": ((headline.get("sensitivity") or {}).get("volatility") or {}).get("status"),
+                      } if headline else None,
                       "risk_progress_v1": {"status": progress.get("status"), "progress_display": progress.get("progress_display"),
                                            "car_scenarios_status": scenarios.get("status"),
                                            "car_scenarios_range": scenarios.get("range")} if progress else None,
