@@ -242,57 +242,9 @@ def _run_locked(args, data_dir: Path) -> int:
     if args.backfill_days is not None:
         backfill_days = args.backfill_days
 
-    results = []
-    alert_rows = []
-    failures = []
-    blocked = False
-    new_total = 0
-
-    for position in process_list:
-        entry = {
-            "ticker": position.ticker,
-            "category": position.category,
-            "cik": position.cik,
-            "status": position.status,
-            "events": [],
-            "rf": [],
-            "error": None,
-        }
-        record = dict(run_state["ciks"].get(position.cik) or _default_record(position))
-        try:
-            submissions = client.fetch_submissions(position.cik)
-        except EdgarBlocked as exc:
-            blocked = True
-            entry["error"] = f"BLOCKED: {digest_module.one_line(exc)}"
-            results.append(entry)
-            failures.append({"ticker": position.ticker, "error": f"BLOCKED: {digest_module.one_line(exc)}"})
-            break
-        except (EdgarRequestError, requests.RequestException) as exc:
-            entry["error"] = digest_module.one_line(exc)
-            results.append(entry)
-            failures.append({"ticker": position.ticker, "error": digest_module.one_line(exc)})
-            continue
-
-        if not position.forced and universe.classify_fund(submissions):
-            position.status = universe.STATUS_SKIPPED_FUND
-            skipped["fund"].append(position.ticker)
-            continue
-
-        new_filings, updated_record = state_store.new_accessions(
-            submissions, record, max_backfill_days=backfill_days, now=now
-        )
-        new_total += len(new_filings)
-        entry["events"].extend(
-            _new_filings_flow(
-                new_filings, position, client, entries_sink=alert_rows, ts=ts
-            )
-        )
-        entry["rf"].extend(
-            _rf_flow(client, position, submissions, updated_record, filings_dir)
-        )
-        updated_record["last_success_utc"] = ts
-        run_state["ciks"][position.cik] = updated_record
-        results.append(entry)
+    results, alert_rows, failures, blocked, new_total = _per_cik_pass(
+        client, process_list, run_state, skipped, now, ts, backfill_days, filings_dir
+    )
 
     if blocked:
         # Abort before the state commit: no partial idempotency point, no sends.
@@ -366,6 +318,67 @@ def _run_locked(args, data_dir: Path) -> int:
 
     _ping_healthcheck(args.healthcheck_url, exit_code == EXIT_OK)
     return exit_code
+
+
+def _per_cik_pass(client, process_list, run_state, skipped, now, ts, backfill_days, filings_dir):
+    """Collect submissions and events for every monitored CIK.
+
+    Returns (results, alert_rows, failures, blocked, new_total); run_state
+    and the fund entries of skipped are updated in place.
+    """
+    results = []
+    alert_rows = []
+    failures = []
+    blocked = False
+    new_total = 0
+
+    for position in process_list:
+        entry = {
+            "ticker": position.ticker,
+            "category": position.category,
+            "cik": position.cik,
+            "status": position.status,
+            "events": [],
+            "rf": [],
+            "error": None,
+        }
+        record = dict(run_state["ciks"].get(position.cik) or _default_record(position))
+        try:
+            submissions = client.fetch_submissions(position.cik)
+        except EdgarBlocked as exc:
+            blocked = True
+            entry["error"] = f"BLOCKED: {digest_module.one_line(exc)}"
+            results.append(entry)
+            failures.append({"ticker": position.ticker, "error": f"BLOCKED: {digest_module.one_line(exc)}"})
+            break
+        except (EdgarRequestError, requests.RequestException) as exc:
+            entry["error"] = digest_module.one_line(exc)
+            results.append(entry)
+            failures.append({"ticker": position.ticker, "error": digest_module.one_line(exc)})
+            continue
+
+        if not position.forced and universe.classify_fund(submissions):
+            position.status = universe.STATUS_SKIPPED_FUND
+            skipped["fund"].append(position.ticker)
+            continue
+
+        new_filings, updated_record = state_store.new_accessions(
+            submissions, record, max_backfill_days=backfill_days, now=now
+        )
+        new_total += len(new_filings)
+        entry["events"].extend(
+            _new_filings_flow(
+                new_filings, position, client, entries_sink=alert_rows, ts=ts
+            )
+        )
+        entry["rf"].extend(
+            _rf_flow(client, position, submissions, updated_record, filings_dir)
+        )
+        updated_record["last_success_utc"] = ts
+        run_state["ciks"][position.cik] = updated_record
+        results.append(entry)
+
+    return results, alert_rows, failures, blocked, new_total
 
 
 def _digest_ctx(ts, rows, monitored, process_list, new_total, failures, config) -> dict:
@@ -495,36 +508,54 @@ def _rf_flow(client, position, submissions, record, filings_dir) -> list:
 
 def _process_risk_factors(client, position, filing, record, filings_dir) -> dict:
     """Fetch, extract Item 1A, diff against the stored baseline; return the digest entry."""
-    cik = position.cik
-    accession = filing["accession"]
-    nodash = accession.replace("-", "")
-    directory = filings_dir / cik / nodash
-    url = client.filing_url(cik, accession)
     entry = {
         "form": filing["form"],
-        "accession": accession,
+        "accession": filing["accession"],
         "filed": filing.get("filing_date", ""),
-        "url": url,
+        "url": client.filing_url(position.cik, filing["accession"]),
         "status": "extracted",
         "added": 0,
         "removed": 0,
         "headers": [],
         "no_baseline": False,
     }
+    body, failure = _fetch_rf_document(client, position, filing["accession"], filing)
+    if failure is not None:
+        entry["status"] = "document_fetch_failed"
+        entry["detail"] = failure
+        return entry
+    return _extract_and_write_rf(body, position, filing, record, filings_dir, entry)
+
+
+def _fetch_rf_document(client, position, accession, filing):
+    """Fetch one periodic filing's primary document for the Item 1A pass.
+
+    Returns (body, None) on HTTP 200 or (None, failure_detail); the failure
+    detail becomes the digest entry's "document_fetch_failed" marker.
+    """
+    nodash = accession.replace("-", "")
     try:
-        status, body = client.fetch_document(cik, nodash, filing.get("primary_document", ""))
+        status, body = client.fetch_document(
+            position.cik, nodash, filing.get("primary_document", "")
+        )
     except (EdgarRequestError, requests.RequestException, EdgarBlocked) as exc:
         logger.warning(
             "risk factors fetch failed for %s (%s): %s", position.ticker, accession, exc
         )
-        entry["status"] = "document_fetch_failed"
-        entry["detail"] = digest_module.one_line(exc)
-        return entry
+        return None, digest_module.one_line(exc)
     if status != 200:
-        entry["status"] = "document_fetch_failed"
-        entry["detail"] = f"HTTP {status}"
-        return entry
+        return None, f"HTTP {status}"
+    return body, None
 
+
+def _extract_and_write_rf(body, position, filing, record, filings_dir, entry) -> dict:
+    """Extract Item 1A from the fetched document, diff it against the stored
+    baseline and write the artifacts; updates record, returns the entry."""
+    cik = position.cik
+    accession = filing["accession"]
+    nodash = accession.replace("-", "")
+    url = entry["url"]
+    directory = filings_dir / cik / nodash
     text = risk_factors.html_to_text(body)
     extract_status, section = risk_factors.extract_item_1a(text)
     metadata = {
