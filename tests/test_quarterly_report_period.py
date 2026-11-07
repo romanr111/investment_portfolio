@@ -1,5 +1,9 @@
 """Quarter labels and activity must belong to the closing export quarter."""
 
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import json
 import os
 import shutil

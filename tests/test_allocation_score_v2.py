@@ -397,6 +397,9 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertLessEqual(max(map(len, q['histories'].values())), 60)
 
     def test_previous_snapshot_reader_handles_missing_and_malformed_files(self):
+        from private_data_guard import private_data_available
+        if not private_data_available():
+            self.skipTest('private local data modules are absent in this checkout')
         import json
         import tempfile
         from pathlib import Path

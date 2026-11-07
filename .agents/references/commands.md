@@ -22,16 +22,20 @@ The authoritative list lives in `justfile`. Key recipes:
 ### `just run` (portfolio sync pipeline)
 
 By default (`just run` with no flags):
-1. Fetches live positions from IB Gateway (`ib_insync`)
+1. Fetches live positions from IB Gateway (`ib_async`, pinned `ib_async==2.1.0`)
 2. Fetches YTD performance from IB Flex Web Service
 3. Calculates allocation and dividend income (yfinance/Yahoo)
 4. Writes `data/snapshots/combined_data_<date>_<timestamp>.json` (+ `_latest.json`)
 5. Updates Google Sheets (`data/credentials.json`)
 6. Skips history sync and Dalio analysis by default
 
+Flag passthrough works in both documented forms: `just run --run-history-sync`
+and `just run -- --run-history-sync` (the bare `--` separator is dropped before
+the module sees the flags).
+
 Full data collection (all sources + history + Dalio):
 ```bash
-just run -- --run-history-sync --run-dalio-analysis
+just run --run-history-sync --run-dalio-analysis
 ```
 
 Key flags:
@@ -44,6 +48,26 @@ Key flags:
 Full flag list: `python -m src.portfolio_sync --help` or see `README.md`.
 
 Required env vars (in `data/ib_flex_env.sh`): `IB_GATEWAY_HOST`, `IB_GATEWAY_PORT`, `IB_FLEX_TOKEN`, `IB_FLEX_QUERY_ID_YTD_PERFORMANCE`, `IB_ACCOUNT_ID`. For the quarterly report also: `IB_FLEX_QUERY_ID_PORTFOLIO_SNAPSHOT` (see `.agents/skills/quarterly-report/SKILL.md`).
+
+### `just run-guarded` (lock, receipts, retries, healthcheck pings)
+
+Runs the same sync under `src.job_control.run_job` (POSIX only):
+
+- advisory lock `data/run/sync.lock`: a second concurrent run exits 3 with
+  `outcome=locked` on stderr and receipt, without pinging;
+- one JSON receipt per run appended to `data/run/receipts.jsonl` (fields:
+  schema, job, start_utc, end_utc, duration_s, attempts, exit_code, outcome,
+  command, pid, retry_delay_s, notified); local-only, safe to delete;
+- healthcheck pings only when `HEALTHCHECK_SYNC_URL` is set: `/start` before
+  the first attempt, bare URL on success, `/fail` after the last failed
+  attempt; ping failures are stderr warnings and never change the exit code;
+- receipt and lock files are recreated on the next run if deleted.
+
+Wrapper options exist only on the direct module call:
+
+```bash
+python -m src.job_control.run_job --job sync --retries 2 -- venv/bin/python -m src.portfolio_sync
+```
 
 Outputs: `data/snapshots/combined_data_*.json`, `data/portfolio_history.csv`, `data/portfolio_history.jsonl`, `analytics/output/` (Dalio).
 

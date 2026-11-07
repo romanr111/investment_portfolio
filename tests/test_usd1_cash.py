@@ -1,3 +1,7 @@
+from private_data_guard import require_private_data
+
+require_private_data()
+
 import unittest
 from datetime import date
 from pathlib import Path

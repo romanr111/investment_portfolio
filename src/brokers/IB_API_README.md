@@ -2,7 +2,7 @@
 
 The portfolio runtime uses two Interactive Brokers data sources:
 
-- IB Gateway / TWS API through `ib_insync` for live account state.
+- IB Gateway / TWS API through `ib_async` (pinned `ib_async==2.1.0` in `requirements.txt`) for live account state.
 - IBKR Flex Web Service for account-level YTD TWR / NAV performance.
 
 The local Client Portal Gateway is deprecated for this project. Runtime code should not call:

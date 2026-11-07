@@ -6,6 +6,18 @@ Keep portfolio positions, generated combined data, snapshots, API keys, credenti
 
 Only this README is tracked so fresh clones keep the expected directory shape without exposing sensitive data.
 
+## Job wrapper run state (`data/run/`)
+
+`just run-guarded` keeps local run state here. It stays local-only and is never
+committed to Git.
+
+- `<job>.lock` - advisory flock holder for the running job, one file per job name.
+- `receipts.jsonl` - one JSON receipt line per run (schema, job, start/end UTC,
+  duration, attempts, exit code, outcome, command, pid, retry delay,
+  healthcheck notification status).
+
+Deleting these files is safe; the next run recreates them.
+
 ## Portfolio insights settings
 
 The dated Google Sheets portfolio tab can use optional local settings from
