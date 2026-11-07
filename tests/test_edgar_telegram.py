@@ -76,6 +76,15 @@ class TelegramSendTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("RuntimeError", detail)
 
+    def test_transport_exception_detail_redacts_bot_token(self):
+        token = "SECRET123"
+        exc = RuntimeError(f"cannot post to https://api.telegram.org/bot{token}/sendMessage")
+        ok, detail = self._send(FakeSession(exc=exc), token=token)
+        self.assertFalse(ok)
+        self.assertNotIn(token, detail)
+        self.assertIn("***", detail)
+        self.assertIn("sendMessage", detail)
+
     def test_message_truncated_to_telegram_limit(self):
         session = FakeSession()
         self._send(session, text="x" * 9000)

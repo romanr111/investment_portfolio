@@ -414,6 +414,110 @@ class WatchRunTests(_OfflineModuleTestCase):
         self.assertIn("--limit-tickers hid 3 of 4 monitored", output)
         self.assertFalse((self.data_dir / "alerts.jsonl").read_text(encoding="utf-8").strip() == "")
 
+    def test_8ka_scan_failure_degrades_to_items_unknown_alert(self):
+        # An 8-K/A with empty items needs the one-shot document scan; the
+        # primary document is absent from the docs map, so the route returns
+        # 404 and the scan fails. The run must degrade, not crash.
+        submissions_by_cik = self._submissions_by_cik()
+        submissions_by_cik["0000001010"] = _submissions(
+            "1010",
+            [("0001010-26-000100", "8-K/A", "", "testa-8ka-unscannable.htm", _day_offset(0))],
+        )
+        routes = _default_routes(submissions_by_cik, self._docs_by_name())
+        code, output = self._run_watch("--dry-alert", session=_FakeSession(routes))
+        self.assertEqual(code, 0, output)
+        self.assertIn("Items unknown (scan failed)", output)
+        rows = [json.loads(line) for line in self._alerts_lines()]
+        unknown = [row for row in rows if row["headline"] == "Items unknown (scan failed)"]
+        self.assertEqual(len(unknown), 1)
+        self.assertEqual(unknown[0]["form"], "8-K/A")
+        self.assertIsNone(unknown[0]["item_code"])
+        self.assertIsNone(unknown[0]["items"])
+
+    def test_telegram_failure_prints_full_digest(self):
+        os.environ["TELEGRAM_BOT_TOKEN"] = "TESTTOKEN"
+        os.environ["TELEGRAM_CHAT_ID"] = "42"
+
+        class _FailingPostSession(_FakeSession):
+            def post(self, url, data=None, timeout=None, **_kwargs):
+                self.posts.append({"url": url, "data": data})
+                raise requests.ConnectionError("telegram unreachable")
+
+        session = _FailingPostSession(
+            _default_routes(self._submissions_by_cik(), self._docs_by_name())
+        )
+        code, output = self._run_watch(session=session)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(len(session.posts), 1)
+        # The full digest survives in the log (launchd stdout redirect).
+        self.assertIn("EDGAR watch ·", output)
+        self.assertIn("\U0001F534 [TESTA] 8-K items 1.03,9.01", output)
+
+    def test_state_save_failure_exits_fatal_after_alerts_without_send(self):
+        os.environ["TELEGRAM_BOT_TOKEN"] = "TESTTOKEN"
+        os.environ["TELEGRAM_CHAT_ID"] = "42"
+        session = self._session()
+        with patch.object(watch.state_store, "save", side_effect=OSError("disk full")):
+            code, output = self._run_watch(session=session)
+        self.assertEqual(code, 1, output)
+        # Alerts were appended: the next run re-alerts, which stays correct.
+        self.assertTrue(self._alerts_lines())
+        self.assertEqual(session.posts, [])
+        self.assertFalse((self.data_dir / "state.json").exists())
+
+    def test_healthcheck_pings_bare_url_on_success(self):
+        url = "http://healthcheck.example/edgar-uid"
+        with patch.object(watch.urllib.request, "urlopen") as ping:
+            ping.return_value.__enter__.return_value.status = 200
+            code, output = self._run_watch("--healthcheck-url", url, session=self._session())
+        self.assertEqual(code, 0, output)
+        self.assertEqual(ping.call_count, 1, output)
+        self.assertEqual(ping.call_args[0][0], url)
+
+    def test_healthcheck_pings_fail_path_on_partial_run(self):
+        url = "http://healthcheck.example/edgar-uid"
+        failing_routes = _default_routes(self._submissions_by_cik(), self._docs_by_name())
+
+        def route_with_failure(routed_url):
+            if "CIK0000002020" in routed_url:
+                return _FakeResponse(503, text="unavailable")
+            return failing_routes(routed_url)
+
+        with patch.object(watch.urllib.request, "urlopen") as ping:
+            ping.return_value.__enter__.return_value.status = 200
+            code, output = self._run_watch(
+                "--healthcheck-url", url, session=_FakeSession(route_with_failure)
+            )
+        self.assertEqual(code, 2, output)
+        self.assertEqual(ping.call_count, 1, output)
+        self.assertEqual(ping.call_args[0][0], url + "/fail")
+
+    def test_value_floor_hides_positions_and_counts_them(self):
+        self.config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "force_include": {"HKSTOCK": {"via": "HKADR", "note": "sample ADR mapping"}},
+                    "min_market_value_usd": 600,
+                }
+            ),
+            encoding="utf-8",
+        )
+        code, output = self._run_watch("--dry-alert", session=self._session())
+        self.assertEqual(code, 0, output)
+        self.assertIn("Below value floor: 3", output)
+        self.assertIn("monitored 1", output)
+        self.assertIn("new 4", output)
+
+    def test_invalid_min_market_value_config_is_fatal(self):
+        self.config_path.write_text(
+            json.dumps({"min_market_value_usd": "lots"}), encoding="utf-8"
+        )
+        code, output = self._run_watch("--dry-alert", session=self._session())
+        self.assertEqual(code, 1, output)
+        # The config parse fails before any network access.
+        self.assertEqual(self._session_holder["session"].gets, [])
+
 
 class EdgarClientTests(_OfflineModuleTestCase):
     def _client(self, route, **kwargs):
@@ -502,7 +606,8 @@ class UniverseTests(_OfflineModuleTestCase):
         self.assertEqual(universe.normalize_symbol(" ok "), "OK")
 
     def test_load_snapshot_symbols_reads_equity_buckets_only(self):
-        rows = universe.load_snapshot_symbols(FIXTURES / "snapshot_fixture.json")
+        rows, value_filtered = universe.load_snapshot_symbols(FIXTURES / "snapshot_fixture.json")
+        self.assertEqual(value_filtered, 0)
         tickers = [row["ticker"] for row in rows]
         self.assertIn("TESTA", tickers)
         self.assertIn("HKSTOCK", tickers)
@@ -511,11 +616,18 @@ class UniverseTests(_OfflineModuleTestCase):
         test_a = next(row for row in rows if row["ticker"] == "TESTA")
         self.assertEqual(test_a["market_value"], 900.0)
 
-    def test_min_market_value_floor_is_applied(self):
-        rows = universe.load_snapshot_symbols(
+    def test_min_market_value_floor_is_applied_and_counted(self):
+        rows, value_filtered = universe.load_snapshot_symbols(
             FIXTURES / "snapshot_fixture.json", min_market_value_usd=350
         )
         self.assertEqual(sorted(row["ticker"] for row in rows), ["TESTA", "TESTB"])
+        self.assertEqual(value_filtered, 2)
+        # A floor above every position keeps the empty-universe signal.
+        rows_all, value_filtered_all = universe.load_snapshot_symbols(
+            FIXTURES / "snapshot_fixture.json", min_market_value_usd=10_000
+        )
+        self.assertEqual(rows_all, [])
+        self.assertEqual(value_filtered_all, 4)
 
     def test_build_cik_map_pads_ciks_and_normalizes(self):
         payload = {"0": {"cik_str": 1067983, "ticker": "BRK B", "title": "Sample Holder"}}
@@ -550,7 +662,7 @@ class UniverseTests(_OfflineModuleTestCase):
             universe.load_cik_map(_FakeSession(failing), self.data_dir / "absent_cache.json", now=FIXED_NOW)
 
     def test_resolve_positions_statuses_and_forces(self):
-        rows = universe.load_snapshot_symbols(FIXTURES / "snapshot_fixture.json")
+        rows, _value_filtered = universe.load_snapshot_symbols(FIXTURES / "snapshot_fixture.json")
         cik_map = universe.build_cik_map(_fixture_json("company_tickers_fixture.json"))
         positions = universe.resolve_positions(rows, cik_map, {})
         statuses = {p.ticker: p.status for p in positions}
@@ -667,6 +779,121 @@ class DigestTests(_OfflineModuleTestCase):
         self.assertIn("Info event title 0", text)
         self.assertNotIn("Info event title 5", text)
         self.assertIn(f"… (+2 entries in {digest_module.ALERTS_LOG_PATH})", text)
+
+    def _warn_tier_results(self):
+        """RED + one large WARN block + several small INFO blocks."""
+        warn_url = (
+            "https://www.sec.gov/Archives/edgar/data/0000001010/"
+            "000101026000009/0001010-26-000009-large-warn-url-padding.htm"
+        )
+        warn_event = {
+            "form": "8-K",
+            "item_code": "2.05",
+            "items": "2.05",
+            "title": "Costs Associated with Exit or Disposal Activities",
+            "level": severity.LEVEL_WARN,
+            "accession": "0001010-26-000009",
+            "filed": "2026-11-06",
+            "url": warn_url,
+        }
+        results = [
+            {"ticker": "RED1", "events": [self._red_event()], "rf": [], "error": None},
+            {"ticker": "WARN1", "events": [warn_event], "rf": [], "error": None},
+        ]
+        for index in range(3):
+            results.append(
+                {
+                    "ticker": f"T{index}",
+                    "events": [self._info_event(index)],
+                    "rf": [],
+                    "error": None,
+                }
+            )
+        return results
+
+    def _info_event(self, index):
+        return {
+            "form": "8-K",
+            "item_code": "2.02",
+            "items": "2.02",
+            "title": f"Info event title {index}",
+            "level": severity.LEVEL_INFO,
+            "accession": f"acc{index}",
+            "filed": "2026-11-06",
+            "url": f"https://u/{index}",
+        }
+
+    def _segments(self, results, new):
+        skipped = {"unresolved": [], "fund": [], "excluded": [], "hidden_by_limit": 0}
+        ctx = {
+            "ts": "t", "positions": 5, "monitored": 5, "processed": 5,
+            "new": new, "failures": [],
+            "digest": {"char_budget": 100000, "max_info_lines": 20},
+        }
+        unrestricted = digest_module.build_digest(results, skipped, ctx)
+        segments = [s for s in unrestricted.split("\n\n") if s]
+        return segments[0], segments[1:]
+
+    def test_warn_block_kept_and_infos_forfeited_under_tight_budget(self):
+        results = self._warn_tier_results()
+        # Measure the real rendered sizes with a generous budget, then pin
+        # the budget to the exact boundary where WARN still fits.
+        header, blocks = self._segments(results, new=5)
+        budget = len(header) + 2 + len(blocks[0]) + 2 + len(blocks[1])
+        ctx = {
+            "ts": "t", "positions": 5, "monitored": 5, "processed": 5,
+            "new": 5, "failures": [],
+            "digest": {"char_budget": budget, "max_info_lines": 20},
+        }
+        text = digest_module.build_digest(
+            results,
+            {"unresolved": [], "fund": [], "excluded": [], "hidden_by_limit": 0},
+            ctx,
+        )
+        self.assertIn("\U0001F534 [RED1]", text)
+        self.assertIn("Costs Associated with Exit or Disposal Activities", text)
+        # Dropping nothing above INFO is a WARN kept boundary: every INFO is
+        # forfeited wholesale, not just the ones that no longer fit.
+        self.assertNotIn("Info event title 0", text)
+        self.assertNotIn("Info event title 2", text)
+        self.assertIn(f"… (+3 entries in {digest_module.ALERTS_LOG_PATH})", text)
+
+    def test_form4_drop_forfeits_infos_under_tight_budget(self):
+        form4_event = dict(
+            self._red_event(),
+            form="4",
+            item_code=None,
+            items=None,
+            title="Form 4",
+            level=severity.LEVEL_INFO,
+            accession="acc4",
+            url="https://u/4",
+        )
+        results = [
+            {"ticker": "RED1", "events": [self._red_event()], "rf": [], "error": None},
+            {"ticker": "T4", "events": [form4_event], "rf": [], "error": None},
+            {"ticker": "T0", "events": [self._info_event(0)], "rf": [], "error": None},
+            {"ticker": "T1", "events": [self._info_event(1)], "rf": [], "error": None},
+        ]
+        header, blocks = self._segments(results, new=4)
+        blocks = [b for b in blocks if "Form 4" not in b]
+        # The Form 4 fold line never fits: it is dropped (1) and both INFO
+        # blocks are forfeited (2).
+        budget = len(header) + 2 + len(blocks[0])
+        ctx = {
+            "ts": "t", "positions": 5, "monitored": 5, "processed": 5,
+            "new": 4, "failures": [],
+            "digest": {"char_budget": budget, "max_info_lines": 20},
+        }
+        text = digest_module.build_digest(
+            results,
+            {"unresolved": [], "fund": [], "excluded": [], "hidden_by_limit": 0},
+            ctx,
+        )
+        self.assertIn("\U0001F534 [RED1]", text)
+        self.assertNotIn("Form 4 (insider changes)", text)
+        self.assertNotIn("Info event title 0", text)
+        self.assertIn(f"… (+3 entries in {digest_module.ALERTS_LOG_PATH})", text)
 
     def test_rf_failure_suffixes(self):
         for status, marker in (

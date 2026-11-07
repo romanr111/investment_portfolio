@@ -36,6 +36,15 @@ class ExtractItem1ATests(unittest.TestCase):
         # Slice keeps boundaries: it does not leak into Item 2 content.
         self.assertNotIn("leases its facilities", section)
 
+    def test_body_heading_beats_pre_body_cross_reference(self):
+        # The cross-reference "Item 1A" sits far from any "Risk Factors"
+        # label, so under the old longest-slice rule its slice (running to
+        # the next Item 1B boundary, i.e. over the whole body) would win.
+        status, section = risk_factors.extract_item_1a(risk_factors.html_to_text(_load("tenk_v3_crossref.html")))
+        self.assertEqual(status, "extracted")
+        self.assertIn("Operational risks remain elevated", section)
+        self.assertNotIn("described in Item 1A", section)
+
     def test_item1a_not_found_status(self):
         status, section = risk_factors.extract_item_1a("No risk factors item here at all.")
         self.assertEqual(status, "item1a_not_found")

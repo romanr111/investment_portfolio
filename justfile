@@ -69,8 +69,10 @@ car-proxies *args:
 # EDGAR filing monitor for individual equity positions (SEC submissions +
 # 8-K items + Risk Factors diffs; alerts.jsonl, state.json, Telegram digest).
 # Requires SEC_USER_AGENT in data/ib_flex_env.sh; --dry-alert previews offline.
+# A literal "--" separator (just edgar-watch -- --dry-alert) is stripped in an
+# anchored way, so argparse never sees it ({{args}} would pass it through).
 edgar-watch *args:
-    venv/bin/python -m src.edgar.watch {{args}}
+    venv/bin/python -m src.edgar.watch {{replace_regex(args, "^-- ", "")}}
 
 # Download Flex snapshot artifacts from last 4 CI runs.
 fetch-snapshots:

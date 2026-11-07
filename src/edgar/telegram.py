@@ -20,6 +20,14 @@ def truncate_for_telegram(text: str, limit: int = MAX_MESSAGE_CHARS) -> str:
     return text[:limit]
 
 
+def _redacted_detail(exc, token) -> str:
+    """Exception detail with the bot token redacted (the request URL embeds it)."""
+    detail = f"{type(exc).__name__}: {exc}"
+    if token:
+        detail = detail.replace(token, "***")
+    return detail
+
+
 def send(session, token, chat_id, text, timeout_s=DEFAULT_TIMEOUT_SECONDS):
     """POST sendMessage; returns (ok, detail)."""
     if not token or not chat_id:
@@ -29,9 +37,9 @@ def send(session, token, chat_id, text, timeout_s=DEFAULT_TIMEOUT_SECONDS):
     try:
         response = session.post(url, data=payload, timeout=timeout_s)
     except requests_exceptions.RequestException as exc:
-        return False, f"{type(exc).__name__}: {exc}"
+        return False, _redacted_detail(exc, token)
     except Exception as exc:  # any other transport failure: never raise
-        return False, f"{type(exc).__name__}: {exc}"
+        return False, _redacted_detail(exc, token)
     try:
         payload_json = response.json()
         body_ok = bool(payload_json.get("ok"))

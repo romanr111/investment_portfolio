@@ -195,7 +195,15 @@ def _run_locked(args, data_dir: Path) -> int:
     client = EdgarClient(session=session)
     try:
         min_value = float(config.get("min_market_value_usd") or 0)
-        rows = universe.load_snapshot_symbols(Path(args.snapshot), min_value)
+    except (TypeError, ValueError) as exc:
+        logger.error(
+            "invalid min_market_value_usd in config %s: %s", config_path, exc
+        )
+        return EXIT_FATAL
+    try:
+        rows, value_filtered = universe.load_snapshot_symbols(
+            Path(args.snapshot), min_value
+        )
     except (OSError, ValueError) as exc:
         logger.error("cannot load snapshot %s: %s", args.snapshot, exc)
         return EXIT_FATAL
@@ -224,6 +232,7 @@ def _run_locked(args, data_dir: Path) -> int:
         "unresolved": [p.ticker for p in positions if p.status == universe.STATUS_SKIPPED_UNRESOLVED],
         "fund": [],
         "excluded": [p.ticker for p in positions if p.status == universe.STATUS_EXCLUDED],
+        "value_filtered": value_filtered,
         "hidden_by_limit": max(0, len(monitored) - len(process_list)),
     }
 
@@ -254,14 +263,14 @@ def _run_locked(args, data_dir: Path) -> int:
             submissions = client.fetch_submissions(position.cik)
         except EdgarBlocked as exc:
             blocked = True
-            entry["error"] = f"BLOCKED: {_one_line(exc)}"
+            entry["error"] = f"BLOCKED: {digest_module.one_line(exc)}"
             results.append(entry)
-            failures.append({"ticker": position.ticker, "error": f"BLOCKED: {_one_line(exc)}"})
+            failures.append({"ticker": position.ticker, "error": f"BLOCKED: {digest_module.one_line(exc)}"})
             break
         except (EdgarRequestError, requests.RequestException) as exc:
-            entry["error"] = _one_line(exc)
+            entry["error"] = digest_module.one_line(exc)
             results.append(entry)
-            failures.append({"ticker": position.ticker, "error": _one_line(exc)})
+            failures.append({"ticker": position.ticker, "error": digest_module.one_line(exc)})
             continue
 
         if not position.forced and universe.classify_fund(submissions):
@@ -347,6 +356,9 @@ def _run_locked(args, data_dir: Path) -> int:
             logger.info("Telegram digest sent (%s)", detail)
         else:
             logger.warning("Telegram digest not delivered (%s)", detail)
+            # There is no resend: keep the full digest in the launchd log.
+            print(digest_text)
+            sys.stdout.flush()
     else:
         logger.info("telegram not configured; digest printed to stdout")
         print(digest_text)
@@ -403,20 +415,24 @@ def _new_filings_flow(new_filings, position, client, entries_sink, ts) -> list:
         doc_scan_needed = classification.needs_doc_scan
         if doc_scan_needed:
             classification = _rescan_8ka(client, position, filing)
+            if classification is None:
+                # Scan failure degrades to an INFO "(items:unknown)" event;
+                # it must not crash the run on the missing classification.
+                event = {
+                    "form": form,
+                    "item_code": None,
+                    "items": None,
+                    "title": "Items unknown (scan failed)",
+                    "level": severity.LEVEL_INFO,
+                    "accession": filing["accession"],
+                    "filed": filing.get("filing_date", ""),
+                    "url": url,
+                }
+                events.append(event)
+                entries_sink.append(_alert_row(ts, position, filing, event, url=url, sent=False))
+                continue
         if not classification.events:
-            if doc_scan_needed:
-                events.append(
-                    {
-                        "form": form,
-                        "item_code": None,
-                        "items": None,
-                        "title": "Items unknown (scan failed)",
-                        "level": severity.LEVEL_INFO,
-                        "accession": filing["accession"],
-                        "filed": filing.get("filing_date", ""),
-                        "url": url,
-                    }
-                )
+            # A plain 8-K with no item codes carries nothing classifiable.
             continue
         for event in classification.events:
             events.append(_full_event(event, filing, url))
@@ -502,7 +518,7 @@ def _process_risk_factors(client, position, filing, record, filings_dir) -> dict
             "risk factors fetch failed for %s (%s): %s", position.ticker, accession, exc
         )
         entry["status"] = "document_fetch_failed"
-        entry["detail"] = _one_line(exc)
+        entry["detail"] = digest_module.one_line(exc)
         return entry
     if status != 200:
         entry["status"] = "document_fetch_failed"
@@ -660,10 +676,6 @@ def _ping_healthcheck(explicit_url: str, success: bool) -> None:
         logger.warning("healthcheck ping failed: %s", exc)
 
 
-def _one_line(message) -> str:
-    return " ".join(str(message).split())[:200]
-
-
 def _run_extract_rf(args, data_dir: Path) -> int:
     """--extract-rf SYMBOL: latest vs previous periodic Item 1A diff; no state."""
     symbol = universe.normalize_symbol(args.extract_rf)
@@ -683,10 +695,10 @@ def _run_extract_rf(args, data_dir: Path) -> int:
     try:
         submissions = client.fetch_submissions(entry["cik"])
     except EdgarBlocked as exc:
-        print(f"edgar-watch: BLOCKED: {_one_line(exc)}")
+        print(f"edgar-watch: BLOCKED: {digest_module.one_line(exc)}")
         return EXIT_FATAL
     except (EdgarRequestError, requests.RequestException) as exc:
-        print(f"edgar-watch: {_one_line(exc)}")
+        print(f"edgar-watch: {digest_module.one_line(exc)}")
         return EXIT_FATAL
 
     filings_list = state_store.recent_filings(submissions)
@@ -738,9 +750,9 @@ def _fetch_and_extract(client, map_entry, filing):
             filing.get("primary_document", ""),
         )
     except EdgarBlocked as exc:
-        return None, f"BLOCKED: {_one_line(exc)}"
+        return None, f"BLOCKED: {digest_module.one_line(exc)}"
     except (EdgarRequestError, requests.RequestException) as exc:
-        return None, _one_line(exc)
+        return None, digest_module.one_line(exc)
     if status != 200:
         return None, f"HTTP {status}"
     text = risk_factors.html_to_text(body)

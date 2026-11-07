@@ -2,10 +2,14 @@
 
 SEC blocks undeclared automated clients (verified live 2026-11-07: an
 undeclared User-Agent gets 403 HTML, a burst page returns HTML with a
-200-like status). The client therefore validates JSON bodies for the
-submissions endpoint and classifies every HTML block page as
-``EdgarBlocked`` instead of failing on parsing. The block is a stop: the
-identity is reported, never rotated for a workaround.
+200-like status). Only submissions bodies are validated: a non-JSON 200
+from ``fetch_submissions`` is classified as ``EdgarBlocked``
+(submissions must be JSON). Documents are legitimately HTML and their
+bodies are never validated: a steady 403/429 still raises
+``EdgarBlocked`` after retries inside ``_get``, while a 200-status HTML
+block page for a document passes through and consumers degrade via a
+``risk_factors.scan_item_codes`` miss. The block is a stop: the identity
+is reported, never rotated for a workaround.
 
 The honest default identity is a fallback for OSS checkouts and offline
 tests without ``SEC_USER_AGENT``; live runs are expected to configure a
@@ -131,7 +135,13 @@ class EdgarClient:
         return payload
 
     def fetch_document(self, cik10: str, nodash: str, primary_document: str):
-        """Fetch one filing primary document; returns (status, body_text)."""
+        """Fetch one filing primary document; returns (status, body_text).
+
+        The body is not validated (documents are legitimately HTML): a
+        steady 403/429 raises ``EdgarBlocked`` after retries, but a burst
+        page served as 200 HTML passes through; consumers degrade via
+        ``risk_factors.scan_item_codes``.
+        """
         url = f"{ARCHIVES_BASE}/{cik10}/{nodash}/{primary_document}"
         return self._get(url)
 

@@ -3,9 +3,12 @@
 Plain text (no parse_mode), one message per run. Sections order RED ->
 WARN -> INFO, with Form 4 folded per ticker and a truncation marker
 pointing at the alerts log. Zero new filings render the heartbeat line.
-Truncation drops the lowest priority first (INFO lines, then Form 4 fold
-lines, then WARN lines); RED lines are kept while the budget holds and
-hard-truncated only as a last resort.
+The budget is applied in strict tiers: header, RED and failure blocks are
+unconditional (failure blocks, like RED, can exceed the budget and the
+result is hard-truncated), WARN and Form 4 lines are kept individually
+while they fit, and dropping any WARN or Form 4 block forfeits the INFO
+tier entirely; only when nothing above them was dropped are INFO blocks
+added greedily from lowest priority upward.
 """
 import logging
 
@@ -105,7 +108,7 @@ def build_digest(results, skipped, ctx) -> str:
     )
     failure_blocks = [
         f"{MARK_WARN} CIK error [{failure.get('ticker', '')}] - "
-        f"{_one_line(str(failure.get('error', 'unknown error')))}"
+        f"{one_line(str(failure.get('error', 'unknown error')))}"
         for failure in failures
     ]
 
@@ -211,40 +214,64 @@ def _render_footer(skipped, ctx) -> list:
     return [". ".join(parts) + "."]
 
 
-def _one_line(message: str, limit: int = 200) -> str:
+def one_line(message: str, limit: int = 200) -> str:
     collapsed = " ".join(str(message).split())
     return collapsed[:limit]
 
 
 def _assemble(header, red_blocks, warn_blocks, failure_blocks, form4_lines, info_blocks, settings):
-    """Join blocks by priority; returns (text, dropped_count).
+    """Join blocks by tier; returns (text, dropped_count).
 
-    RED blocks are always kept (the budget can be exceeded by RED only, in
-    which case the text is hard-truncated). WARN, FORM 4 and INFO blocks are
-    dropped in ascending priority when the budget is exhausted.
+    Strict tiers, in this decision order: the header, every RED block and
+    every failure block form the unconditional base (failure blocks, like
+    RED, can exceed the budget; the result is hard-truncated afterwards).
+    WARN blocks are then kept individually only while the total fits, and
+    Form 4 lines follow the same rule; dropping ANY WARN or Form 4 block
+    forfeits the INFO tier (all INFO blocks count as dropped). INFO blocks
+    are added greedily only when nothing above them was dropped. Display
+    order is unchanged: RED -> WARN -> failure -> Form 4 -> INFO.
     """
     budget = max(0, int(settings["char_budget"]))
-    text = header
+    red_text = "".join("\n\n" + "\n".join(block) for block in red_blocks)
+    failure_text = "".join("\n\n" + block for block in failure_blocks)
+    # Decision base: header plus the unconditional tiers. A WARN or Form 4
+    # entry renders before the failure lines, but its budget check counts
+    # them (the final length is the sum either way).
+    decision = header + red_text + failure_text
     dropped = 0
+    infos_forfeited = False
 
-    for block in red_blocks:
-        text += "\n\n" + "\n".join(block)
+    def _fits(block):
+        lines = [block] if isinstance(block, str) else block
+        return lines, len(decision) + 2 + len("\n".join(lines)) <= budget
 
-    def _add_droppable(blocks):
-        nonlocal text, dropped
+    kept = {"warn": [], "form4": [], "info": []}
+    for stage, blocks in (("warn", warn_blocks), ("form4", form4_lines)):
         for block in blocks:
-            lines = [block] if isinstance(block, str) else block
-            candidate = text + "\n\n" + "\n".join(lines)
-            if len(candidate) > budget:
+            lines, fits = _fits(block)
+            if not fits:
+                dropped += 1
+                infos_forfeited = True
+                continue
+            kept[stage].append("\n".join(lines))
+            decision += "\n\n" + "\n".join(lines)
+
+    if infos_forfeited:
+        dropped += len(info_blocks)
+    else:
+        for block in info_blocks:
+            lines, fits = _fits(block)
+            if not fits:
                 dropped += 1
                 continue
-            text = candidate
+            kept["info"].append("\n".join(lines))
+            decision += "\n\n" + "\n".join(lines)
 
-    _add_droppable(warn_blocks)
-    for block in failure_blocks:
-        text += "\n\n" + block
-    _add_droppable(form4_lines)
-    _add_droppable(info_blocks)
+    text = header + red_text
+    text += "".join("\n\n" + block_text for block_text in kept["warn"])
+    text += failure_text
+    text += "".join("\n\n" + block_text for block_text in kept["form4"])
+    text += "".join("\n\n" + block_text for block_text in kept["info"])
 
     if len(text) > budget:
         text = text[:budget].rstrip()

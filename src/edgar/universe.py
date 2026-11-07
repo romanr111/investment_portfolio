@@ -12,14 +12,13 @@ the same way operating companies do, so resolution alone is not a filter).
 """
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
-from src.edgar.edgar_client import SEC_DEFAULT_UA, TICKER_MAP_URL
+from src.edgar.edgar_client import TICKER_MAP_URL, resolve_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,10 @@ STATUS_EXCLUDED = "excluded_config"
 
 _FUND_ENTITY_TYPES = frozenset({"other", "funds"})
 _FUND_SIC_PREFIX = "6221"
-_PERIODIC_FORM_SET = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A"})
+# Fund-detection signal forms: deliberately wider than severity.PERIODIC_FORMS
+# (an 8-K stream also indicates an operating filer); Risk Factors work stays
+# periodic-only.
+_FUND_SIGNAL_FORM_SET = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A"})
 
 
 @dataclass
@@ -57,14 +59,19 @@ def normalize_symbol(symbol: str) -> str:
     return (symbol or "").strip().upper().replace(" ", "-").replace(".", "-")
 
 
-def load_snapshot_symbols(snapshot_path, min_market_value_usd=0.0) -> list:
-    """Equity rows (ticker, category, market_value) from the saved snapshot."""
+def load_snapshot_symbols(snapshot_path, min_market_value_usd=0.0) -> tuple:
+    """Equity rows and the below-floor count from the saved snapshot.
+
+    Returns (rows, value_filtered): rows carry the equity positions at or
+    above the floor; value_filtered counts the rows skipped by it.
+    """
     payload = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
     ib_data = (payload.get("data") or {}).get("IB_DATA") or {}
     as_of = payload.get("as_of_date", "")
     if not isinstance(ib_data, dict):
         raise ValueError(f"snapshot {snapshot_path} carries no data.IB_DATA object")
     rows = []
+    value_filtered = 0
     for category in _EQUITY_CATEGORY_ORDER:
         category_positions = ib_data.get(category) or {}
         if not isinstance(category_positions, dict):
@@ -76,6 +83,7 @@ def load_snapshot_symbols(snapshot_path, min_market_value_usd=0.0) -> list:
                 logger.warning("Ignoring unparseable value for %s in %s", ticker, category)
                 continue
             if market_value < min_market_value_usd:
+                value_filtered += 1
                 continue
             rows.append(
                 {
@@ -85,7 +93,7 @@ def load_snapshot_symbols(snapshot_path, min_market_value_usd=0.0) -> list:
                     "snapshot_as_of": as_of,
                 }
             )
-    return rows
+    return rows, value_filtered
 
 
 def build_cik_map(payload: dict) -> dict:
@@ -127,7 +135,7 @@ def load_cik_map(session, cache_path, ua=None, ttl_days=TICKER_MAP_TTL_DAYS, now
         except (OSError, ValueError) as exc:
             logger.warning("Ignoring unreadable CIK map cache %s: %s", cache_path, exc)
 
-    user_agent = resolve_map_ua(ua)
+    user_agent = resolve_user_agent(ua)
     try:
         response = session.get(
             TICKER_MAP_URL,
@@ -146,12 +154,6 @@ def load_cik_map(session, cache_path, ua=None, ttl_days=TICKER_MAP_TTL_DAYS, now
         raise
     _save_cache(cache_path, cik_map)
     return cik_map, "fresh"
-
-
-def resolve_map_ua(ua=None) -> str:
-    if ua:
-        return ua
-    return os.environ.get("SEC_USER_AGENT", "").strip() or SEC_DEFAULT_UA
 
 
 def _save_cache(cache_path: Path, cik_map: dict) -> None:
@@ -248,9 +250,9 @@ def classify_fund(submissions: dict) -> bool:
     forms = set(
         ((submissions.get("filings") or {}).get("recent") or {}).get("form") or []
     )
-    has_periodic_or_8k = bool(forms & _PERIODIC_FORM_SET)
+    has_fund_signal_forms = bool(forms & _FUND_SIGNAL_FORM_SET)
     return (
         entity_type in _FUND_ENTITY_TYPES
         or sic.startswith(_FUND_SIC_PREFIX)
-        or not has_periodic_or_8k
+        or not has_fund_signal_forms
     )

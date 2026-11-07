@@ -49,6 +49,9 @@ _ITEM_BOUNDARY = re.compile(
     r"Item\s+(?:1B|1C|2)\.?(?!\d)", re.IGNORECASE
 )
 _ITEM_CODE = re.compile(r"Item\s+(\d\.\d{2})\b", re.IGNORECASE)
+# A window that mentions the "Risk Factors" label marks an Item 1A match as
+# the real body heading rather than a bare cross-reference.
+_RISK_FACTORS_HINT = re.compile(r"Risk\s+Factors", re.IGNORECASE)
 
 
 class _BlockTextParser(HTMLParser):
@@ -97,10 +100,12 @@ def _occurrences(text: str, pattern) -> list:
 def extract_item_1a(text: str):
     """Slice Item 1A out of plain filing text.
 
-    Returns (status, section_text). TOC pages also carry "Item 1A" markers,
-    so each candidate start is paired with the next Item 1B (or Item 1C/2)
-    boundary and the longest candidate wins - a body section is always
-    longer than a table-of-contents row.
+    Returns (status, section_text). Two-tier candidate rule: matches whose
+    nearby window (160 chars) mentions the "Risk Factors" label (body
+    headings, and honest TOC rows do too) are preferred over bare
+    cross-references, and the longest chunk wins inside that tier; only when
+    no match carries the label does the plain longest-chunk rule apply. A
+    body section is always longer than a table-of-contents row.
     """
     if text is None:
         return STATUS_NOT_FOUND, ""
@@ -108,7 +113,8 @@ def extract_item_1a(text: str):
     if not item_matches:
         return STATUS_NOT_FOUND, ""
     boundaries = _occurrences(text, _ITEM_BOUNDARY)
-    best = None
+    labeled = []
+    plain = []
     for item_match in item_matches:
         start = item_match.start()
         following_end = next((end for end in boundaries if end > start), None)
@@ -116,14 +122,18 @@ def extract_item_1a(text: str):
         # trailing "Risk Factors" label and following whitespace), so a
         # marker immediately followed by Item 1B counts as empty.
         chunk = text[item_match.end():following_end].strip()
-        if best is None or len(chunk) > len(best[0]):
-            best = (chunk, following_end is not None)
-    if best is None:
+        pool = labeled if _RISK_FACTORS_HINT.search(text[start:start + 160]) else plain
+        pool.append(chunk)
+    candidates = labeled or plain
+    if not candidates:
         return STATUS_NOT_FOUND, ""
-    chunk = best[0].strip()
-    if not chunk:
+    best = None
+    for chunk in candidates:
+        if best is None or len(chunk) > len(best):
+            best = chunk
+    if not best.strip():
         return STATUS_EMPTY, ""
-    return STATUS_EXTRACTED, chunk
+    return STATUS_EXTRACTED, best.strip()
 
 
 def risk_headers(text: str) -> list:
