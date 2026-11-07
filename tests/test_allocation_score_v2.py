@@ -55,9 +55,10 @@ class AllocationScoreV2Tests(unittest.TestCase):
 class AllocationV2IntegrationTests(unittest.TestCase):
     @staticmethod
     def _older_snapshot(saved):
-        """The same saved data without the risk_progress_v2 key: how snapshots saved before it still render."""
+        """The same saved data without the risk progress keys: how snapshots saved before them still render."""
         from copy import deepcopy
         older = deepcopy(saved)
+        older['DIVERSIFICATION_DATA'].pop('risk_progress_v3')
         older['DIVERSIFICATION_DATA'].pop('risk_progress_v2')
         return older
 
@@ -191,7 +192,8 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         q = result['data']['DIVERSIFICATION_DATA']
         self.assertIn('allocation_score_v2', q)
         self.assertEqual(q['risk_progress_v2']['version'], 'risk_progress_v2')
-        derived = ('allocation_score_v2', 'concentration_v1', 'risk_progress_v2')
+        self.assertEqual(q['risk_progress_v3']['version'], 'risk_progress_v3')
+        derived = ('allocation_score_v2', 'concentration_v1', 'risk_progress_v2', 'risk_progress_v3')
         self.assertEqual({k: v for k, v in q.items() if k not in derived}, before['data']['DIVERSIFICATION_DATA'])
         self.assertIn('allocation_score_v2_enrichment', result)
 
@@ -245,6 +247,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(saved['DIVERSIFICATION_DATA']['allocation_score_v2']['status'], 'unavailable')
 
     def test_saved_view_exposes_explicit_points_not_percent(self):
+        from copy import deepcopy
         from tests.test_allocation_score import allocation_fixture
         from analytics.holy_grail.enrich import enrich_combined_data
         from analytics.holy_grail.views.diversification import saved_diversification_view
@@ -252,7 +255,7 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         settings['method_version'] = 'capital_diversification_v2'
         saved = enrich_combined_data(data, config={'allocation': settings}, monthly_returns=histories, allow_network=False)
         result = saved['DIVERSIFICATION_DATA']['allocation_score_v2']
-        points = saved['DIVERSIFICATION_DATA']['risk_progress_v2']['progress_display']['headline']
+        points = saved['DIVERSIFICATION_DATA']['risk_progress_v3']['progress_display']['headline']
         view = saved_diversification_view(saved)
         self.assertEqual(view['number_kind'], 'allocation_points')
         self.assertIsInstance(view['sheet_number'], int)
@@ -260,6 +263,11 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         self.assertEqual(view['sheet_summary'][0][1], points)
         self.assertEqual(view['headline'], f'≈{points}/100')
         self.assertEqual(view['number_format'], {'type': 'NUMBER', 'pattern': '0" зі 100"'})
+        # A snapshot saved before risk_progress_v3 keeps the risk_progress_v2 headline.
+        v2_only = deepcopy(saved)
+        v2_only['DIVERSIFICATION_DATA'].pop('risk_progress_v3')
+        self.assertEqual(saved_diversification_view(v2_only)['sheet_number'],
+                         saved['DIVERSIFICATION_DATA']['risk_progress_v2']['progress_display']['headline'])
         # A snapshot saved before risk_progress_v2 keeps its own explicit points.
         older = saved_diversification_view(self._older_snapshot(saved))
         self.assertEqual(older['sheet_number'], result['display_score'])
@@ -304,11 +312,11 @@ class AllocationV2IntegrationTests(unittest.TestCase):
         for _ in range(2):
             refresh_insights(book, saved, config={})
         main = book.worksheet('30 Sep 2026')
-        points = saved['DIVERSIFICATION_DATA']['risk_progress_v2']['progress_display']['headline']
+        points = saved['DIVERSIFICATION_DATA']['risk_progress_v3']['progress_display']['headline']
         self.assertEqual(main.values[(10, 2)], points)
         self.assertIsInstance(main.values[(10, 2)], int)
         self.assertEqual(main.formats[(10, 2)]['numberFormat'], {'type': 'NUMBER', 'pattern': '0" зі 100"'})
-        # Older snapshots (no risk_progress_v2 key) keep writing the v2 points the same way on repeat.
+        # Older snapshots (no risk progress keys) keep writing the v2 points the same way on repeat.
         older_book = FakeSpreadsheet()
         older = self._older_snapshot(saved)
         for _ in range(2):

@@ -4,7 +4,9 @@
 > "Concentration safeguards beside the score" and "Offline what-if scenarios"
 > under it (near the end of this file). Optional sibling records follow it:
 > "Capital diversification v3 (car-category pairs)" for the car-business pairs.
-> The headline for new snapshots is "Risk progress v2 (`risk_progress_v2`)"; the
+> The headline for new snapshots is "Risk progress v3 (`risk_progress_v3`)", the
+> individual-investor score with private streams; "Risk progress v2
+> (`risk_progress_v2`)" follows it and stays in the details. The
 > older "Risk progress (`risk_progress_v1`)" and "Car-business scenarios
 > (`car_proxies`)" follow it as the last sections. Public car-market context and
 > the category evidence are in `docs/car-resale-market-context.md` and
@@ -588,9 +590,226 @@ car-category build ...`), copy it to `data/car_category/block_latest.json`, then
 run the normal pipeline. A stale block gives the explicit `unavailable` v3
 record and the v2 assumption numbers with a warning (see Gates above).
 
+## Risk progress v3 (`risk_progress_v3`)
+
+The headline for new snapshots: one score from 0 to 100 for an individual,
+non-accredited, long-only investor (no shorts, no leverage, no hedge-fund
+strategies). It keeps the Holy Grail idea and the formula of
+`risk_progress_v2`, but it sets the target at what such an investor can reach
+with effort, and it counts the assets held outside the broker. The record is a
+sibling derived from the same saved, replayed `capital_diversification_v2`
+record and frozen car proxy block (`analytics/holy_grail/risk_progress_v3.py`),
+saved as `DIVERSIFICATION_DATA.risk_progress_v3`. `risk_progress_v2` (100 = 15
+streams, invested assets only) is still derived and shown in the details.
+
+**Goal (owner decision, 2026-11-07).** What this score aims for; check later
+changes against it:
+
+- Useful to an individual, non-accredited investor with up to about $1M in the
+  US and Ukraine: 100 is reachable with effort, but not trivial. A simple
+  liquid portfolio stays well below it.
+- Long only: no shorts, no leverage, no hedge-fund strategies.
+- Close to the Holy Grail idea: many independent return streams, scored with
+  the v2 formula, with the target at 7 streams instead of 15.
+- Assets held outside the broker count. Property, land, Ukrainian government
+  bonds and deposits, and P2P loans are modeled from public parameters.
+  Infrastructure, private equity, private credit and timber count through
+  listed stand-ins.
+- Location counts. Each private asset has a country and, optionally, a city.
+  The model treats assets in one city as more closely linked than assets in
+  different cities or countries. Countries beyond the US and Ukraine are
+  supported, so a model portfolio can diversify globally.
+- Simple: obscure classes (carbon, collectibles, royalties and similar) are
+  left out, and a primary residence is excluded.
+
+```
+DR = sum(w_i * sigma_i) / sqrt(wᵀ Σ w)      N_effective = DR²
+score = clip(100 * (1 - 1/DR) / (1 - 1/sqrt(7)), 0, 100)
+```
+
+| streams | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| points | 0 | 47 | 68 | 80 | 89 | 95 | 100 |
+
+The display rules are those of v2: 100 only at 7.0 equivalent streams or more;
+otherwise the headline is capped at 99 and the detail at 99.9.
+
+**Why 7.** In 2026-11 research, long-only portfolios reached about 2.5-3.2
+effective streams out of sample with liquid assets, and about 5 with private
+assets under central literature assumptions, so 15 streams was out of reach and
+the score did not guide decisions. With 7, the extended individual menu below
+reaches 100 at its best weights, while a typical liquid portfolio stays near 60.
+
+**Universe and weights.** The invested part of the v2 record plus the declared
+private streams. Capital weights are value over that universe, applied to the
+whole window like v2. Cash stays outside, except deposits declared from Cash
+(see below). Balances and totals are never changed.
+
+**Streams.**
+
+- Measured: a v2 group (its representative history), the car business (the
+  CPRT/KMX/OPLN basket of the frozen block, as in v2), and listed proxy baskets
+  for private classes an individual reaches through public vehicles
+  (equal-weight monthly returns, all names required):
+  `infrastructure` BIP+BEP, `private_equity` BN+KKR, `private_credit_funds`
+  BIZD, `timberland` WOOD. Proxy streams carry listed-equity beta, so they earn
+  little diversification credit: that is the honest measurement of the proxy,
+  not of the asset.
+- Modeled private streams, one per (class, country, location):
+
+  ```
+  r = βᵀF + σ_res * (sqrt(s_c) g_country + sqrt(s_k) h_class,country + sqrt(s_l) k_location)
+  ```
+
+  `F` are the `equity_us` (SPY), `treasury_medium` (IEF) and `commodities`
+  (DBC) representatives, plus `EURUSD=X` only for rows that declare
+  `corr_fx_eur` (EUR beta 0 otherwise). `β` follows from the row's correlations
+  with `F` and its central volatility (`β = Σ_F⁻¹ (σ_F ⊙ ρ) vol`, with `ρ`
+  scaled down when it would explain more than 95% of the variance), and
+  `σ_res² = vol² - βᵀ Σ_F β`. `g`, `h` and `k` are independent unit factors with
+  residual-variance shares `s_c + s_k + s_l = 1`. There is no idiosyncratic
+  term, so splitting one holding into several entries never adds a stream. The
+  same location across classes shares `k`; different cities of one country share
+  `g` and `h`; countries are linked only through `F` (and the UA link). US and
+  `other` rows have no country factor; without a location (or with
+  `diversified`) `s_l` folds into `s_k`. Locations are compared after collapsing
+  whitespace and case.
+- UA link: the Ukrainian country factor is tied to the measured Ukrainian
+  streams (the car business, only with a reviewed `business_geography` of
+  Ukraine, and Ukrainian proxy holdings):
+  `g_UA = ρ e/σ_e + sqrt(1-ρ²) u_UA`, where `e` is their value-weighted
+  residual against the other measured columns and `ρ = car_link_rho`. With the
+  car business's geography unreviewed, the link applies in the adverse scenario
+  only, with a warning.
+
+**Covariance.** The measured columns (the v2 groups, the car basket, the proxy
+baskets and the factors) are shrunk jointly with the v2 Ledoit-Wolf estimator.
+`Σ = A blockdiag(Σ_shrunk, I) Aᵀ`, which is positive semidefinite by
+construction. With no private streams declared, `A` only selects the v2 groups,
+and DR equals the `risk_progress_v2` DR exactly.
+
+**Scenarios.** The central parameters give the headline. Favorable uses the low
+values of every correlation, residual-share triplet and `car_link_rho`; adverse
+uses the high values. A separate ×0.5/×2 sensitivity scales the private
+volatilities (DR is not monotone in volatility). Neither is a confidence
+interval. "Внесок приватних потоків" is sequential on the same window and block:
+the v2 groups alone (reclassified positions put back), then plus the modeled
+streams, then plus the proxies (the headline). Its starting point can differ
+slightly from the score without private streams, because the factor and proxy
+columns change the joint shrinkage.
+
+**Parameters.** `analytics/models/private_streams_v1.json` holds public
+literature and index values only, with sources and an access note for a
+non-accredited investor for every row. Its fingerprint is part of the method,
+and the parameters a record used are embedded in it. Changing any value needs a
+new file and method version, and the boundary shows "Змінено методику". Rows
+(class:country):
+
+- `residential_re` US, UA, PL, DE, ES, PT, AE, GE
+- `commercial_re` US, UA, DE, ES, PL
+- `farmland` US, UA
+- `development_land` US, UA
+- `ovdp_deposits_uah` UA (the only row that may come from Cash)
+- `ua_sovereign_usd` UA (USD OVDP and Eurobonds)
+- `p2p_loans` US, UA, other
+
+USD cash, including USD deposits in Ukrainian banks, stays cash. Polish
+farmland is left out because only farmers may buy it.
+
+**Private declaration** (`data/holy_grail_config.json -> private_streams`,
+frozen inside the v2 configuration; keys only here):
+
+- `entries[]`:
+  - required: `id`, `class`, `country`, `value_usd`, `valuation_as_of`
+  - optional: `location`, `currency`, `debt_usd`, `nav_source` (`outside` or
+    `cash`), `held_from`, `valuation_source`, `reviewed_at`,
+    `primary_residence`
+- `reclassify`: `{position_id: {class, country, location?, source_identity?}}`
+  moves an itemized v2 position out of its group (for example P2P out of the
+  HYG proxy, or Ukrainian Eurobonds held at a broker). A positional id
+  (`p2p:i`) needs the position's `source_identity`.
+
+Rules:
+
+- A primary residence is excluded and counted.
+- `debt_usd > 0` gives unavailable (`unsupported_leverage`).
+- `held_from` after the snapshot excludes the entry.
+- `nav_source: cash` is allowed only on cash-eligible rows, and their sum must
+  not exceed the v2 Cash (`cash_entries_exceed_cash`).
+- A valuation older than 12 months makes the record provisional.
+- An unknown key, class or country, or a bad reclassification, gives
+  unavailable (`invalid_private_streams`, `class_not_in_model`,
+  `invalid_reclassify`). Nothing is dropped silently.
+- A declared class without a usable series gives unavailable (`no_history`);
+  the factor and proxy histories are collected with the v2 histories only when
+  private streams are declared.
+
+**Calibration (public data, the 60 months to 2026-10; parameters frozen by
+sha256 before any score was read, never tuned).** The reference portfolios:
+
+- R1: 60/40 SPY/IEF.
+- R2: 8 liquid assets at equal weight.
+- R3: 12 liquid groups at equal risk.
+- R4: an individual reference at equal risk (property at least 6%, every other
+  stream at least 2%, every stream at most 25%). Liquid core; US rental in one
+  metro; UA apartment, commercial premises and farmland in three locations;
+  USD OVDP; P2P; infrastructure proxy; car basket.
+- R5: R4 with all UA privates in one city.
+- R6: R4 without US property.
+- R7: the UBS 2026 US family-office average.
+- R8: R4 plus residential property in PL, ES and AE (one Iberian country only).
+
+| portfolio | points | streams |
+|---|---|---|
+| R1 | 15.0 | 1.22 |
+| R2 | 59.6 | 2.53 |
+| R3 | 59.4 | 2.51 |
+| R4 | 83.6 (adverse 66.2, favorable 100) | 4.34 |
+| R5 | 80.8 | 4.04 |
+| R6 | 80.5 | 4.01 |
+| R7 | 34.8 | 1.63 |
+| R8 | 87.4 (adverse 68.2, favorable 100) | 4.80 |
+
+Bands:
+
+- The fixed bands for R0, R1, R2, R3, R6 and R7 hold, and so does the
+  revision's band R8 >= R4.
+- Two bands of the first calibration failed: R4 >= 85 and a one-city penalty of
+  at least 5. The owner kept the target of 7 and accepted both values as
+  landmarks.
+
+Best long-only weights with a 25% cap (information only): the reference menu
+reaches 89.7. A 30-stream individual menu reaches 100 (7.1 streams, adverse
+77.7), and adding global property reaches 100 (8.2 streams, adverse 80.2).
+
+**Coverage of a 120-item asset list.**
+
+| Treatment | Items |
+|---|---|
+| Measured v2 groups | equities of any style, region, sector or size; listed REITs, infrastructure companies, PE managers and BDCs held as stocks; bonds, bills and money-market funds; metals and commodities; crypto |
+| Modeled private streams | residential and commercial property (fractional and non-traded REITs as their class with location `diversified`), farmland, development land, UAH deposits and OVDP, USD OVDP and Ukrainian Eurobonds, P2P loans |
+| Measured listed proxies | infrastructure; private equity, venture and pre-IPO; retail private credit funds; timberland |
+| Out of scope | cash, US bank deposits, repos and stablecoins; strategies and contracts (no shorts, leverage or hedge-fund strategies) |
+| Not in this version (`class_not_in_model`) | collectibles, royalties and IP, litigation finance, cat bonds, carbon, shipping leasing, operating agricultural businesses, own business other than the car business, tokenized RWAs, NFTs |
+
+**Limits.**
+
+- Ukrainian parameters under war conditions rest on thin data (asking prices
+  since 2021, judgement for commercial property, P2P, Eurobond correlations and
+  `car_link_rho`), so the scenario range is wide.
+- `residential_re:GE`, `commercial_re:PL` and `residential_re:AE` rest on thin
+  or judgemental series.
+- ES and PT residuals share a cycle that the independent country factors do
+  not see.
+- Declared values are appraisals.
+- The 60-month window is one regime.
+
+The score is a modelled effect of diversification under a product scale. It is
+not a grade, a forecast or a measurement of any property or business.
+
 ## Risk progress v2 (`risk_progress_v2`)
 
-The headline for new snapshots: one score from 0 to 100 for the whole invested
+The headline for snapshots saved before `risk_progress_v3` (and a detail row after it): one score from 0 to 100 for the whole invested
 part of the portfolio, answering how much of the modelled diversification effect
 behind the Holy Grail idea the current mix shows. It is a sibling derived from a
 saved, replayed `capital_diversification_v2` record and a frozen car proxy block

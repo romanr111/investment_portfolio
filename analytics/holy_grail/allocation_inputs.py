@@ -101,14 +101,17 @@ def profile_for(position, config, as_of_date):
     return profile
 
 
-def allocation_history_requests(positions, config, as_of_date):
-    groups = set()
+def allocation_history_requests(positions, config, as_of_date, extra_groups=(), extra_symbols=()):
+    """Representatives of the held groups, plus `extra_groups` and `extra_symbols` (risk_progress_v3 factors and
+    proxy baskets); v2 stores every collected column and scores only its weighted groups."""
+    groups = set(extra_groups)
     for position in positions:
         profile = profile_for(position, config, as_of_date)
         if profile:
             groups.update(c['group'] for c in profile['components'])
-    return [dict(series='yf:'+GROUPS[g][1], symbol=GROUPS[g][1], provider='yfinance',
-                 value_usd=0, collection_priority=0) for g in sorted(groups) if GROUPS[g][1]]
+    symbols = [GROUPS[g][1] for g in sorted(groups) if GROUPS[g][1]]
+    symbols += [s for s in sorted(set(extra_symbols)) if s not in symbols]
+    return [dict(series='yf:'+s, symbol=s, provider='yfinance', value_usd=0, collection_priority=0) for s in symbols]
 
 
 def seal_result(result):

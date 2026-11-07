@@ -548,6 +548,10 @@ def allocation_view_v2(data, expected_date=None, saved_at_utc=None):
     # A saved risk_progress_v2 decides the headline before any older method: it is replayed against this very v2,
     # and a record that does not replay shows "Недоступно" and never another method's number. Key presence decides,
     # so a present-but-null record is replayed too; only snapshots without the key keep the older dispatch.
+    # risk_progress_v3 (the individual-investor headline) comes first under the same rule.
+    if valid and 'risk_progress_v3' in data['DIVERSIFICATION_DATA']:
+        from analytics.holy_grail.views.risk_progress_v3 import risk_progress_v3_view
+        return risk_progress_v3_view(view, data, result, expected, saved_at_utc)
     if valid and 'risk_progress_v2' in data['DIVERSIFICATION_DATA']:
         from analytics.holy_grail.views.risk_progress_v2 import risk_progress_v2_view
         return risk_progress_v2_view(view, data, result, expected, saved_at_utc)

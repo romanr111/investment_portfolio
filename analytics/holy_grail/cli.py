@@ -53,6 +53,7 @@ def main():
     v2 = quality.get("allocation_score_v2") or {}
     v3 = quality.get("allocation_score_v3") or {}
     headline = quality.get("risk_progress_v2") or {}
+    individual = quality.get("risk_progress_v3") or {}
     progress = quality.get("risk_progress_v1") or {}
     scenarios = progress.get("car_scenarios") or {}
     print(json.dumps({"output": str(args.output.resolve()),
@@ -64,6 +65,13 @@ def main():
                       "allocation_score_v2": quality.get("allocation_score_v2"),
                       "allocation_score_v3": {key: v3.get(key) for key in (
                           "status", "score", "display_score", "category", "warnings")} if v3 else None,
+                      "risk_progress_v3": {
+                          "status": individual.get("status"), "reason": individual.get("reason"),
+                          "progress_display": individual.get("progress_display"), "warnings": individual.get("warnings"),
+                          "private_streams": individual.get("private"),
+                          "scenarios": (individual.get("scenarios") or {}).get("range"),
+                          "private_gain_points": (individual.get("private_gain") or {}).get("total_points"),
+                      } if individual else None,
                       "risk_progress_v2": {
                           "status": headline.get("status"), "reason": headline.get("reason"),
                           "progress_display": headline.get("progress_display"), "warnings": headline.get("warnings"),

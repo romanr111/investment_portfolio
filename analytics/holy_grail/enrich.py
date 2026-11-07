@@ -15,6 +15,7 @@ from analytics.holy_grail.car import proxy_collection, risk_proxies
 from analytics.holy_grail.exposures import bound_exposure_record, extract_exposures, iso_date
 from analytics.holy_grail.paths import CACHE_DIR, CONFIG_PATH, DATA_DIR
 from analytics.holy_grail.risk_progress import derive_risk_progress_v1, derive_risk_progress_v2
+from analytics.holy_grail.risk_progress_v3 import derive_risk_progress_v3, history_needs
 
 
 def load_config(path=CONFIG_PATH):
@@ -49,6 +50,9 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     positive weight, the CPRT/KMX/OPLN basket is collected (cache and `allow_network` respected) and frozen
     with the price indexes of `car_proxies` into a car_proxies_v3 block; replay and offline runs never set it.
     `retrospective` marks the risk_progress_v2 record as a later recomputation of a saved snapshot.
+    risk_progress_v3 (the individual-investor headline) is derived beside v2 from the same v2 record and block; the
+    private streams it reads are frozen in the v2 configuration, and their factor and proxy histories are collected
+    with the v2 histories only when private streams are declared.
     """
     output = dict(data)
     as_of_date = iso_date(as_of_date or data.get("POSITION_DATA", {}).get("as_of_date")
@@ -65,7 +69,7 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     existing = data.get('DIVERSIFICATION_DATA')
     output['DIVERSIFICATION_DATA'] = deepcopy(existing) if isinstance(existing, dict) else {}
     # Records derived from a v2 record never survive a run that cannot match them (early exits included).
-    for key in ('risk_progress_v1', 'risk_progress_v2'):
+    for key in ('risk_progress_v1', 'risk_progress_v2', 'risk_progress_v3'):
         output['DIVERSIFICATION_DATA'].pop(key, None)
     requested = settings.get('allocation') if isinstance(settings, dict) else None
     method = requested.get('method_version', 'capital_diversification_v2') if isinstance(requested, dict) else None
@@ -83,7 +87,8 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     try:
         positions, cash, flags = extract_exposures(data, as_of_date, settings)
         if monthly_returns is None:
-            requests = allocation_history_requests(positions, allocation_config, as_of_date)
+            extra_groups, extra_symbols = history_needs(settings)
+            requests = allocation_history_requests(positions, allocation_config, as_of_date, extra_groups, extra_symbols)
             returns, provenance, collection_flags = market_history.collect_return_history(
                 requests, as_of_date=as_of_date, cache_dir=cache_dir, allow_network=allow_network)
             flags.update(collection_flags)
@@ -132,6 +137,9 @@ def enrich_combined_data(data, *, as_of_date=None, config=None, monthly_returns=
     headline = derive_risk_progress_v2(saved, headline_block, retrospective=retrospective)
     if headline is not None:
         output['DIVERSIFICATION_DATA']['risk_progress_v2'] = headline
+    individual = derive_risk_progress_v3(saved, headline_block, retrospective=retrospective)
+    if individual is not None:
+        output['DIVERSIFICATION_DATA']['risk_progress_v3'] = individual
     # Concentration facts measured beside the score on the same frozen inputs;
     # a failed build stays explicit instead of silently omitting the block.
     try:
@@ -187,7 +195,7 @@ def enrich_snapshot_file(source_path, output_path, *, config=None, cache_dir=CAC
         target_dd.pop('allocation_score_v3', None)
         if 'allocation_score_v3' in enriched['DIVERSIFICATION_DATA']:
             target_dd['allocation_score_v3'] = deepcopy(enriched['DIVERSIFICATION_DATA']['allocation_score_v3'])
-        for key in ('risk_progress_v1', 'risk_progress_v2'):
+        for key in ('risk_progress_v1', 'risk_progress_v2', 'risk_progress_v3'):
             target_dd.pop(key, None)
             if key in enriched['DIVERSIFICATION_DATA']:
                 target_dd[key] = deepcopy(enriched['DIVERSIFICATION_DATA'][key])
